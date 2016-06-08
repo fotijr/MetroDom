@@ -1,0 +1,29 @@
+﻿<Window x:Class="MetroDom.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:MetroDom"
+        mc:Ignorable="d"
+        Title="MetroDom" Height="181.111" Width="234.999">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="62*"/>
+            <RowDefinition Height="65*"/>
+        </Grid.RowDefinitions>
+        <StackPanel Margin="10,10,10.6,6" Grid.RowSpan="1">
+            <TextBlock>
+                <TextBlock>BPM</TextBlock>
+               <TextBox Name="txtBpm" Width="50">60</TextBox>
+            </TextBlock>
+        </StackPanel>
+        <StackPanel Margin="0,9,20.6,-8.4" Grid.Row="1">
+            <TextBlock>
+                <Button Name="btnStartStop" Click="btnStartStop_Click" Height="24" Width="48" >
+                    <Button.FontWeight>Bold</Button.FontWeight>
+                    <Button.Content>Start</Button.Content>
+                </Button>
+            </TextBlock>
+        </StackPanel>
+    </Grid>
+</Window>
