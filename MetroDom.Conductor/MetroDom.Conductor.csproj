@@ -7,8 +7,8 @@
     <ProjectGuid>{170E75C8-6739-42D3-8E81-E4703989FA94}</ProjectGuid>
     <OutputType>WinExe</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>Duinos.MetroDom</RootNamespace>
-    <AssemblyName>Duinos.MetroDom</AssemblyName>
+    <RootNamespace>MetroDom.Conductor</RootNamespace>
+    <AssemblyName>MetroDom.Conductor</AssemblyName>
     <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
   </PropertyGroup>
@@ -30,6 +30,9 @@
     <DefineConstants>TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup>
+    <StartupObject>MetroDom.Conductor.Program</StartupObject>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="System" />

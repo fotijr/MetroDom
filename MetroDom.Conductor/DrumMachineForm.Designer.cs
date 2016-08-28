@@ -1,4 +1,4 @@
-﻿namespace Duinos.MetroDom
+﻿namespace MetroDom.Conductor
 {
     partial class DrumMachineForm
     {

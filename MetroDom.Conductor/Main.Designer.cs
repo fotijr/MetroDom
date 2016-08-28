@@ -1,4 +1,4 @@
-﻿namespace Duinos.MetroDom
+﻿namespace MetroDom.Conductor
 {
     partial class Main
     {
@@ -48,7 +48,7 @@
             this.toolStripButton2});
             this.toolStrip1.Location = new System.Drawing.Point(0, 0);
             this.toolStrip1.Name = "toolStrip1";
-            this.toolStrip1.Size = new System.Drawing.Size(117, 618);
+            this.toolStrip1.Size = new System.Drawing.Size(109, 618);
             this.toolStrip1.TabIndex = 0;
             this.toolStrip1.Text = "toolStrip1";
             // 
@@ -62,7 +62,7 @@
             this.toolStripButton1.ImageTransparentColor = System.Drawing.Color.Magenta;
             this.toolStripButton1.Name = "toolStripButton1";
             this.toolStripButton1.Padding = new System.Windows.Forms.Padding(0, 0, 0, 100);
-            this.toolStripButton1.Size = new System.Drawing.Size(114, 124);
+            this.toolStripButton1.Size = new System.Drawing.Size(106, 119);
             this.toolStripButton1.Text = "Drum Machine";
             this.toolStripButton1.Click += new System.EventHandler(this.toolStripButton1_Click);
             // 
@@ -88,7 +88,7 @@
             this.toolStripButton2.ImageTransparentColor = System.Drawing.Color.Magenta;
             this.toolStripButton2.Name = "toolStripButton2";
             this.toolStripButton2.Padding = new System.Windows.Forms.Padding(0, 0, 0, 100);
-            this.toolStripButton2.Size = new System.Drawing.Size(114, 158);
+            this.toolStripButton2.Size = new System.Drawing.Size(106, 149);
             this.toolStripButton2.Text = "X";
             this.toolStripButton2.Click += new System.EventHandler(this.toolStripButton2_Click);
             // 
@@ -99,10 +99,10 @@
             this.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(64)))), ((int)(((byte)(64)))), ((int)(((byte)(64)))));
             this.ClientSize = new System.Drawing.Size(1376, 618);
             this.Controls.Add(this.toolStrip1);
-            this.DataBindings.Add(new System.Windows.Forms.Binding("Location", global::Duinos.MetroDom.Properties.Settings.Default, "WindowLocation", true, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged));
+            this.DataBindings.Add(new System.Windows.Forms.Binding("Location", global::MetroDom.Conductor.Properties.Settings.Default, "WindowLocation", true, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged));
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.SizableToolWindow;
             this.IsMdiContainer = true;
-            this.Location = global::Duinos.MetroDom.Properties.Settings.Default.WindowLocation;
+            this.Location = global::MetroDom.Conductor.Properties.Settings.Default.WindowLocation;
             this.Name = "Main";
             this.Text = "MetroDom";
             this.toolStrip1.ResumeLayout(false);

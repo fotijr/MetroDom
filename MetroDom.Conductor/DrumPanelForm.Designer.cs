@@ -1,4 +1,4 @@
-﻿namespace Duinos.MetroDom
+﻿namespace MetroDom.Conductor
 {
     partial class DrumPanelForm
     {
@@ -74,7 +74,7 @@
             // 
             this.pictureBox1.BackgroundImageLayout = System.Windows.Forms.ImageLayout.None;
             this.pictureBox1.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.pictureBox1.Image = global::Duinos.MetroDom.Properties.Resources.HighHat;
+            this.pictureBox1.Image = global::MetroDom.Conductor.Properties.Resources.HighHat;
             this.pictureBox1.Location = new System.Drawing.Point(4, 45);
             this.pictureBox1.Name = "pictureBox1";
             this.pictureBox1.Size = new System.Drawing.Size(94, 119);
@@ -85,7 +85,7 @@
             // pictureBox2
             // 
             this.pictureBox2.BackgroundImageLayout = System.Windows.Forms.ImageLayout.None;
-            this.pictureBox2.Image = global::Duinos.MetroDom.Properties.Resources.Snare;
+            this.pictureBox2.Image = global::MetroDom.Conductor.Properties.Resources.Snare;
             this.pictureBox2.Location = new System.Drawing.Point(4, 171);
             this.pictureBox2.Name = "pictureBox2";
             this.pictureBox2.Size = new System.Drawing.Size(94, 119);
@@ -96,7 +96,7 @@
             // pictureBox3
             // 
             this.pictureBox3.BackgroundImageLayout = System.Windows.Forms.ImageLayout.None;
-            this.pictureBox3.Image = global::Duinos.MetroDom.Properties.Resources.Bass;
+            this.pictureBox3.Image = global::MetroDom.Conductor.Properties.Resources.Bass;
             this.pictureBox3.Location = new System.Drawing.Point(4, 297);
             this.pictureBox3.Name = "pictureBox3";
             this.pictureBox3.Size = new System.Drawing.Size(94, 119);

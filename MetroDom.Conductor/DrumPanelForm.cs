@@ -9,7 +9,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
-namespace Duinos.MetroDom
+namespace MetroDom.Conductor
 {
     public partial class DrumPanelForm : Form
     {
