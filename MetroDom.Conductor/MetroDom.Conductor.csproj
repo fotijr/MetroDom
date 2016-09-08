@@ -60,6 +60,12 @@
     <Compile Include="DrumPanelForm.Designer.cs">
       <DependentUpon>DrumPanelForm.cs</DependentUpon>
     </Compile>
+    <Compile Include="Forms\LiveControlForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Forms\LiveControlForm.Designer.cs">
+      <DependentUpon>LiveControlForm.cs</DependentUpon>
+    </Compile>
     <Compile Include="Main.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -68,11 +74,15 @@
     </Compile>
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Services\SerialService.cs" />
     <EmbeddedResource Include="DrumMachineForm.resx">
       <DependentUpon>DrumMachineForm.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="DrumPanelForm.resx">
       <DependentUpon>DrumPanelForm.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Forms\LiveControlForm.resx">
+      <DependentUpon>LiveControlForm.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="Main.resx">
       <DependentUpon>Main.cs</DependentUpon>

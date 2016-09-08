@@ -33,6 +33,7 @@
             this.toolStripButton1 = new System.Windows.Forms.ToolStripButton();
             this.toolStripButton3 = new System.Windows.Forms.ToolStripButton();
             this.toolStripButton2 = new System.Windows.Forms.ToolStripButton();
+            this.btnLive = new System.Windows.Forms.ToolStripButton();
             this.toolStrip1.SuspendLayout();
             this.SuspendLayout();
             // 
@@ -45,6 +46,7 @@
             this.toolStrip1.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.toolStripButton1,
             this.toolStripButton3,
+            this.btnLive,
             this.toolStripButton2});
             this.toolStrip1.Location = new System.Drawing.Point(0, 0);
             this.toolStrip1.Name = "toolStrip1";
@@ -92,6 +94,19 @@
             this.toolStripButton2.Text = "X";
             this.toolStripButton2.Click += new System.EventHandler(this.toolStripButton2_Click);
             // 
+            // btnLive
+            // 
+            this.btnLive.AutoSize = false;
+            this.btnLive.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Text;
+            this.btnLive.Font = new System.Drawing.Font("Segoe UI", 12F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.btnLive.ForeColor = System.Drawing.Color.White;
+            this.btnLive.Image = ((System.Drawing.Image)(resources.GetObject("btnLive.Image")));
+            this.btnLive.ImageTransparentColor = System.Drawing.Color.Magenta;
+            this.btnLive.Name = "btnLive";
+            this.btnLive.Size = new System.Drawing.Size(108, 124);
+            this.btnLive.Text = "Live";
+            this.btnLive.Click += new System.EventHandler(this.btnLive_Click);
+            // 
             // Main
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
@@ -118,6 +133,7 @@
         private System.Windows.Forms.ToolStripButton toolStripButton1;
         private System.Windows.Forms.ToolStripButton toolStripButton2;
         private System.Windows.Forms.ToolStripButton toolStripButton3;
+        private System.Windows.Forms.ToolStripButton btnLive;
     }
 }
 
