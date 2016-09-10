@@ -1,4 +1,4 @@
-# MetroDom
+# MetroDom [![Build Status](https://travis-ci.org/fotijr/MetroDom.svg?branch=master)](https://travis-ci.org/fotijr/MetroDom)
 MetroDom is a hardware and software project to program and control physical instruments.
 
 ## Roadmap
