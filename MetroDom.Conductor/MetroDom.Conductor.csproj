@@ -48,16 +48,16 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="DrumMachineForm.cs">
+    <Compile Include="Forms\DrumMachineForm.cs">
       <SubType>Form</SubType>
     </Compile>
-    <Compile Include="DrumMachineForm.Designer.cs">
+    <Compile Include="Forms\DrumMachineForm.Designer.cs">
       <DependentUpon>DrumMachineForm.cs</DependentUpon>
     </Compile>
-    <Compile Include="DrumPanelForm.cs">
+    <Compile Include="Forms\DrumPanelForm.cs">
       <SubType>Form</SubType>
     </Compile>
-    <Compile Include="DrumPanelForm.Designer.cs">
+    <Compile Include="Forms\DrumPanelForm.Designer.cs">
       <DependentUpon>DrumPanelForm.cs</DependentUpon>
     </Compile>
     <Compile Include="Forms\LiveControlForm.cs">
@@ -66,25 +66,25 @@
     <Compile Include="Forms\LiveControlForm.Designer.cs">
       <DependentUpon>LiveControlForm.cs</DependentUpon>
     </Compile>
-    <Compile Include="Main.cs">
+    <Compile Include="Forms\Main.cs">
       <SubType>Form</SubType>
     </Compile>
-    <Compile Include="Main.Designer.cs">
+    <Compile Include="Forms\Main.Designer.cs">
       <DependentUpon>Main.cs</DependentUpon>
     </Compile>
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Services\SerialService.cs" />
-    <EmbeddedResource Include="DrumMachineForm.resx">
+    <EmbeddedResource Include="Forms\DrumMachineForm.resx">
       <DependentUpon>DrumMachineForm.cs</DependentUpon>
     </EmbeddedResource>
-    <EmbeddedResource Include="DrumPanelForm.resx">
+    <EmbeddedResource Include="Forms\DrumPanelForm.resx">
       <DependentUpon>DrumPanelForm.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="Forms\LiveControlForm.resx">
       <DependentUpon>LiveControlForm.cs</DependentUpon>
     </EmbeddedResource>
-    <EmbeddedResource Include="Main.resx">
+    <EmbeddedResource Include="Forms\Main.resx">
       <DependentUpon>Main.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="Properties\Resources.resx">
@@ -118,6 +118,12 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="Resources\Snare.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\MetroDom.Core\MetroDom.Core.csproj">
+      <Project>{b274d009-7a6e-43f7-815a-ca429396f78c}</Project>
+      <Name>MetroDom.Core</Name>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

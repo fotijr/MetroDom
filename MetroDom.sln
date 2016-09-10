@@ -3,9 +3,9 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 14
 VisualStudioVersion = 14.0.25420.1
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MetroDom", "MetroDom\MetroDom.csproj", "{DC3886E3-6E21-431D-BFB6-9A24978F5AC8}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MetroDom.Conductor", "MetroDom.Conductor\MetroDom.Conductor.csproj", "{170E75C8-6739-42D3-8E81-E4703989FA94}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MetroDom.Core", "MetroDom.Core\MetroDom.Core.csproj", "{B274D009-7A6E-43F7-815A-CA429396F78C}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -13,14 +13,14 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{DC3886E3-6E21-431D-BFB6-9A24978F5AC8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{DC3886E3-6E21-431D-BFB6-9A24978F5AC8}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{DC3886E3-6E21-431D-BFB6-9A24978F5AC8}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{DC3886E3-6E21-431D-BFB6-9A24978F5AC8}.Release|Any CPU.Build.0 = Release|Any CPU
 		{170E75C8-6739-42D3-8E81-E4703989FA94}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{170E75C8-6739-42D3-8E81-E4703989FA94}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{170E75C8-6739-42D3-8E81-E4703989FA94}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{170E75C8-6739-42D3-8E81-E4703989FA94}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B274D009-7A6E-43F7-815A-CA429396F78C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B274D009-7A6E-43F7-815A-CA429396F78C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B274D009-7A6E-43F7-815A-CA429396F78C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B274D009-7A6E-43F7-815A-CA429396F78C}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

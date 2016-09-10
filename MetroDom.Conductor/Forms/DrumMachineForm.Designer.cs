@@ -1,4 +1,4 @@
-﻿namespace MetroDom.Conductor
+﻿namespace MetroDom.Conductor.Forms
 {
     partial class DrumMachineForm
     {
