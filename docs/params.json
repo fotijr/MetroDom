@@ -1,0 +1,6 @@
+{
+  "name": "Metrodom",
+  "tagline": "MetroDom is a hardware and software project to program and control musical instruments.",
+  "body": "# MetroDom [![Build Status](https://travis-ci.org/fotijr/MetroDom.svg?branch=master)](https://travis-ci.org/fotijr/MetroDom)\r\nMetroDom is a hardware and software project to program and control physical instruments.\r\n\r\n## Roadmap\r\n - Control hardware with a C# brain (MetroDom.Conductor)\r\n - Interface with Arduinos, which play physical instruments.\r\n    - Communicate via serial over USB\r\n    - Ideally using MIDI protocol",
+  "note": "Don't delete this file! It's used internally to help with page regeneration."
+}
