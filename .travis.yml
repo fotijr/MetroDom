@@ -1,2 +1,4 @@
 language: csharp
 solution: MetroDom.sln
+script:
+  - mono packages\xunit.runner.console.2.1.0\tools\xunit.console MetroDom.Tests\bin\Debug\MetroDom.Tests.dll
