@@ -1,4 +1,5 @@
 ﻿using MetroDom.Core;
+using Sanford.Multimedia;
 using System;
 using System.Collections.Generic;
 using Xunit;
@@ -12,7 +13,7 @@ namespace MetroDom.Tests.Core
         {
             // Arrange
             var orchestra = new Orchestra(null);
-            var song = new Song(new List<SongNote> { new SongNote(Note.C, 500) });
+            var song = new Song(Key.EMajor, new List<SongNote> { new SongNote(MetroDom.Core.Note.C, 500) });
 
             // Act
             orchestra.Start(song);

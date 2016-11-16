@@ -4,38 +4,41 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Windows.Forms;
 using MetroDom.Core;
+using Sanford.Multimedia;
 
 namespace MetroDom.Conductor.Forms
 {
     public partial class LiveControlForm : Form
     {
-        Song _jingleBells = new Song(new List<SongNote>
+        Song _jingleBells = new Song(
+                                    Key.EMajor,
+                                    new List<SongNote>
                                     {
-                                        new SongNote(Note.E, 350),
-                                        new SongNote(Note.E, 350),
-                                        new SongNote(Note.E, 700),
-                                        new SongNote(Note.E, 350),
-                                        new SongNote(Note.E, 350),
-                                        new SongNote(Note.E, 700),
-                                        new SongNote(Note.E, 350),
-                                        new SongNote(Note.G, 350),
-                                        new SongNote(Note.C, 350),
-                                        new SongNote(Note.D, 350),
-                                        new SongNote(Note.E, 1050),
-                                        new SongNote(Note.F, 350),
-                                        new SongNote(Note.F, 350),
-                                        new SongNote(Note.F, 350),
-                                        new SongNote(Note.F, 350),
-                                        new SongNote(Note.E, 350),
-                                        new SongNote(Note.E, 350),
-                                        new SongNote(Note.E, 350),
-                                        new SongNote(Note.E, 350),
-                                        new SongNote(Note.E, 350),
-                                        new SongNote(Note.D, 350),
-                                        new SongNote(Note.D, 350),
-                                        new SongNote(Note.E, 350),
-                                        new SongNote(Note.D, 700),
-                                        new SongNote(Note.G, 700)
+                                        new SongNote(Core.Note.E, 350),
+                                        new SongNote(Core.Note.E, 350),
+                                        new SongNote(Core.Note.E, 700),
+                                        new SongNote(Core.Note.E, 350),
+                                        new SongNote(Core.Note.E, 350),
+                                        new SongNote(Core.Note.E, 700),
+                                        new SongNote(Core.Note.E, 350),
+                                        new SongNote(Core.Note.G, 350),
+                                        new SongNote(Core.Note.C, 350),
+                                        new SongNote(Core.Note.D, 350),
+                                        new SongNote(Core.Note.E, 1050),
+                                        new SongNote(Core.Note.F, 350),
+                                        new SongNote(Core.Note.F, 350),
+                                        new SongNote(Core.Note.F, 350),
+                                        new SongNote(Core.Note.F, 350),
+                                        new SongNote(Core.Note.E, 350),
+                                        new SongNote(Core.Note.E, 350),
+                                        new SongNote(Core.Note.E, 350),
+                                        new SongNote(Core.Note.E, 350),
+                                        new SongNote(Core.Note.E, 350),
+                                        new SongNote(Core.Note.D, 350),
+                                        new SongNote(Core.Note.D, 350),
+                                        new SongNote(Core.Note.E, 350),
+                                        new SongNote(Core.Note.D, 700),
+                                        new SongNote(Core.Note.G, 700)
                                     });
 
         public LiveControlForm()

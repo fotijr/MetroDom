@@ -1,15 +1,13 @@
-﻿using System;
+﻿using Sanford.Multimedia;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace MetroDom.Core
 {
     public class Song
     {
-        public Song(List<SongNote> songNotes)
+        public Song(Key key, List<SongNote> songNotes)
         {
+            SongKey = key;
             SongNotes = songNotes;
         }
 
@@ -17,6 +15,11 @@ namespace MetroDom.Core
         /// Sequential list of song notes
         /// </summary>
         public List<SongNote> SongNotes { get; set; }
+
+        /// <summary>
+        /// Key of the song
+        /// </summary>
+        public Key SongKey { get; set; }
     }
 
 
@@ -24,7 +27,7 @@ namespace MetroDom.Core
 
     public class SongNote
     {
-        public Note Note;
+        public Core.Note Note;
         public int Length;
 
         public SongNote(Note note, int length)
