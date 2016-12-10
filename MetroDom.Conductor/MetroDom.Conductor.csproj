@@ -65,6 +65,12 @@
     <Compile Include="Forms\DrumPanelForm.Designer.cs">
       <DependentUpon>DrumPanelForm.cs</DependentUpon>
     </Compile>
+    <Compile Include="Forms\Explorer.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Forms\Explorer.Designer.cs">
+      <DependentUpon>Explorer.cs</DependentUpon>
+    </Compile>
     <Compile Include="Forms\LiveControlForm.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -85,6 +91,9 @@
     </EmbeddedResource>
     <EmbeddedResource Include="Forms\DrumPanelForm.resx">
       <DependentUpon>DrumPanelForm.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Forms\Explorer.resx">
+      <DependentUpon>Explorer.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="Forms\LiveControlForm.resx">
       <DependentUpon>LiveControlForm.cs</DependentUpon>

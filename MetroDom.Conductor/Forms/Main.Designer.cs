@@ -32,8 +32,9 @@
             this.toolStrip1 = new System.Windows.Forms.ToolStrip();
             this.toolStripButton1 = new System.Windows.Forms.ToolStripButton();
             this.toolStripButton3 = new System.Windows.Forms.ToolStripButton();
-            this.toolStripButton2 = new System.Windows.Forms.ToolStripButton();
             this.btnLive = new System.Windows.Forms.ToolStripButton();
+            this.toolStripButton2 = new System.Windows.Forms.ToolStripButton();
+            this.toolStripButton4 = new System.Windows.Forms.ToolStripButton();
             this.toolStrip1.SuspendLayout();
             this.SuspendLayout();
             // 
@@ -47,6 +48,7 @@
             this.toolStripButton1,
             this.toolStripButton3,
             this.btnLive,
+            this.toolStripButton4,
             this.toolStripButton2});
             this.toolStrip1.Location = new System.Drawing.Point(0, 0);
             this.toolStrip1.Name = "toolStrip1";
@@ -81,6 +83,19 @@
             this.toolStripButton3.Text = "Panel";
             this.toolStripButton3.Click += new System.EventHandler(this.toolStripButton3_Click);
             // 
+            // btnLive
+            // 
+            this.btnLive.AutoSize = false;
+            this.btnLive.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Text;
+            this.btnLive.Font = new System.Drawing.Font("Segoe UI", 12F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.btnLive.ForeColor = System.Drawing.Color.White;
+            this.btnLive.Image = ((System.Drawing.Image)(resources.GetObject("btnLive.Image")));
+            this.btnLive.ImageTransparentColor = System.Drawing.Color.Magenta;
+            this.btnLive.Name = "btnLive";
+            this.btnLive.Size = new System.Drawing.Size(108, 124);
+            this.btnLive.Text = "Live";
+            this.btnLive.Click += new System.EventHandler(this.btnLive_Click);
+            // 
             // toolStripButton2
             // 
             this.toolStripButton2.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Text;
@@ -94,18 +109,17 @@
             this.toolStripButton2.Text = "X";
             this.toolStripButton2.Click += new System.EventHandler(this.toolStripButton2_Click);
             // 
-            // btnLive
+            // toolStripButton4
             // 
-            this.btnLive.AutoSize = false;
-            this.btnLive.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Text;
-            this.btnLive.Font = new System.Drawing.Font("Segoe UI", 12F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            this.btnLive.ForeColor = System.Drawing.Color.White;
-            this.btnLive.Image = ((System.Drawing.Image)(resources.GetObject("btnLive.Image")));
-            this.btnLive.ImageTransparentColor = System.Drawing.Color.Magenta;
-            this.btnLive.Name = "btnLive";
-            this.btnLive.Size = new System.Drawing.Size(108, 124);
-            this.btnLive.Text = "Live";
-            this.btnLive.Click += new System.EventHandler(this.btnLive_Click);
+            this.toolStripButton4.AutoSize = false;
+            this.toolStripButton4.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Text;
+            this.toolStripButton4.ForeColor = System.Drawing.SystemColors.ButtonFace;
+            this.toolStripButton4.Image = ((System.Drawing.Image)(resources.GetObject("toolStripButton4.Image")));
+            this.toolStripButton4.ImageTransparentColor = System.Drawing.Color.Magenta;
+            this.toolStripButton4.Name = "toolStripButton4";
+            this.toolStripButton4.Size = new System.Drawing.Size(106, 40);
+            this.toolStripButton4.Text = "Explorer";
+            this.toolStripButton4.Click += new System.EventHandler(this.toolStripButton4_Click);
             // 
             // Main
             // 
@@ -134,6 +148,7 @@
         private System.Windows.Forms.ToolStripButton toolStripButton2;
         private System.Windows.Forms.ToolStripButton toolStripButton3;
         private System.Windows.Forms.ToolStripButton btnLive;
+        private System.Windows.Forms.ToolStripButton toolStripButton4;
     }
 }
 
