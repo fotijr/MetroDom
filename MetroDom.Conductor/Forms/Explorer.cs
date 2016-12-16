@@ -1,12 +1,20 @@
 ﻿using System;
 using System.Windows.Forms;
 using Sanford.Multimedia.Midi;
-using System.Diagnostics;
+using Newtonsoft.Json;
+using System.Text;
 
 namespace MetroDom.Conductor.Forms
 {
     public partial class Explorer : Form
     {
+        private JsonSerializerSettings _jsonSettings = new JsonSerializerSettings
+        {
+            ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
+            NullValueHandling = NullValueHandling.Ignore,
+            Formatting = Formatting.Indented
+        };
+
         public Explorer()
         {
             InitializeComponent();
@@ -24,11 +32,27 @@ namespace MetroDom.Conductor.Forms
                 try
                 {
                     song.Load(openDialog.FileName);
-                    Debug.WriteLine(song.SequenceType.ToString());
+                    var output = new StringBuilder();
+                    output.AppendLine("Song Output-----------------------------------");
+                    output.AppendLine(JsonConvert.SerializeObject(song, _jsonSettings));
+
+                    foreach (var track in song)
+                    {
+                        output.AppendLine("Track Output-----------------------------------");
+                        output.AppendLine(JsonConvert.SerializeObject(track, _jsonSettings));
+
+                        output.AppendLine($"Track Events ({ track.Count })-----------------------------------");
+                        for (int i = 0; i < track.Count; i++)
+                        {
+                            output.AppendLine(JsonConvert.SerializeObject(track.GetMidiEvent(i), _jsonSettings));
+                        }
+                    }
+
+                    rtbOutput.Text = output.ToString();
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show("Error: Could not read file from disk. Original error: " + ex.Message);
+                    MessageBox.Show($"Error loading MIDI file:  {ex.Message}");
                 }
             }
         }
