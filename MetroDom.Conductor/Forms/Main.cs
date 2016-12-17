@@ -9,6 +9,11 @@ namespace MetroDom.Conductor.Forms
         {
             InitializeComponent();
         }
+        private void Main_Load(object sender, EventArgs e)
+        {
+            // open default form
+            OpenForm<Explorer>();
+        }
 
         private void toolStripButton2_Click(object sender, EventArgs e)
         {
@@ -17,68 +22,25 @@ namespace MetroDom.Conductor.Forms
 
         private void toolStripButton1_Click(object sender, EventArgs e)
         {
-            var drumMachine = new DrumMachineForm();
-            drumMachine.MdiParent = this;
-            drumMachine.Show();
+            OpenForm<DrumPanelForm>();
         }
 
         private void toolStripButton3_Click(object sender, EventArgs e)
         {
-
-            MdiClient ctlMDI;
-
-            // Loop through all of the form's controls looking
-            // for the control of type MdiClient.
-            foreach (Control ctl in this.Controls)
-            {
-                try
-                {
-                    // Attempt to cast the control to type MdiClient.
-                    ctlMDI = (MdiClient)ctl;
-
-                    // Set the BackColor of the MdiClient control.
-                    ctlMDI.BackColor = this.BackColor;
-                }
-                catch (InvalidCastException exc)
-                {
-                    // Catch and ignore the error if casting failed.
-                }
-            }
-
-            var drumMachine = new DrumPanelForm();
-            drumMachine.MdiParent = this;
-            drumMachine.Show();
+            OpenForm<DrumPanelForm>();
         }
 
         private void btnLive_Click(object sender, EventArgs e)
         {
-
-            MdiClient ctlMDI;
-
-            // Loop through all of the form's controls looking
-            // for the control of type MdiClient.
-            foreach (Control ctl in this.Controls)
-            {
-                try
-                {
-                    // Attempt to cast the control to type MdiClient.
-                    ctlMDI = (MdiClient)ctl;
-
-                    // Set the BackColor of the MdiClient control.
-                    ctlMDI.BackColor = this.BackColor;
-                }
-                catch (InvalidCastException exc)
-                {
-                    // Catch and ignore the error if casting failed.
-                }
-            }
-
-            var liveForm = new LiveControlForm();
-            liveForm.MdiParent = this;
-            liveForm.Show();
+            OpenForm<LiveControlForm>();
         }
 
         private void toolStripButton4_Click(object sender, EventArgs e)
+        {
+            OpenForm<Explorer>();
+        }
+
+        private void OpenForm<T>() where T:Form, new()
         {
             MdiClient ctlMDI;
 
@@ -100,9 +62,9 @@ namespace MetroDom.Conductor.Forms
                 }
             }
 
-            var explorer = new Explorer();
-            explorer.MdiParent = this;
-            explorer.Show();
+            var form = new T();
+            form.MdiParent = this;
+            form.Show();
         }
     }
 }

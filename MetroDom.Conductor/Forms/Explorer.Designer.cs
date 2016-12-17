@@ -28,46 +28,163 @@
         /// </summary>
         private void InitializeComponent()
         {
-            this.button1 = new System.Windows.Forms.Button();
+            System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(Explorer));
             this.rtbOutput = new System.Windows.Forms.RichTextBox();
+            this.clbChannels = new System.Windows.Forms.CheckedListBox();
+            this.gbChannels = new System.Windows.Forms.GroupBox();
+            this.toolStripContainer1 = new System.Windows.Forms.ToolStripContainer();
+            this.toolStrip1 = new System.Windows.Forms.ToolStrip();
+            this.btnOpen = new System.Windows.Forms.ToolStripButton();
+            this.toolStripSeparator1 = new System.Windows.Forms.ToolStripSeparator();
+            this.btnStop = new System.Windows.Forms.ToolStripButton();
+            this.btnPlay = new System.Windows.Forms.ToolStripButton();
+            this.gbChannels.SuspendLayout();
+            this.toolStripContainer1.ContentPanel.SuspendLayout();
+            this.toolStripContainer1.TopToolStripPanel.SuspendLayout();
+            this.toolStripContainer1.SuspendLayout();
+            this.toolStrip1.SuspendLayout();
             this.SuspendLayout();
-            // 
-            // button1
-            // 
-            this.button1.Location = new System.Drawing.Point(12, 12);
-            this.button1.Name = "button1";
-            this.button1.Size = new System.Drawing.Size(144, 23);
-            this.button1.TabIndex = 0;
-            this.button1.Text = "Load MIDI File";
-            this.button1.UseVisualStyleBackColor = true;
-            this.button1.Click += new System.EventHandler(this.button1_Click);
             // 
             // rtbOutput
             // 
-            this.rtbOutput.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
-            | System.Windows.Forms.AnchorStyles.Left) 
-            | System.Windows.Forms.AnchorStyles.Right)));
-            this.rtbOutput.Location = new System.Drawing.Point(12, 41);
+            this.rtbOutput.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
+            | System.Windows.Forms.AnchorStyles.Left)));
+            this.rtbOutput.Location = new System.Drawing.Point(3, 0);
             this.rtbOutput.Name = "rtbOutput";
-            this.rtbOutput.Size = new System.Drawing.Size(503, 228);
+            this.rtbOutput.ReadOnly = true;
+            this.rtbOutput.Size = new System.Drawing.Size(549, 637);
             this.rtbOutput.TabIndex = 1;
             this.rtbOutput.Text = "";
+            // 
+            // clbChannels
+            // 
+            this.clbChannels.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
+            | System.Windows.Forms.AnchorStyles.Left) 
+            | System.Windows.Forms.AnchorStyles.Right)));
+            this.clbChannels.FormattingEnabled = true;
+            this.clbChannels.Location = new System.Drawing.Point(14, 17);
+            this.clbChannels.Margin = new System.Windows.Forms.Padding(2);
+            this.clbChannels.Name = "clbChannels";
+            this.clbChannels.Size = new System.Drawing.Size(206, 274);
+            this.clbChannels.TabIndex = 4;
+            this.clbChannels.ItemCheck += new System.Windows.Forms.ItemCheckEventHandler(this.clbChannels_ItemCheck);
+            // 
+            // gbChannels
+            // 
+            this.gbChannels.Controls.Add(this.clbChannels);
+            this.gbChannels.Location = new System.Drawing.Point(583, 12);
+            this.gbChannels.Margin = new System.Windows.Forms.Padding(2);
+            this.gbChannels.Name = "gbChannels";
+            this.gbChannels.Padding = new System.Windows.Forms.Padding(2);
+            this.gbChannels.Size = new System.Drawing.Size(229, 307);
+            this.gbChannels.TabIndex = 5;
+            this.gbChannels.TabStop = false;
+            this.gbChannels.Text = "Channels";
+            // 
+            // toolStripContainer1
+            // 
+            // 
+            // toolStripContainer1.ContentPanel
+            // 
+            this.toolStripContainer1.ContentPanel.Controls.Add(this.rtbOutput);
+            this.toolStripContainer1.ContentPanel.Controls.Add(this.gbChannels);
+            this.toolStripContainer1.ContentPanel.Size = new System.Drawing.Size(924, 640);
+            this.toolStripContainer1.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.toolStripContainer1.Location = new System.Drawing.Point(0, 0);
+            this.toolStripContainer1.Name = "toolStripContainer1";
+            this.toolStripContainer1.Size = new System.Drawing.Size(924, 665);
+            this.toolStripContainer1.TabIndex = 6;
+            this.toolStripContainer1.Text = "toolStripContainer1";
+            // 
+            // toolStripContainer1.TopToolStripPanel
+            // 
+            this.toolStripContainer1.TopToolStripPanel.Controls.Add(this.toolStrip1);
+            // 
+            // toolStrip1
+            // 
+            this.toolStrip1.AllowMerge = false;
+            this.toolStrip1.GripStyle = System.Windows.Forms.ToolStripGripStyle.Hidden;
+            this.toolStrip1.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
+            this.btnOpen,
+            this.toolStripSeparator1,
+            this.btnPlay,
+            this.btnStop});
+            this.toolStrip1.Location = new System.Drawing.Point(3, 0);
+            this.toolStrip1.Name = "toolStrip1";
+            this.toolStrip1.Size = new System.Drawing.Size(145, 25);
+            this.toolStrip1.TabIndex = 0;
+            // 
+            // btnOpen
+            // 
+            this.btnOpen.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Text;
+            this.btnOpen.Image = ((System.Drawing.Image)(resources.GetObject("btnOpen.Image")));
+            this.btnOpen.ImageTransparentColor = System.Drawing.Color.Magenta;
+            this.btnOpen.Name = "btnOpen";
+            this.btnOpen.Size = new System.Drawing.Size(89, 22);
+            this.btnOpen.Text = "Open MIDI File";
+            this.btnOpen.Click += new System.EventHandler(this.btnOpen_Click);
+            // 
+            // toolStripSeparator1
+            // 
+            this.toolStripSeparator1.Name = "toolStripSeparator1";
+            this.toolStripSeparator1.Size = new System.Drawing.Size(6, 25);
+            // 
+            // btnStop
+            // 
+            this.btnStop.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Text;
+            this.btnStop.Enabled = false;
+            this.btnStop.Image = ((System.Drawing.Image)(resources.GetObject("btnStop.Image")));
+            this.btnStop.ImageTransparentColor = System.Drawing.Color.Magenta;
+            this.btnStop.Name = "btnStop";
+            this.btnStop.Size = new System.Drawing.Size(23, 22);
+            this.btnStop.Text = "■";
+            this.btnStop.ToolTipText = "Stop MIDI playback";
+            this.btnStop.Click += new System.EventHandler(this.btnStop_Click);
+            // 
+            // btnPlay
+            // 
+            this.btnPlay.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Text;
+            this.btnPlay.Enabled = false;
+            this.btnPlay.Image = ((System.Drawing.Image)(resources.GetObject("btnPlay.Image")));
+            this.btnPlay.ImageTransparentColor = System.Drawing.Color.Magenta;
+            this.btnPlay.Name = "btnPlay";
+            this.btnPlay.Size = new System.Drawing.Size(24, 22);
+            this.btnPlay.Text = " ▶";
+            this.btnPlay.ToolTipText = "Play MIDI";
+            this.btnPlay.Click += new System.EventHandler(this.btnPlay_Click);
             // 
             // Explorer
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(527, 281);
-            this.Controls.Add(this.rtbOutput);
-            this.Controls.Add(this.button1);
+            this.ClientSize = new System.Drawing.Size(924, 665);
+            this.Controls.Add(this.toolStripContainer1);
+            this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.None;
             this.Name = "Explorer";
             this.Text = "Explorer";
+            this.FormClosing += new System.Windows.Forms.FormClosingEventHandler(this.Explorer_FormClosing);
+            this.Load += new System.EventHandler(this.Explorer_Load);
+            this.gbChannels.ResumeLayout(false);
+            this.toolStripContainer1.ContentPanel.ResumeLayout(false);
+            this.toolStripContainer1.TopToolStripPanel.ResumeLayout(false);
+            this.toolStripContainer1.TopToolStripPanel.PerformLayout();
+            this.toolStripContainer1.ResumeLayout(false);
+            this.toolStripContainer1.PerformLayout();
+            this.toolStrip1.ResumeLayout(false);
+            this.toolStrip1.PerformLayout();
             this.ResumeLayout(false);
 
         }
 
         #endregion
-        private System.Windows.Forms.Button button1;
         private System.Windows.Forms.RichTextBox rtbOutput;
+        private System.Windows.Forms.CheckedListBox clbChannels;
+        private System.Windows.Forms.GroupBox gbChannels;
+        private System.Windows.Forms.ToolStripContainer toolStripContainer1;
+        private System.Windows.Forms.ToolStrip toolStrip1;
+        private System.Windows.Forms.ToolStripButton btnOpen;
+        private System.Windows.Forms.ToolStripSeparator toolStripSeparator1;
+        private System.Windows.Forms.ToolStripButton btnPlay;
+        private System.Windows.Forms.ToolStripButton btnStop;
     }
 }
