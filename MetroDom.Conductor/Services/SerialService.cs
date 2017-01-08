@@ -1,23 +1,30 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.IO.Ports;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace MetroDom.Conductor.Services
 {
     public class SerialService : IDisposable
     {
         SerialPort _serialPort = new SerialPort();
+        const int _baudRate = 9600;
 
         public SerialService()
         {
             string[] ports = SerialPort.GetPortNames();
-            if (ports.Length > 0)
+            foreach (var port in ports)
             {
-                _serialPort = new SerialPort(ports[0], 9600, Parity.None, 8, StopBits.One);
-                _serialPort.Open();
+                try
+                {
+                    _serialPort = new SerialPort(ports[0], _baudRate, Parity.None, 8, StopBits.One);
+                    _serialPort.Open();
+                    // TODO: add some type of question and response between device and host
+                    // to verify device is compatible
+                }
+                catch (Exception)
+                {
+                    // unable to connect to a MetroDom device
+                    throw;
+                }
             }
         }
 

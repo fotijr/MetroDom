@@ -5,76 +5,75 @@ using System.Threading;
 using System.Windows.Forms;
 using MetroDom.Core;
 using Sanford.Multimedia;
+using Sanford.Multimedia.Midi;
 
 namespace MetroDom.Conductor.Forms
 {
     public partial class LiveControlForm : Form
     {
-        Song _jingleBells = new Song(
-                                    Key.EMajor,
-                                    new List<SongNote>
-                                    {
-                                        new SongNote(Core.Note.E, 350),
-                                        new SongNote(Core.Note.E, 350),
-                                        new SongNote(Core.Note.E, 700),
-                                        new SongNote(Core.Note.E, 350),
-                                        new SongNote(Core.Note.E, 350),
-                                        new SongNote(Core.Note.E, 700),
-                                        new SongNote(Core.Note.E, 350),
-                                        new SongNote(Core.Note.G, 350),
-                                        new SongNote(Core.Note.C, 350),
-                                        new SongNote(Core.Note.D, 350),
-                                        new SongNote(Core.Note.E, 1050),
-                                        new SongNote(Core.Note.F, 350),
-                                        new SongNote(Core.Note.F, 350),
-                                        new SongNote(Core.Note.F, 350),
-                                        new SongNote(Core.Note.F, 350),
-                                        new SongNote(Core.Note.E, 350),
-                                        new SongNote(Core.Note.E, 350),
-                                        new SongNote(Core.Note.E, 350),
-                                        new SongNote(Core.Note.E, 350),
-                                        new SongNote(Core.Note.E, 350),
-                                        new SongNote(Core.Note.D, 350),
-                                        new SongNote(Core.Note.D, 350),
-                                        new SongNote(Core.Note.E, 350),
-                                        new SongNote(Core.Note.D, 700),
-                                        new SongNote(Core.Note.G, 700)
-                                    });
+        private InputDevice _selectedInput = null;
+        private SerialService _serial;
 
         public LiveControlForm()
         {
             InitializeComponent();
+            LoadMidiInputs();
         }
 
-        private void button1_Click(object sender, EventArgs e)
+        /// <summary>
+        /// Loads available MIDI inputs
+        /// </summary>
+        private void LoadMidiInputs()
         {
-            using (var serial = new SerialService())
-            {
+            MidiInCaps deviceProperties;
 
-                var afterMoveRest = 300;
-                var afterNoteRest = 250;
-                foreach (var note in _jingleBells.SongNotes)
-                {
-                    serial.SendMessage($"{note.Note.Position}m");
-                    Thread.Sleep(afterMoveRest);
-                    serial.SendMessage("p");
-                    afterNoteRest = Math.Max(150, note.Length / 2);
-                    afterMoveRest = note.Length - afterNoteRest;
-                    Thread.Sleep(afterNoteRest);
-                }
+            if (InputDevice.DeviceCount == 0)
+            {
+                ddbMidiInputs.DropDownItems.Add("No MIDI input devices detected.");
+                ddbMidiInputs.DropDownItems[0].Enabled = false;
+            }
+
+            for (int i = 0; i < InputDevice.DeviceCount; i++)
+            {
+                deviceProperties = InputDevice.GetDeviceCapabilities(i);
+                ddbMidiInputs.DropDownItems.Add(deviceProperties.name);
+                ddbMidiInputs.DropDownItems[i].Click += MidiInputSelected;
+                ddbMidiInputs.DropDownItems[i].ImageIndex = i; // hack to store MIDI index
             }
         }
 
-        private void button2_Click(object sender, EventArgs e)
+        private void MidiInputSelected(object sender, EventArgs e)
         {
-            using (var serial = new SerialService())
+            if (_selectedInput != null)
             {
-                serial.SendMessage($"{txtNote.Text}m");
-                Thread.Sleep(250);
-                serial.SendMessage("p");
+                _selectedInput.StopRecording();
+                _selectedInput.Close();
+            }
+            var menuItem = (ToolStripMenuItem)sender;
+            var midiIndex = menuItem.ImageIndex;
+            ddbMidiInputs.DropDownItems[midiIndex].Select();
+            _serial = new SerialService();
+            _selectedInput = new InputDevice(midiIndex);
+            _selectedInput.ChannelMessageReceived += ChannelMessageReceived;
+            _selectedInput.StartRecording();
+        }
 
-                // TODO: need to convert the above into MIDI/library friendly code
-                //throw new NotImplementedException("Sorry, still working on converting to MIDI.");
+        private void ChannelMessageReceived(object sender, ChannelMessageEventArgs e)
+        {
+            // note value: e.Message.Data1
+            // velocity: e.Message.Data2
+            if (e.Message.Data2 == 0) return;
+            if (e.Message.Data1 == 60)
+            {
+                _serial.SendMessage("0");
+            }
+            else if (e.Message.Data1 == 64)
+            {
+                _serial.SendMessage("4");
+            }
+            else if (e.Message.Data1 == 67)
+            {
+                _serial.SendMessage("7");
             }
         }
     }

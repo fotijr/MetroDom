@@ -30,13 +30,13 @@
         {
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(LiveControlForm));
             this.toolStripContainer1 = new System.Windows.Forms.ToolStripContainer();
+            this.button2 = new System.Windows.Forms.Button();
+            this.txtNote = new System.Windows.Forms.TextBox();
             this.button1 = new System.Windows.Forms.Button();
             this.toolStrip1 = new System.Windows.Forms.ToolStrip();
-            this.midiDropdown = new System.Windows.Forms.ToolStripDropDownButton();
+            this.ddbMidiInputs = new System.Windows.Forms.ToolStripDropDownButton();
             this.toolStripLabel1 = new System.Windows.Forms.ToolStripLabel();
             this.metroDomDropdown = new System.Windows.Forms.ToolStripDropDownButton();
-            this.txtNote = new System.Windows.Forms.TextBox();
-            this.button2 = new System.Windows.Forms.Button();
             this.toolStripContainer1.ContentPanel.SuspendLayout();
             this.toolStripContainer1.TopToolStripPanel.SuspendLayout();
             this.toolStripContainer1.SuspendLayout();
@@ -63,22 +63,32 @@
             // 
             this.toolStripContainer1.TopToolStripPanel.Controls.Add(this.toolStrip1);
             // 
+            // button2
+            // 
+            this.button2.Location = new System.Drawing.Point(0, 0);
+            this.button2.Name = "button2";
+            this.button2.Size = new System.Drawing.Size(75, 23);
+            this.button2.TabIndex = 0;
+            // 
+            // txtNote
+            // 
+            this.txtNote.Location = new System.Drawing.Point(236, 232);
+            this.txtNote.Name = "txtNote";
+            this.txtNote.Size = new System.Drawing.Size(100, 20);
+            this.txtNote.TabIndex = 1;
+            // 
             // button1
             // 
-            this.button1.Font = new System.Drawing.Font("Microsoft Sans Serif", 24F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            this.button1.Location = new System.Drawing.Point(310, 36);
+            this.button1.Location = new System.Drawing.Point(0, 0);
             this.button1.Name = "button1";
-            this.button1.Size = new System.Drawing.Size(313, 106);
-            this.button1.TabIndex = 0;
-            this.button1.Text = "Play Song";
-            this.button1.UseVisualStyleBackColor = true;
-            this.button1.Click += new System.EventHandler(this.button1_Click);
+            this.button1.Size = new System.Drawing.Size(75, 23);
+            this.button1.TabIndex = 2;
             // 
             // toolStrip1
             // 
             this.toolStrip1.Dock = System.Windows.Forms.DockStyle.None;
             this.toolStrip1.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
-            this.midiDropdown,
+            this.ddbMidiInputs,
             this.toolStripLabel1,
             this.metroDomDropdown});
             this.toolStrip1.Location = new System.Drawing.Point(3, 0);
@@ -86,14 +96,14 @@
             this.toolStrip1.Size = new System.Drawing.Size(321, 25);
             this.toolStrip1.TabIndex = 0;
             // 
-            // midiDropdown
+            // ddbMidiInputs
             // 
-            this.midiDropdown.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Text;
-            this.midiDropdown.Image = ((System.Drawing.Image)(resources.GetObject("midiDropdown.Image")));
-            this.midiDropdown.ImageTransparentColor = System.Drawing.Color.Magenta;
-            this.midiDropdown.Name = "midiDropdown";
-            this.midiDropdown.Size = new System.Drawing.Size(88, 22);
-            this.midiDropdown.Text = "MIDI Devices";
+            this.ddbMidiInputs.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Text;
+            this.ddbMidiInputs.Image = ((System.Drawing.Image)(resources.GetObject("ddbMidiInputs.Image")));
+            this.ddbMidiInputs.ImageTransparentColor = System.Drawing.Color.Magenta;
+            this.ddbMidiInputs.Name = "ddbMidiInputs";
+            this.ddbMidiInputs.Size = new System.Drawing.Size(88, 22);
+            this.ddbMidiInputs.Text = "MIDI Devices";
             // 
             // toolStripLabel1
             // 
@@ -109,23 +119,6 @@
             this.metroDomDropdown.Name = "metroDomDropdown";
             this.metroDomDropdown.Size = new System.Drawing.Size(121, 22);
             this.metroDomDropdown.Text = "MetroDom Devices";
-            // 
-            // txtNote
-            // 
-            this.txtNote.Location = new System.Drawing.Point(236, 232);
-            this.txtNote.Name = "txtNote";
-            this.txtNote.Size = new System.Drawing.Size(100, 20);
-            this.txtNote.TabIndex = 1;
-            // 
-            // button2
-            // 
-            this.button2.Location = new System.Drawing.Point(392, 229);
-            this.button2.Name = "button2";
-            this.button2.Size = new System.Drawing.Size(75, 23);
-            this.button2.TabIndex = 2;
-            this.button2.Text = "Play Note";
-            this.button2.UseVisualStyleBackColor = true;
-            this.button2.Click += new System.EventHandler(this.button2_Click);
             // 
             // LiveControlForm
             // 
@@ -152,7 +145,7 @@
 
         private System.Windows.Forms.ToolStripContainer toolStripContainer1;
         private System.Windows.Forms.ToolStrip toolStrip1;
-        private System.Windows.Forms.ToolStripDropDownButton midiDropdown;
+        private System.Windows.Forms.ToolStripDropDownButton ddbMidiInputs;
         private System.Windows.Forms.ToolStripLabel toolStripLabel1;
         private System.Windows.Forms.ToolStripDropDownButton metroDomDropdown;
         private System.Windows.Forms.Button button1;

@@ -1,10 +1,15 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Windows.Forms;
 
 namespace MetroDom.Conductor.Forms
 {
     public partial class Main : Form
     {
+        private List<Form> _openForms = new List<Form>();
+        Form _currentForm;
+
         public Main()
         {
             InitializeComponent();
@@ -12,22 +17,12 @@ namespace MetroDom.Conductor.Forms
         private void Main_Load(object sender, EventArgs e)
         {
             // open default form
-            OpenForm<Explorer>();
+            OpenForm<LiveControlForm>();
         }
 
         private void toolStripButton2_Click(object sender, EventArgs e)
         {
             Application.Exit();
-        }
-
-        private void toolStripButton1_Click(object sender, EventArgs e)
-        {
-            OpenForm<DrumPanelForm>();
-        }
-
-        private void toolStripButton3_Click(object sender, EventArgs e)
-        {
-            OpenForm<DrumPanelForm>();
         }
 
         private void btnLive_Click(object sender, EventArgs e)
@@ -42,6 +37,15 @@ namespace MetroDom.Conductor.Forms
 
         private void OpenForm<T>() where T:Form, new()
         {
+            var openForm = _openForms.FirstOrDefault(f => f.GetType() == typeof(T));
+            if (openForm != null)
+            {
+                _currentForm?.Hide();
+                openForm.Show();
+                openForm.BringToFront();
+                return;
+            }
+
             MdiClient ctlMDI;
 
             // Loop through all of the form's controls looking
@@ -64,7 +68,12 @@ namespace MetroDom.Conductor.Forms
 
             var form = new T();
             form.MdiParent = this;
+            //form.MinimumSize = form.Size;
+            //form.MaximumSize = form.Size;
             form.Show();
+            form.WindowState = FormWindowState.Maximized;
+            _openForms.Add(form);
+            _currentForm = form;
         }
     }
 }
