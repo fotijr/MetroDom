@@ -36,7 +36,8 @@
             this.toolStrip1 = new System.Windows.Forms.ToolStrip();
             this.ddbMidiInputs = new System.Windows.Forms.ToolStripDropDownButton();
             this.toolStripLabel1 = new System.Windows.Forms.ToolStripLabel();
-            this.metroDomDropdown = new System.Windows.Forms.ToolStripDropDownButton();
+            this.ddbInstruments = new System.Windows.Forms.ToolStripDropDownButton();
+            this.toolStripButton1 = new System.Windows.Forms.ToolStripButton();
             this.toolStripContainer1.ContentPanel.SuspendLayout();
             this.toolStripContainer1.TopToolStripPanel.SuspendLayout();
             this.toolStripContainer1.SuspendLayout();
@@ -90,10 +91,11 @@
             this.toolStrip1.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.ddbMidiInputs,
             this.toolStripLabel1,
-            this.metroDomDropdown});
+            this.ddbInstruments,
+            this.toolStripButton1});
             this.toolStrip1.Location = new System.Drawing.Point(3, 0);
             this.toolStrip1.Name = "toolStrip1";
-            this.toolStrip1.Size = new System.Drawing.Size(321, 25);
+            this.toolStrip1.Size = new System.Drawing.Size(344, 25);
             this.toolStrip1.TabIndex = 0;
             // 
             // ddbMidiInputs
@@ -111,14 +113,24 @@
             this.toolStripLabel1.Name = "toolStripLabel1";
             this.toolStripLabel1.Size = new System.Drawing.Size(100, 22);
             // 
-            // metroDomDropdown
+            // ddbInstruments
             // 
-            this.metroDomDropdown.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Text;
-            this.metroDomDropdown.Image = ((System.Drawing.Image)(resources.GetObject("metroDomDropdown.Image")));
-            this.metroDomDropdown.ImageTransparentColor = System.Drawing.Color.Magenta;
-            this.metroDomDropdown.Name = "metroDomDropdown";
-            this.metroDomDropdown.Size = new System.Drawing.Size(121, 22);
-            this.metroDomDropdown.Text = "MetroDom Devices";
+            this.ddbInstruments.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Text;
+            this.ddbInstruments.Image = ((System.Drawing.Image)(resources.GetObject("ddbInstruments.Image")));
+            this.ddbInstruments.ImageTransparentColor = System.Drawing.Color.Magenta;
+            this.ddbInstruments.Name = "ddbInstruments";
+            this.ddbInstruments.Size = new System.Drawing.Size(121, 22);
+            this.ddbInstruments.Text = "MetroDom Devices";
+            // 
+            // toolStripButton1
+            // 
+            this.toolStripButton1.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Image;
+            this.toolStripButton1.Image = ((System.Drawing.Image)(resources.GetObject("toolStripButton1.Image")));
+            this.toolStripButton1.ImageTransparentColor = System.Drawing.Color.Magenta;
+            this.toolStripButton1.Name = "toolStripButton1";
+            this.toolStripButton1.Size = new System.Drawing.Size(23, 22);
+            this.toolStripButton1.Text = "toolStripButton1";
+            this.toolStripButton1.Click += new System.EventHandler(this.toolStripButton1_Click);
             // 
             // LiveControlForm
             // 
@@ -129,6 +141,7 @@
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.None;
             this.Name = "LiveControlForm";
             this.Text = "LiveControlForm";
+            this.Load += new System.EventHandler(this.LiveControlForm_Load);
             this.toolStripContainer1.ContentPanel.ResumeLayout(false);
             this.toolStripContainer1.ContentPanel.PerformLayout();
             this.toolStripContainer1.TopToolStripPanel.ResumeLayout(false);
@@ -147,9 +160,10 @@
         private System.Windows.Forms.ToolStrip toolStrip1;
         private System.Windows.Forms.ToolStripDropDownButton ddbMidiInputs;
         private System.Windows.Forms.ToolStripLabel toolStripLabel1;
-        private System.Windows.Forms.ToolStripDropDownButton metroDomDropdown;
+        private System.Windows.Forms.ToolStripDropDownButton ddbInstruments;
         private System.Windows.Forms.Button button1;
         private System.Windows.Forms.Button button2;
         private System.Windows.Forms.TextBox txtNote;
+        private System.Windows.Forms.ToolStripButton toolStripButton1;
     }
 }

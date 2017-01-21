@@ -6,6 +6,7 @@ using System.Windows.Forms;
 using MetroDom.Core;
 using Sanford.Multimedia;
 using Sanford.Multimedia.Midi;
+using System.Threading.Tasks;
 
 namespace MetroDom.Conductor.Forms
 {
@@ -42,6 +43,17 @@ namespace MetroDom.Conductor.Forms
             }
         }
 
+        private async Task<bool> LoadInstrumentOutputs()
+        {
+            _serial = await SerialService.InitializeAsync();
+            var instruments = _serial.AvailableInstruments;
+            foreach (var instrument in instruments)
+            {
+                ddbInstruments.DropDownItems.Add(instrument.Name);
+            }
+            return true;
+        }
+
         private void MidiInputSelected(object sender, EventArgs e)
         {
             if (_selectedInput != null)
@@ -52,7 +64,7 @@ namespace MetroDom.Conductor.Forms
             var menuItem = (ToolStripMenuItem)sender;
             var midiIndex = menuItem.ImageIndex;
             ddbMidiInputs.DropDownItems[midiIndex].Select();
-            _serial = new SerialService();
+            //_serial = new SerialService();
             _selectedInput = new InputDevice(midiIndex);
             _selectedInput.ChannelMessageReceived += ChannelMessageReceived;
             _selectedInput.StartRecording();
@@ -65,16 +77,30 @@ namespace MetroDom.Conductor.Forms
             if (e.Message.Data2 == 0) return;
             if (e.Message.Data1 == 60)
             {
-                _serial.SendMessage("0");
+             //   _serial.SendMessage("0");
             }
             else if (e.Message.Data1 == 64)
             {
-                _serial.SendMessage("4");
+            //    _serial.SendMessage("4");
             }
             else if (e.Message.Data1 == 67)
             {
-                _serial.SendMessage("7");
+              //  _serial.SendMessage("7");
             }
+        }
+
+        private void toolStripButton1_Click(object sender, EventArgs e)
+        {
+            var instruments = _serial.AvailableInstruments;
+            foreach (var instrument in instruments)
+            {
+                Console.WriteLine(instrument.Name);
+            }
+        }
+
+        private async void LiveControlForm_Load(object sender, EventArgs e)
+        {
+            await LoadInstrumentOutputs();
         }
     }
 }
