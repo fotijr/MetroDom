@@ -101,6 +101,7 @@ namespace MetroDom.Conductor.Forms
         private async void LiveControlForm_Load(object sender, EventArgs e)
         {
             await LoadInstrumentOutputs();
+            this.MaximizeBox = false;
         }
     }
 }

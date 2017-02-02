@@ -71,6 +71,7 @@ namespace MetroDom.Conductor.Forms
             //form.MinimumSize = form.Size;
             //form.MaximumSize = form.Size;
             form.Show();
+            form.FormBorderStyle = FormBorderStyle.None;
             form.WindowState = FormWindowState.Maximized;
             _openForms.Add(form);
             _currentForm = form;

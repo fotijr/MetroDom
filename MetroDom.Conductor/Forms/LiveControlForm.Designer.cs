@@ -52,11 +52,13 @@
             this.toolStripContainer1.ContentPanel.Controls.Add(this.button2);
             this.toolStripContainer1.ContentPanel.Controls.Add(this.txtNote);
             this.toolStripContainer1.ContentPanel.Controls.Add(this.button1);
-            this.toolStripContainer1.ContentPanel.Size = new System.Drawing.Size(883, 455);
+            this.toolStripContainer1.ContentPanel.Margin = new System.Windows.Forms.Padding(4, 4, 4, 4);
+            this.toolStripContainer1.ContentPanel.Size = new System.Drawing.Size(1177, 566);
             this.toolStripContainer1.Dock = System.Windows.Forms.DockStyle.Fill;
             this.toolStripContainer1.Location = new System.Drawing.Point(0, 0);
+            this.toolStripContainer1.Margin = new System.Windows.Forms.Padding(4, 4, 4, 4);
             this.toolStripContainer1.Name = "toolStripContainer1";
-            this.toolStripContainer1.Size = new System.Drawing.Size(883, 480);
+            this.toolStripContainer1.Size = new System.Drawing.Size(1177, 591);
             this.toolStripContainer1.TabIndex = 0;
             this.toolStripContainer1.Text = "toolStripContainer1";
             // 
@@ -67,22 +69,25 @@
             // button2
             // 
             this.button2.Location = new System.Drawing.Point(0, 0);
+            this.button2.Margin = new System.Windows.Forms.Padding(4, 4, 4, 4);
             this.button2.Name = "button2";
-            this.button2.Size = new System.Drawing.Size(75, 23);
+            this.button2.Size = new System.Drawing.Size(100, 28);
             this.button2.TabIndex = 0;
             // 
             // txtNote
             // 
-            this.txtNote.Location = new System.Drawing.Point(236, 232);
+            this.txtNote.Location = new System.Drawing.Point(315, 286);
+            this.txtNote.Margin = new System.Windows.Forms.Padding(4, 4, 4, 4);
             this.txtNote.Name = "txtNote";
-            this.txtNote.Size = new System.Drawing.Size(100, 20);
+            this.txtNote.Size = new System.Drawing.Size(132, 22);
             this.txtNote.TabIndex = 1;
             // 
             // button1
             // 
             this.button1.Location = new System.Drawing.Point(0, 0);
+            this.button1.Margin = new System.Windows.Forms.Padding(4, 4, 4, 4);
             this.button1.Name = "button1";
-            this.button1.Size = new System.Drawing.Size(75, 23);
+            this.button1.Size = new System.Drawing.Size(100, 28);
             this.button1.TabIndex = 2;
             // 
             // toolStrip1
@@ -134,11 +139,13 @@
             // 
             // LiveControlForm
             // 
-            this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
+            this.AutoScaleDimensions = new System.Drawing.SizeF(8F, 16F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(883, 480);
+            this.ClientSize = new System.Drawing.Size(1177, 591);
             this.Controls.Add(this.toolStripContainer1);
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.None;
+            this.Margin = new System.Windows.Forms.Padding(4, 4, 4, 4);
+            this.MaximizeBox = false;
             this.Name = "LiveControlForm";
             this.Text = "LiveControlForm";
             this.Load += new System.EventHandler(this.LiveControlForm_Load);

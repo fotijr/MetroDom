@@ -43,10 +43,10 @@ namespace MetroDom.Conductor.Forms
                 catch (Exception ex)
                 {
                     MessageBox.Show(ex.Message, "Error!", MessageBoxButtons.OK, MessageBoxIcon.Stop);
-
                     Close();
                 }
             }
+            this.MaximizeBox = false;
         }
 
         private void btnOpen_Click(object sender, EventArgs e)
