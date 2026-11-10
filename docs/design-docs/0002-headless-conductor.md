@@ -27,8 +27,9 @@ Windows desktop and no monitor.
   - **Host**: composition root / service executable.
 - Reuse over build: use **DryWetMIDI** (Melanchall, netstandard2.0, MIT) for SMF parsing and MIDI
   types in Core. Device I/O sits behind `IMidiOutput` so the platform library can change
-  (DryWetMIDI devices on Windows/macOS. On Linux, ALSA via a maintained wrapper such as RtMidi,
-  to be verified on a Pi in Phase 2).
+  (DryWetMIDI devices on Windows/macOS. On Linux, the ALSA sequencer called directly from C#
+  through `libasound.so.2`, which ships with every desktop distro and Raspberry Pi OS, so there is
+  no extra native library to build or bundle).
 - Until the service and web UI exist, the Conductor ships as the `metrodom` CLI. Nothing may
   require a specific OS to build or test.
 
@@ -40,5 +41,5 @@ Windows desktop and no monitor.
 - Timing-sensitive paths avoid allocations (GC pauses). Measure on the target box.
 
 ## Open questions
-- Linux MIDI device library: confirm hot-plug and latency on a Pi before committing.
+- ALSA adapter: measure latency and add hot-plug (sequencer announce events) on a Pi.
 - Does the box also act as the Wi-Fi access point for the rental scenario?

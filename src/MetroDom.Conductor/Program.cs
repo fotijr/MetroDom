@@ -1,5 +1,6 @@
 using MetroDom.Conductor;
 using MetroDom.Conductor.Commands;
+using MetroDom.Conductor.Midi;
 
 const string usage = """
     metrodom: MetroDom Conductor (prototype CLI)
@@ -12,7 +13,8 @@ const string usage = """
                                                            Route a live controller to an output
       metrodom panic --output <port>                       All sound/notes off on every channel
 
-    Ports are names or indexes from 'metrodom devices'. Channels are 1-16, comma separated.
+    Ports are indexes, names, or a unique part of a name from 'metrodom devices'
+    (on Linux, the ALSA address works too, e.g. --output 20:0). Channels are 1-16, comma separated.
     Ctrl+C during play/route stops and sends panic.
     """;
 
@@ -41,6 +43,11 @@ catch (PlatformNotSupportedException ex)
 {
     Console.Error.WriteLine(ex.Message);
     return 3;
+}
+catch (MidiDeviceException ex)
+{
+    Console.Error.WriteLine(ex.Message);
+    return 4;
 }
 
 int Help()

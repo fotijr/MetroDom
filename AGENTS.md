@@ -31,7 +31,7 @@ This file is a **map, not a manual**. Read the doc that matches your task, then 
 AGENTS.md              ← you are here (table of contents only)
 ARCHITECTURE.md        ← layers, boundaries, current code map
 src/MetroDom.Core/     ← C# library: routing, panic, song analysis. Pure logic, no OS I/O
-src/MetroDom.Conductor/ ← `metrodom` CLI + OS MIDI adapters (DryWetMIDI)
+src/MetroDom.Conductor/ ← `metrodom` CLI + OS MIDI adapters (ALSA, DryWetMIDI)
 tests/                 ← xUnit v3 tests
 Instruments/           ← Arduino firmware + per-instrument hardware notes
 docs/                  ← knowledge base (Markdown). docs/index.html etc. is the legacy GitHub Pages site.

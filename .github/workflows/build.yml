@@ -17,5 +17,13 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
+      - name: Load ALSA virtual MIDI (Midi Through) for the loopback test
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q libasound2t64 "linux-modules-extra-$(uname -r)"
+          sudo modprobe snd-seq-dummy
+          sudo chmod a+rw /dev/snd/seq
+          echo "METRODOM_REQUIRE_ALSA=1" >> "$GITHUB_ENV"
       - run: dotnet build --configuration Release
       - run: dotnet test --configuration Release --no-build

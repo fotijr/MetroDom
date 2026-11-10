@@ -20,7 +20,9 @@ One system, three ways to use it:
 - [AGENTS.md](AGENTS.md): map for coding agents (humans welcome)
 
 ## Build
-Needs the [.NET 10 SDK](https://dotnet.microsoft.com/download) on Linux, macOS or Windows.
+Needs the [.NET 10 SDK](https://dotnet.microsoft.com/download) on Linux, macOS or Windows. On Linux,
+MIDI devices need ALSA (`libasound2`, preinstalled on desktops and Raspberry Pi OS) and membership
+of the `audio` group.
 
 ```bash
 dotnet test

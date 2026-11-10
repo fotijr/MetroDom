@@ -6,14 +6,14 @@ namespace MetroDom.Conductor.Commands;
 /// <summary>Shared setup for commands that drive an output: orchestra, mutes, Ctrl+C → panic.</summary>
 internal sealed class Session : IDisposable
 {
-    private readonly DeviceOutput _output;
+    private readonly IMidiOutputPort _output;
     private readonly ManualResetEventSlim _stop = new();
 
     public Session(CommandLine cli)
     {
         var port = cli.Option("output") ?? throw new UsageException($"{cli.Command}: missing --output <port>.");
         var mutes = cli.Channels("mute");
-        _output = new DeviceOutput(MidiDevices.OpenOutput(port));
+        _output = MidiDevices.OpenOutput(port);
         Orchestra.AssignAll(_output);
         foreach (var channel in mutes)
         {

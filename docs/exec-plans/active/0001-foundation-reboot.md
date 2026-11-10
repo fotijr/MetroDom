@@ -33,9 +33,9 @@ That is the first milestone of the [live band spec](../../product-specs/live-ban
 ### Phase 2: Headless Conductor core
 - [x] SDK-style `net10.0` Core + CLI + tests, `dotnet test` on Linux/macOS/Windows CI
 - [x] Core: SMF analysis (DryWetMIDI), channel routing with safe mute, panic
-- [ ] Linux MIDI device adapter (ALSA), TD-14
+- [x] Linux MIDI device adapter (ALSA sequencer), round trip tested in CI
 - [ ] Core: arranger (track → instrument), scheduler with fake-clock tests
-- [ ] Adapters: OS MIDI in/out + hot-plug. Verify Linux MIDI library on a Pi
+- [ ] Adapters: hot-plug (TD-16). Measure ALSA latency on a Pi
 - [ ] Discovery per [ADR 0007](../../design-docs/0007-instrument-discovery.md): MetroDom + general MIDI devices
 - [ ] Safety governor + panic, tested
 - [ ] Tap tempo / MIDI Clock in
@@ -55,5 +55,9 @@ That is the first milestone of the [live band spec](../../product-specs/live-ban
   on any OS. WinForms app and serial discovery deleted (git history keeps them). The Explorer
   and live-control ideas live on as `metrodom inspect/play/route`.
 
+- 2026-11-10: Linux MIDI talks to the ALSA sequencer directly (P/Invoke to libasound) rather
+  than RtMidi: no native library to build per architecture, and the sequencer sees USB devices,
+  interfaces, soft synths and virtual ports alike.
+
 ## Open questions
-- Target box model and Linux MIDI library (ADR 0002).
+- Target box model (ADR 0002).

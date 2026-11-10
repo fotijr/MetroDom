@@ -10,5 +10,5 @@ Severity: **H** blocks the roadmap or is unsafe · **M** wrong/fragile · **L** 
 | TD-04 | M | `.github/workflows/build.yml` | Linux/macOS/Windows matrix not yet run on GitHub (verified locally on macOS and in a Linux container) |
 | TD-10 | M | `Instruments/xylophone_solenoid` | `delay(45)` inside `serialEvent` blocks all input. Debug `Serial.print`s on the data channel |
 | TD-12 | L | `docs/index.html` etc. | Legacy GitHub Pages site duplicates an old README. Decide: regenerate from docs or delete |
-| TD-14 | H | `src/MetroDom.Conductor/Midi/` | No MIDI device I/O on Linux (DryWetMIDI devices are Windows/macOS only). The target box is Linux. Needs an ALSA adapter behind `IMidiOutput` |
-| TD-15 | M | `metrodom play/route` | Not yet exercised against a real MIDI device (no device on the dev machine). Test with a USB-MIDI instrument or a virtual port |
+| TD-15 | M | `metrodom play/route` | Not yet exercised against a real MIDI instrument. Linux ALSA send/receive is covered by a CI loopback test through the kernel's virtual Midi Through port. Still needs a USB-MIDI device and a Pi |
+| TD-16 | M | `src/MetroDom.Conductor/Midi/` | No hot-plug. Unplugging a device mid-run makes `Send` throw instead of silencing that instrument while the rest play on (live-band acceptance). Needs port watching + reconnect ([ADR 0007](../design-docs/0007-instrument-discovery.md)) |

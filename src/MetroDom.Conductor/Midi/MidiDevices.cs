@@ -1,77 +1,66 @@
-using Melanchall.DryWetMidi.Multimedia;
-
 namespace MetroDom.Conductor.Midi;
 
 /// <summary>
-/// OS MIDI device access via DryWetMIDI. This is the platform adapter from ADR 0002: Core never
-/// touches devices. DryWetMIDI's device API supports Windows and macOS. Linux needs its own
-/// adapter (ALSA), tracked as TD-14 in docs/exec-plans/tech-debt-tracker.md.
+/// Picks the OS MIDI adapter (ADR 0002: Core never touches devices). Linux uses the ALSA
+/// sequencer directly. Windows and macOS use DryWetMIDI's device API.
 /// </summary>
 internal static class MidiDevices
 {
-    public static bool IsSupported => OperatingSystem.IsWindows() || OperatingSystem.IsMacOS();
+    private static readonly Lazy<IMidiBackend> Backend = new(Create);
 
-    public static void EnsureSupported()
+    public static IReadOnlyList<string> OutputNames() => Backend.Value.OutputNames();
+
+    public static IReadOnlyList<string> InputNames() => Backend.Value.InputNames();
+
+    /// <summary>Opens an output by index, exact name, or unique part of a name (e.g. ALSA "20:0").</summary>
+    public static IMidiOutputPort OpenOutput(string query) =>
+        Backend.Value.OpenOutput(Resolve(query, OutputNames(), "output"));
+
+    /// <summary>Opens an input by index, exact name, or unique part of a name (e.g. ALSA "20:0").</summary>
+    public static IMidiInputPort OpenInput(string query) =>
+        Backend.Value.OpenInput(Resolve(query, InputNames(), "input"));
+
+    internal static int Resolve(string query, IReadOnlyList<string> names, string kind)
     {
-        if (!IsSupported)
+        if (int.TryParse(query, out var index))
         {
-            throw new PlatformNotSupportedException(
-                "MIDI device I/O isn't implemented on this OS yet (Linux ALSA adapter is planned, TD-14). " +
-                "File commands like 'inspect' work everywhere.");
-        }
-    }
-
-    public static IReadOnlyList<string> OutputNames()
-    {
-        EnsureSupported();
-        return OutputDevice.GetAll().Select(Name).ToArray();
-    }
-
-    public static IReadOnlyList<string> InputNames()
-    {
-        EnsureSupported();
-        return InputDevice.GetAll().Select(Name).ToArray();
-    }
-
-    /// <summary>Opens an output by exact name, or by index as listed by <c>metrodom devices</c>.</summary>
-    public static OutputDevice OpenOutput(string nameOrIndex)
-    {
-        EnsureSupported();
-        var names = OutputNames();
-        return OutputDevice.GetByIndex(Resolve(nameOrIndex, names, "output"));
-    }
-
-    /// <summary>Opens an input by exact name, or by index as listed by <c>metrodom devices</c>.</summary>
-    public static InputDevice OpenInput(string nameOrIndex)
-    {
-        EnsureSupported();
-        var names = InputNames();
-        return InputDevice.GetByIndex(Resolve(nameOrIndex, names, "input"));
-    }
-
-    private static int Resolve(string nameOrIndex, IReadOnlyList<string> names, string kind)
-    {
-        if (int.TryParse(nameOrIndex, out var index) && index >= 0 && index < names.Count)
-        {
-            return index;
+            // A number is always an index, never a substring ("3" must not match "(1234:0)").
+            return index >= 0 && index < names.Count
+                ? index
+                : throw new UsageException($"No MIDI {kind} number {index}. Run 'metrodom devices'.");
         }
 
-        for (var i = 0; i < names.Count; i++)
+        var exact = Matches(names, n => string.Equals(n, query, StringComparison.OrdinalIgnoreCase));
+        if (exact.Count == 1)
         {
-            if (string.Equals(names[i], nameOrIndex, StringComparison.OrdinalIgnoreCase))
-            {
-                return i;
-            }
+            return exact[0];
         }
 
-        throw new UsageException($"No MIDI {kind} named or numbered '{nameOrIndex}'. Run 'metrodom devices'.");
+        var partial = Matches(names, n => n.Contains(query, StringComparison.OrdinalIgnoreCase));
+        return partial.Count switch
+        {
+            1 => partial[0],
+            0 => throw new UsageException($"No MIDI {kind} matches '{query}'. Run 'metrodom devices'."),
+            _ => throw new UsageException(
+                $"'{query}' matches {partial.Count} MIDI {kind}s; use the index from 'metrodom devices'."),
+        };
     }
 
-    private static string Name(MidiDevice device)
+    private static List<int> Matches(IReadOnlyList<string> names, Func<string, bool> predicate) =>
+        Enumerable.Range(0, names.Count).Where(i => predicate(names[i])).ToList();
+
+    private static IMidiBackend Create()
     {
-        using (device)
+        if (OperatingSystem.IsLinux())
         {
-            return device.Name;
+            return new Alsa.AlsaBackend();
         }
+
+        if (OperatingSystem.IsWindows() || OperatingSystem.IsMacOS())
+        {
+            return new DryWetMidiBackend();
+        }
+
+        throw new PlatformNotSupportedException("MIDI devices are supported on Linux, macOS and Windows.");
     }
 }

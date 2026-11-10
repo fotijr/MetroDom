@@ -10,12 +10,12 @@ internal static class RouteCommand
         var port = cli.Option("input") ?? throw new UsageException("route: missing --input <port>.");
         using var session = new Session(cli);
         using var input = MidiDevices.OpenInput(port);
-        input.EventReceived += (_, e) => session.Orchestra.Route(e.Event);
-        input.StartEventsListening();
+        input.EventReceived += e => session.Orchestra.Route(e);
+        input.Start();
 
         Console.WriteLine($"Routing from {input.Name}. Ctrl+C to stop.");
         session.WaitForStop();
-        input.StopEventsListening();
+        input.Stop();
         return 0;
     }
 }

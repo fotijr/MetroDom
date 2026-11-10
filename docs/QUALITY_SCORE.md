@@ -15,7 +15,7 @@ Last reviewed: 2026-11-10
 | Core: routing, mute, panic (`Orchestra`) | C | Unit | ARCHITECTURE | No scheduler/latency yet. Single output per run in the CLI |
 | Core: song analysis (`SongAnalyzer`) | C | Unit | ARCHITECTURE | Read-only analysis. No arranger yet |
 | CLI: `inspect` | C | Smoke (manual) | `--help` | Any OS |
-| CLI: `devices` / `play` / `route` / `panic` | D | None | `--help` | Windows/macOS only (TD-14). Not yet tested against a real MIDI device |
+| CLI: `devices` / `play` / `route` / `panic` | D | ALSA loopback (CI) | `--help` | Linux (ALSA), macOS, Windows. No hot-plug (TD-16). Not yet tested against a real instrument (TD-15) |
 | Scheduler / latency compensation | — | — | ADR | [ADR 0004](design-docs/0004-latency-compensation.md) |
 | Control API | — | — | ADR | [ADR 0003](design-docs/0003-control-api.md) |
 | Policy / roles | — | — | ADR | [ADR 0005](design-docs/0005-deployment-modes-are-policy.md) |

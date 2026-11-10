@@ -87,7 +87,8 @@ See [ADR 0005](docs/design-docs/0005-deployment-modes-are-policy.md).
 ## Current code map
 
 Stack: **C# on .NET 10 (LTS)**, SDK-style projects, `MetroDom.slnx`. Builds and tests on Linux,
-macOS and Windows. MIDI via DryWetMIDI. The 2016–2017 WinForms app was retired in favor of a
+macOS and Windows. MIDI files and types via DryWetMIDI. Devices via ALSA on Linux and DryWetMIDI
+on macOS/Windows. The 2016–2017 WinForms app was retired in favor of a
 CLI (recover it from git history at commit `266b6b5` if needed).
 
 | Path | What it is today |
@@ -96,8 +97,9 @@ CLI (recover it from git history at commit `266b6b5` if needed).
 | `src/MetroDom.Core/Orchestra.cs` | Channel → output routing, mute (Note Offs always pass), panic (CC 120/123) |
 | `src/MetroDom.Core/SongAnalyzer.cs` | SMF → tracks, channels, note ranges, tempo, duration (arranger input) |
 | `src/MetroDom.Conductor/` | `metrodom` CLI: `inspect`, `devices`, `play`, `route`, `panic` |
-| `src/MetroDom.Conductor/Midi/` | OS MIDI device adapter (DryWetMIDI: Windows/macOS. Linux pending, TD-14) |
+| `src/MetroDom.Conductor/Midi/` | OS MIDI device adapters behind `IMidiBackend`: `Alsa/` (Linux sequencer via P/Invoke) and DryWetMIDI (Windows/macOS) |
 | `tests/MetroDom.Core.Tests/` | xUnit v3 tests for Core (Microsoft.Testing.Platform runner) |
+| `tests/MetroDom.Conductor.Tests/` | Port matching, and a real ALSA round trip (runs where `/dev/snd/seq` exists; required in CI) |
 | `Instruments/xylophone_solenoid/` | 3 solenoids on pins 9–11, ASCII `'0' '4' '7'` triggers, 45 ms strike |
 | `Instruments/xylophone_servo/` | Spin + strike servo. `<digits>m` moves, `p` strikes, `?` identifies |
 

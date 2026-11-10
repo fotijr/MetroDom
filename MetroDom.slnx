@@ -4,6 +4,7 @@
     <Project Path="src/MetroDom.Core/MetroDom.Core.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/MetroDom.Conductor.Tests/MetroDom.Conductor.Tests.csproj" />
     <Project Path="tests/MetroDom.Core.Tests/MetroDom.Core.Tests.csproj" />
   </Folder>
 </Solution>
