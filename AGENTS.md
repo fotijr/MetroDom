@@ -23,6 +23,7 @@ This file is a **map, not a manual**. Read the doc that matches your task, then 
 | Handle auth, roles, untrusted crowd input       | [docs/SECURITY.md](docs/SECURITY.md)                        |
 | Look up MIDI / protocol details                 | [docs/references/index.md](docs/references/index.md)        |
 | Build or modify an instrument (firmware)        | [Instruments/README.md](Instruments/README.md)              |
+| Detect instruments or other MIDI devices        | [ADR 0007](docs/design-docs/0007-instrument-discovery.md)   |
 
 ## Repository layout
 
@@ -48,10 +49,11 @@ the docs describe intent and the code describes reality — check
 
 ```bash
 python3 scripts/check_docs.py          # knowledge-base lint (links, orphans, AGENTS.md length)
-msbuild MetroDom.sln /p:Configuration=Release   # .NET Framework 4.6.1, Windows-only at runtime
+msbuild MetroDom.sln /p:Configuration=Release   # legacy prototype: .NET Framework 4.8, Windows-only
 ```
 
-CI on Travis is dead; see [tech debt](docs/exec-plans/tech-debt-tracker.md).
+CI: GitHub Actions (`.github/workflows/`): `docs` (lint) and `build` (legacy solution on Windows).
+New Conductor code is modern C# on .NET LTS ([ADR 0002](docs/design-docs/0002-headless-conductor.md)).
 
 ## Working rules
 

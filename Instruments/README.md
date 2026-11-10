@@ -2,6 +2,11 @@
 
 Each folder is one physical instrument: firmware, wiring notes, and (soon) a `profile.json`.
 
+Target design: a swappable **brain** (Pico-footprint board running one generic firmware) plugs
+into an instrument-specific **body** that stores its own profile
+([ADR 0006](../docs/design-docs/0006-swappable-instrument-brains.md)). The Conductor finds
+instruments automatically ([ADR 0007](../docs/design-docs/0007-instrument-discovery.md)).
+
 ## Rules for instruments
 1. Speak **MIDI**: class-compliant USB-MIDI preferred
    ([ADR 0001](../docs/design-docs/0001-midi-is-the-contract.md), [MIDI essentials](../docs/references/midi-essentials.md)).

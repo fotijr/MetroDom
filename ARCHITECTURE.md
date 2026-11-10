@@ -38,6 +38,8 @@ plays offline.
 ### Instruments: dumb, safe, standard
 - A microcontroller presents itself as a **class-compliant MIDI device** (no drivers) and maps
   notes to actuators (solenoids, servos, motors).
+- Split into a swappable **brain** (Pico-footprint MCU, one generic firmware) and an
+  instrument-specific **body** that describes itself ([ADR 0006](docs/design-docs/0006-swappable-instrument-brains.md)).
 - Identifies itself with a **SysEx Identity Reply**, and later MIDI-CI. It publishes an
   **instrument profile** (note range, polyphony, latency per note, velocity curve, duty limits).
   See [references/instrument-profile.md](docs/references/instrument-profile.md).
@@ -46,12 +48,12 @@ plays offline.
 - Knows nothing about songs, tempo, other instruments, or users.
 
 ### Conductor: the only thing that knows there is a band
-Headless service on a small computer that ships with the band (e.g. a Raspberry Pi-class box).
+Headless **modern C# / .NET** service on a small computer that ships with the band (e.g. a Raspberry Pi-class box).
 Components:
 
 | Component          | Responsibility                                                               |
 | ------------------ | ---------------------------------------------------------------------------- |
-| Registry           | Discover instruments, read profiles, track health/connection                 |
+| Registry           | Discover MetroDom and general MIDI devices ([ADR 0007](docs/design-docs/0007-instrument-discovery.md)), read profiles, track health |
 | Arranger           | Map song tracks/channels to instruments, transpose, drop unplayable notes    |
 | Transport & tempo  | Play/pause/seek. Tempo comes from a human: tap, MIDI clock in, live player   |
 | Scheduler          | Send each note early by that instrument's latency so the sound lands on time |
@@ -91,12 +93,12 @@ See [ADR 0005](docs/design-docs/0005-deployment-modes-are-policy.md).
 | `MetroDom.Core/Song.cs`                | Song = key + note list. `Note` hard-codes **servo angles** (temporary hack) |
 | `MetroDom.Conductor/Forms/LiveControlForm.cs` | Picks a MIDI input, discovers serial instruments, note→serial mapping commented out |
 | `MetroDom.Conductor/Forms/Explorer.cs` | Loads a `.mid`, lists tracks/channels, plays to a MIDI out with channel mute |
-| `MetroDom.Conductor/SerialService.cs`  | Probes COM ports with `md?`, parses `Name:`/`Id:` lines (9600 baud ASCII) |
+| `MetroDom.Conductor/SerialService.cs`  | Probes COM ports with `md?`, parses `Name:`/`Id:` lines (9600 baud ASCII). Replaced by [ADR 0007](docs/design-docs/0007-instrument-discovery.md) |
 | `Instruments/xylophone_solenoid/`      | 3 solenoids on pins 9–11, ASCII `'0' '4' '7'` triggers, 45 ms strike     |
 | `Instruments/xylophone_servo/`         | Spin + strike servo; `<digits>m` moves, `p` strikes, `?` identifies      |
 | `MetroDom.Tests/`                      | Two xUnit tests for `Orchestra.Start` argument handling                  |
 
-Stack: .NET Framework 4.6.1, WinForms, Sanford.Multimedia.Midi (Windows `winmm`), so the
+Stack: .NET Framework 4.8, WinForms, Sanford.Multimedia.Midi (Windows `winmm`), so the
 Conductor runs on Windows only. The legacy serial protocol is documented in
 [references/legacy-serial-protocol.md](docs/references/legacy-serial-protocol.md).
 

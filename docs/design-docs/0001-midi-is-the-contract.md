@@ -27,6 +27,6 @@ custom host code, and nothing outside MetroDom (DAWs, keyboards, phone MIDI apps
 - The legacy serial firmware gets ported, not extended.
 
 ## Open questions
-- Board standard for new instruments (RP2040 is cheap with TinyUSB; Teensy has the best
-  `usbMIDI` ergonomics).
+- Board standard: proposed in [ADR 0006](0006-swappable-instrument-brains.md) (Pico-footprint
+  RP2040/RP2350 brains).
 - MIDI 2.0 UMP from day one, or MIDI 1.0 now with 2.0 later? Leaning 1.0 now for tooling reach.
