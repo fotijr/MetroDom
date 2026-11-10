@@ -14,3 +14,4 @@ jobs:
         with:
           python-version: "3.12"
       - run: python3 scripts/check_docs.py
+      - run: python3 scripts/check_hardware.py

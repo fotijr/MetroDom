@@ -1,0 +1,6 @@
+id = "latency-jig"
+name = "Latency measurement jig"
+revision = "A"
+status = "planned"   # planned | prototype | proven | deprecated
+job = "measure"
+interfaces = ["usb-midi"]

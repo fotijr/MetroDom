@@ -56,5 +56,6 @@ Split every instrument into a **brain** and a **body**:
 
 ## Open questions
 - Exact body connector pinout and power rails (5 V logic + separate actuator supply).
+  Proposed in [ADR 0009](0009-shared-hardware-modules.md) / [hardware/interfaces.md](../../hardware/interfaces.md).
 - Generic firmware in Arduino C++ (speed, libraries) vs CircuitPython (easiest edits).
   Leaning Arduino C++ for timing.

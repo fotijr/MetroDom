@@ -23,6 +23,7 @@ This file is a **map, not a manual**. Read the doc that matches your task, then 
 | Handle auth, roles, untrusted crowd input       | [docs/SECURITY.md](docs/SECURITY.md)                        |
 | Look up MIDI / protocol details                 | [docs/references/index.md](docs/references/index.md)        |
 | Build or modify an instrument (firmware)        | [Instruments/README.md](Instruments/README.md)              |
+| Parts, inventory, hardware modules, builds      | [hardware/README.md](hardware/README.md)                    |
 | Detect instruments or other MIDI devices        | [ADR 0007](docs/design-docs/0007-instrument-discovery.md)   |
 
 ## Repository layout
@@ -34,8 +35,10 @@ src/MetroDom.Core/     ← C# library: routing, panic, song analysis. Pure logic
 src/MetroDom.Conductor/ ← `metrodom` CLI + OS MIDI adapters (ALSA, DryWetMIDI)
 tests/                 ← xUnit v3 tests
 Instruments/           ← Arduino firmware + per-instrument hardware notes
+hardware/              ← parts catalog, inventory, shared modules, build records (ADR 0008)
 docs/                  ← knowledge base (Markdown). docs/index.html etc. is the legacy GitHub Pages site.
 scripts/check_docs.py  ← knowledge-base linter (run before committing doc changes)
+scripts/check_hardware.py ← hardware records linter (run before committing hardware changes)
 ```
 
 ## State of the project (read before assuming anything works)
@@ -49,6 +52,7 @@ the docs describe intent and the code describes reality — check
 
 ```bash
 python3 scripts/check_docs.py          # knowledge-base lint (links, orphans, AGENTS.md length)
+python3 scripts/check_hardware.py      # parts/BOM/module/build consistency (--buildable: stock report)
 dotnet build && dotnet test                      # .NET 10 SDK, any OS (Linux/macOS/Windows)
 dotnet run --project src/MetroDom.Conductor -- inspect song.mid
 ```

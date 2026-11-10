@@ -1,6 +1,10 @@
 # Glossary
 
 - **Actuator**: the thing that moves: solenoid, servo, stepper, motor.
+- **Body**: the instrument-specific hardware a brain plugs into ([ADR 0006](../design-docs/0006-swappable-instrument-brains.md)).
+- **BOM**: bill of materials. A module's `bom.csv` lists catalog part ids and quantities.
+- **Brain**: the swappable Pico board running the generic firmware.
+- **Build record**: the history of one physical unit, keyed by the serial on its label (`MD-…-NNN`).
 - **Arranger**: Conductor component mapping song tracks/channels onto available instruments.
 - **Click track**: a fixed metronome performers lock to. MetroDom avoids requiring one.
 - **Conductor**: the headless service that runs the band (today: the `metrodom` CLI).
@@ -9,6 +13,7 @@
 - **Instrument**: one physical instrument + microcontroller + firmware, presented as a MIDI device.
 - **Instrument profile**: self-description of an instrument's notes, latency and limits.
 - **Lookahead**: sending a note early by the instrument's latency so it sounds on time.
+- **Module**: a reusable hardware assembly with standard interfaces (`hardware/modules/`).
 - **Panic**: immediate all-off of every actuator.
 - **Policy profile**: config defining a deployment mode's roles, queue rules and limits.
 - **SMF**: Standard MIDI File (`.mid`).

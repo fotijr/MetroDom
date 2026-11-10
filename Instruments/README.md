@@ -1,6 +1,8 @@
 # MetroDom instruments
 
-Each folder is one physical instrument: firmware, wiring notes, and (soon) a `profile.json`.
+Each folder is one physical instrument: firmware, wiring notes, (soon) a `profile.json`, and an
+`instrument.toml` listing the shared hardware modules it is built from
+([hardware/](../hardware/README.md), [ADR 0009](../docs/design-docs/0009-shared-hardware-modules.md)).
 
 Target design: a swappable **brain** (Pico-footprint board running one generic firmware) plugs
 into an instrument-specific **body** that stores its own profile

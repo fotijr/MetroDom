@@ -13,6 +13,8 @@ Architecture Decision Records (ADRs) plus the beliefs every decision must respec
 | 0005 | [Deployment modes are policy, not forks; local-first](0005-deployment-modes-are-policy.md) | Proposed |
 | 0006 | [Swappable instrument brains (brain / body split)](0006-swappable-instrument-brains.md) | Proposed |
 | 0007 | [Instrument discovery: MetroDom + general MIDI devices](0007-instrument-discovery.md) | Proposed |
+| 0008 | [Hardware as code: how hardware lives in the repo](0008-hardware-as-code.md) | Proposed |
+| 0009 | [Shared hardware modules and connector standards](0009-shared-hardware-modules.md) | Proposed |
 
 ## Writing a new ADR
 Copy the shape of an existing one: **Status, Context, Decision, Consequences, Open questions**.

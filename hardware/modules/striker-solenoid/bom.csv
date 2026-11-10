@@ -1,0 +1,6 @@
+part_id,qty,ref,notes
+solenoid-jf0530b-12v,1,SOL1,push type; pushes the mallet up into the bar
+conn-jst-xh-2p,1,J1,act-2p lead
+screw-m3x6,2,,solenoid to bracket
+screw-m5x8,2,,bracket to 2020 T-nuts
+tnut-m5-2020,2,,

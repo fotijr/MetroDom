@@ -1,0 +1,29 @@
+# Which shared hardware modules this instrument is built from (ADR 0009).
+# Target design for the port in exec plan 0002; the 2017 prototype predates it.
+id = "xylophone-solenoid"
+name = "Xylophone (solenoid)"
+status = "planned"
+
+[[modules]]
+id = "brain-pico"
+qty = 1
+
+[[modules]]
+id = "body-backplane"
+qty = 1
+
+[[modules]]
+id = "power-entry"
+qty = 1
+
+[[modules]]
+id = "driver-mosfet-8ch"
+qty = 1
+
+[[modules]]
+id = "striker-solenoid"
+qty = 8
+
+[[modules]]
+id = "frame-2020"
+qty = 1

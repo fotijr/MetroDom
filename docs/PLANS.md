@@ -25,3 +25,4 @@ Status: Active | Blocked (on X) | Done   ·   Last updated: YYYY-MM-DD
 
 ## Active plans
 - [0001: Foundation reboot](exec-plans/active/0001-foundation-reboot.md)
+- [0002: Hardware bootstrap](exec-plans/active/0002-hardware-bootstrap.md)

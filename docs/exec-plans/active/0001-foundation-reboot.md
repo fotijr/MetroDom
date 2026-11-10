@@ -25,7 +25,7 @@ That is the first milestone of the [live band spec](../../product-specs/live-ban
 ### Phase 1: Instruments speak MIDI
 - [ ] Accept brain/body split ([ADR 0006](../../design-docs/0006-swappable-instrument-brains.md)). Define body connector + EEPROM layout
 - [ ] Generic brain firmware (Pico, Arduino C++): USB-MIDI, Note On → fixed strike pulse, watchdog, all-off
-- [ ] Port solenoid xylophone to a body (PCA9685/MOSFET + ID EEPROM)
+- [ ] Port solenoid xylophone to a body (PCA9685/MOSFET + ID EEPROM). Hardware side: [exec plan 0002](0002-hardware-bootstrap.md)
 - [ ] SysEx Identity Reply + [instrument profile](../../references/instrument-profile.md) read from body EEPROM
 - [ ] Bench-test with a stock DAW/keyboard (no MetroDom software)
 - [ ] Measure and record per-note latency

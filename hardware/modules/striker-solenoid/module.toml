@@ -1,0 +1,6 @@
+id = "striker-solenoid"
+name = "Solenoid striker"
+revision = "A"
+status = "planned"   # planned | prototype | proven | deprecated
+job = "strike"
+interfaces = ["act-2p", "mount-2020"]
