@@ -55,7 +55,10 @@ internal static class MidiDevices
         };
     }
 
-    private static void Log(string message) => Console.Error.WriteLine(message);
+    /// <summary>Where reconnect/unplug notices go. The live status view redirects this into its panel.</summary>
+    public static Action<string> LogSink { get; set; } = Console.Error.WriteLine;
+
+    private static void Log(string message) => LogSink(message);
 
     private static List<int> Matches(IReadOnlyList<string> names, Func<string, bool> predicate) =>
         Enumerable.Range(0, names.Count).Where(i => predicate(names[i])).ToList();

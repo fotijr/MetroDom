@@ -4,8 +4,11 @@ using MetroDom.Core;
 
 namespace MetroDom.Conductor.Midi;
 
-/// <summary>Lets DryWetMIDI's <see cref="Playback"/> drive an <see cref="Orchestra"/>.</summary>
-internal sealed class OrchestraPlaybackDevice(Orchestra orchestra) : IOutputDevice
+/// <summary>
+/// Lets DryWetMIDI's <see cref="Playback"/> drive an <see cref="Orchestra"/>. <paramref name="routed"/>
+/// is told about each event an output accepted (runs on the playback thread; keep it cheap).
+/// </summary>
+internal sealed class OrchestraPlaybackDevice(Orchestra orchestra, Action<MidiEvent>? routed = null) : IOutputDevice
 {
     public event EventHandler<MidiEventSentEventArgs>? EventSent;
 
@@ -17,6 +20,7 @@ internal sealed class OrchestraPlaybackDevice(Orchestra orchestra) : IOutputDevi
     {
         if (orchestra.Route(midiEvent) > 0)
         {
+            routed?.Invoke(midiEvent);
             EventSent?.Invoke(this, new MidiEventSentEventArgs(midiEvent));
         }
     }

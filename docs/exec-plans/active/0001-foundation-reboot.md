@@ -56,6 +56,13 @@ That is the first milestone of the [live band spec](../../product-specs/live-ban
   on any OS. WinForms app and serial discovery deleted (git history keeps them). The Explorer
   and live-control ideas live on as `metrodom inspect/play/route`.
 
+- 2026-11-10: CLI moved from a hand-written parser to Spectre.Console(.Cli): per-command help
+  and validation, typed options with short forms (`-o`, `-m`, `-i`), a port picker when
+  `--output`/`--input` is omitted in a terminal, and a live status panel for `play`/`route`
+  (progress, 16-channel activity, connection state, warnings). Piped/CI runs stay plain text.
+  A full-screen TUI (e.g. Terminal.Gui) is deferred: per ADR 0002 it should be a Control API
+  client, not a second in-process controller.
+
 - 2026-11-10: Linux MIDI talks to the ALSA sequencer directly (P/Invoke to libasound) rather
   than RtMidi: no native library to build per architecture, and the sequencer sees USB devices,
   interfaces, soft synths and virtual ports alike.

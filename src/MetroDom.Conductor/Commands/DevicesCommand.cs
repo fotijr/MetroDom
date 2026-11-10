@@ -1,28 +1,38 @@
 using MetroDom.Conductor.Midi;
+using Spectre.Console;
+using Spectre.Console.Cli;
 
 namespace MetroDom.Conductor.Commands;
 
-internal static class DevicesCommand
+internal sealed class DevicesCommand : Command
 {
-    public static int Run()
+    public override int Execute(CommandContext context, CancellationToken cancellationToken)
     {
-        Print("Outputs (instruments)", MidiDevices.OutputNames());
-        Console.WriteLine();
-        Print("Inputs (controllers)", MidiDevices.InputNames());
+        AnsiConsole.MarkupLine("[bold]Outputs[/] [grey](instruments, for --output)[/]");
+        AnsiConsole.Write(Ports(MidiDevices.OutputNames()));
+        AnsiConsole.MarkupLine("[bold]Inputs[/] [grey](controllers, for --input)[/]");
+        AnsiConsole.Write(Ports(MidiDevices.InputNames()));
+        AnsiConsole.MarkupLine("[grey]Pass the # or a unique part of the name.[/]");
         return 0;
     }
 
-    private static void Print(string title, IReadOnlyList<string> names)
+    private static Table Ports(IReadOnlyList<string> names)
     {
-        Console.WriteLine($"{title}:");
+        var table = new Table()
+            .Border(TableBorder.Rounded)
+            .BorderColor(Color.Grey)
+            .AddColumn(new TableColumn("[grey]#[/]").RightAligned())
+            .AddColumn(new TableColumn("Name"));
         if (names.Count == 0)
         {
-            Console.WriteLine("  (none)");
+            table.AddRow("", "[grey](none)[/]");
         }
 
         for (var i = 0; i < names.Count; i++)
         {
-            Console.WriteLine($"  {i,3}  {names[i]}");
+            table.AddRow($"[bold]{i}[/]", Markup.Escape(names[i]));
         }
+
+        return table;
     }
 }

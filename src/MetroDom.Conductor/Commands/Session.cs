@@ -1,3 +1,4 @@
+using MetroDom.Conductor.Cli;
 using MetroDom.Conductor.Midi;
 using MetroDom.Core;
 
@@ -8,28 +9,50 @@ internal sealed class Session : IDisposable
 {
     private readonly IMidiOutputPort _output;
     private readonly ManualResetEventSlim _stop = new();
+    private Action<string> _log = Ui.Warn;
 
-    public Session(CommandLine cli)
+    public Session(OutputSettings settings)
+        : this(PortPicker.Output(settings.Output), settings.MutedChannels)
     {
-        var port = cli.Option("output") ?? throw new UsageException($"{cli.Command}: missing --output <port>.");
-        var mutes = cli.Channels("mute");
-        _output = MidiDevices.OpenOutput(port);
+    }
+
+    internal Session(IMidiOutputPort output, IReadOnlyList<int> mutedChannels)
+    {
+        _output = output;
         Orchestra.AssignAll(_output);
-        Orchestra.SendFailed += (output, ex) => Console.Error.WriteLine($"MIDI {output.Name}: send failed ({ex.Message}).");
-        foreach (var channel in mutes)
+        Orchestra.SendFailed += (port, ex) => _log($"MIDI {port.Name}: send failed ({ex.Message}).");
+        foreach (var channel in mutedChannels)
         {
             Orchestra.SetMuted(channel, true);
         }
 
         Console.CancelKeyPress += OnCancel;
-        Console.WriteLine($"Output: {_output.Name}" + (mutes.Count > 0 ? $"  muted: {string.Join(",", mutes.Select(c => c + 1))}" : ""));
     }
 
     public Orchestra Orchestra { get; } = new();
 
+    public ChannelActivity Activity { get; } = new();
+
+    public MessageLog Messages { get; } = new();
+
+    public string OutputName => _output.Name;
+
+    public bool IsOutputConnected => _output is not ResilientOutput resilient || resilient.IsConnected;
+
+    public bool IsStopping => _stop.IsSet;
+
+    /// <summary>Routes warnings (send failures, unplug/replug notices) to <paramref name="log"/>.</summary>
+    public void UseLog(Action<string> log)
+    {
+        _log = log;
+        MidiDevices.LogSink = log;
+    }
+
     public void RequestStop() => _stop.Set();
 
     public void WaitForStop() => _stop.Wait();
+
+    public bool WaitForStop(TimeSpan timeout) => _stop.Wait(timeout);
 
     public void Dispose()
     {
@@ -42,7 +65,6 @@ internal sealed class Session : IDisposable
     private void OnCancel(object? sender, ConsoleCancelEventArgs e)
     {
         e.Cancel = true;
-        Console.WriteLine("Stopping (panic).");
         RequestStop();
     }
 }

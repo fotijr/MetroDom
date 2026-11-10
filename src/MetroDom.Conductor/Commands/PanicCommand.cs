@@ -1,16 +1,24 @@
-using MetroDom.Conductor.Midi;
+using System.ComponentModel;
+using MetroDom.Conductor.Cli;
 using MetroDom.Core;
+using Spectre.Console.Cli;
 
 namespace MetroDom.Conductor.Commands;
 
-internal static class PanicCommand
+internal sealed class PanicCommand : Command<PanicCommand.Settings>
 {
-    public static int Run(CommandLine cli)
+    public sealed class Settings : CommandSettings
     {
-        var port = cli.Option("output") ?? throw new UsageException("panic: missing --output <port>.");
-        using var output = MidiDevices.OpenOutput(port);
+        [CommandOption("-o|--output <PORT>")]
+        [Description("Output port: index, name, or unique part of a name from [bold]metrodom devices[/]. Prompted for when omitted in a terminal.")]
+        public string? Output { get; init; }
+    }
+
+    public override int Execute(CommandContext context, Settings settings, CancellationToken cancellationToken)
+    {
+        using var output = PortPicker.Output(settings.Output);
         Orchestra.SendPanic(output);
-        Console.WriteLine($"Panic sent to {output.Name}.");
+        Ui.Success($"Panic sent to {output.Name}.");
         return 0;
     }
 }
