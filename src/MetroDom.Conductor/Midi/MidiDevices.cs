@@ -2,23 +2,32 @@ namespace MetroDom.Conductor.Midi;
 
 /// <summary>
 /// Picks the OS MIDI adapter (ADR 0002: Core never touches devices). Linux uses the ALSA
-/// sequencer directly. Windows and macOS use DryWetMIDI's device API.
+/// sequencer directly. Windows and macOS use DryWetMIDI's device API. Opened ports reconnect
+/// themselves after an unplug (<see cref="ResilientOutput"/>, <see cref="ResilientInput"/>).
 /// </summary>
 internal static class MidiDevices
 {
     private static readonly Lazy<IMidiBackend> Backend = new(Create);
 
-    public static IReadOnlyList<string> OutputNames() => Backend.Value.OutputNames();
+    public static IReadOnlyList<string> OutputNames() => Backend.Value.Outputs().Select(p => p.DisplayName).ToArray();
 
-    public static IReadOnlyList<string> InputNames() => Backend.Value.InputNames();
+    public static IReadOnlyList<string> InputNames() => Backend.Value.Inputs().Select(p => p.DisplayName).ToArray();
 
     /// <summary>Opens an output by index, exact name, or unique part of a name (e.g. ALSA "20:0").</summary>
-    public static IMidiOutputPort OpenOutput(string query) =>
-        Backend.Value.OpenOutput(Resolve(query, OutputNames(), "output"));
+    public static IMidiOutputPort OpenOutput(string query)
+    {
+        var ports = Backend.Value.Outputs();
+        var port = ports[Resolve(query, ports.Select(p => p.DisplayName).ToArray(), "output")];
+        return new ResilientOutput(Backend.Value, port, Log);
+    }
 
     /// <summary>Opens an input by index, exact name, or unique part of a name (e.g. ALSA "20:0").</summary>
-    public static IMidiInputPort OpenInput(string query) =>
-        Backend.Value.OpenInput(Resolve(query, InputNames(), "input"));
+    public static IMidiInputPort OpenInput(string query)
+    {
+        var ports = Backend.Value.Inputs();
+        var port = ports[Resolve(query, ports.Select(p => p.DisplayName).ToArray(), "input")];
+        return new ResilientInput(Backend.Value, port, Log);
+    }
 
     internal static int Resolve(string query, IReadOnlyList<string> names, string kind)
     {
@@ -45,6 +54,8 @@ internal static class MidiDevices
                 $"'{query}' matches {partial.Count} MIDI {kind}s; use the index from 'metrodom devices'."),
         };
     }
+
+    private static void Log(string message) => Console.Error.WriteLine(message);
 
     private static List<int> Matches(IReadOnlyList<string> names, Func<string, bool> predicate) =>
         Enumerable.Range(0, names.Count).Where(i => predicate(names[i])).ToList();

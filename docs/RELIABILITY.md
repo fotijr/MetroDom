@@ -31,7 +31,7 @@ but is polled (1 ms full-speed frames).
 ## Failure modes to design for
 | Failure | Expected behavior |
 | --- | --- |
-| Instrument USB unplugged mid-song | Firmware watchdog silences it. Conductor marks it offline, song continues on others |
+| Instrument USB unplugged mid-song | Firmware watchdog silences it. Conductor drops that port's events (found within ~1 s, or at once if a send fails), song continues on others. On replug it reconnects by port name and sends panic before resuming. Built in `ResilientPorts.cs` (firmware watchdog still TD-03) |
 | Conductor crash | Firmware watchdogs silence everything. Service supervisor restarts the Conductor. Resume is optional |
 | Wi-Fi / internet loss | Playback and queue continue. Apps reconnect and resync state over WebSocket |
 | Power brownout | Instruments boot to all-off. Conductor boots to "ready, not playing" |

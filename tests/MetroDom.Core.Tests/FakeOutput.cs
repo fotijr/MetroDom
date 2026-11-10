@@ -8,5 +8,16 @@ internal sealed class FakeOutput(string name = "fake") : IMidiOutput
 
     public List<MidiEvent> Sent { get; } = [];
 
-    public void Send(MidiEvent midiEvent) => Sent.Add(midiEvent);
+    /// <summary>When true, Send throws like an unplugged device.</summary>
+    public bool Broken { get; set; }
+
+    public void Send(MidiEvent midiEvent)
+    {
+        if (Broken)
+        {
+            throw new IOException($"{Name} unplugged");
+        }
+
+        Sent.Add(midiEvent);
+    }
 }

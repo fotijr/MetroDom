@@ -35,7 +35,8 @@ That is the first milestone of the [live band spec](../../product-specs/live-ban
 - [x] Core: SMF analysis (DryWetMIDI), channel routing with safe mute, panic
 - [x] Linux MIDI device adapter (ALSA sequencer), round trip tested in CI
 - [ ] Core: arranger (track → instrument), scheduler with fake-clock tests
-- [ ] Adapters: hot-plug (TD-16). Measure ALSA latency on a Pi
+- [x] Adapters: unplug goes silent, replug reconnects with a panic first. One failing output can't block others
+- [ ] Measure ALSA latency on a Pi
 - [ ] Discovery per [ADR 0007](../../design-docs/0007-instrument-discovery.md): MetroDom + general MIDI devices
 - [ ] Safety governor + panic, tested
 - [ ] Tap tempo / MIDI Clock in

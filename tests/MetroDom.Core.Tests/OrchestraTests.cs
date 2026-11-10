@@ -102,4 +102,36 @@ public class OrchestraTests
 
         Assert.Throws<ArgumentOutOfRangeException>(() => orchestra.Assign(channel, new FakeOutput()));
     }
+
+    [Fact]
+    public void Route_FailingOutputDoesNotBlockOthers()
+    {
+        var broken = new FakeOutput("broken") { Broken = true };
+        var healthy = new FakeOutput("healthy");
+        var orchestra = new Orchestra();
+        orchestra.AssignAll(broken);
+        orchestra.AssignAll(healthy);
+        var failures = new List<string>();
+        orchestra.SendFailed += (output, _) => failures.Add(output.Name);
+
+        var sent = orchestra.Route(NoteOn(0));
+
+        Assert.Equal(1, sent);
+        Assert.Single(healthy.Sent);
+        Assert.Equal(["broken"], failures);
+    }
+
+    [Fact]
+    public void Panic_ReachesEveryOutputEvenIfOneFails()
+    {
+        var broken = new FakeOutput("broken") { Broken = true };
+        var healthy = new FakeOutput("healthy");
+        var orchestra = new Orchestra();
+        orchestra.AssignAll(broken);
+        orchestra.AssignAll(healthy);
+
+        orchestra.Panic();
+
+        Assert.Equal(Orchestra.ChannelCount * 2, healthy.Sent.Count);
+    }
 }

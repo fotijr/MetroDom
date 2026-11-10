@@ -6,19 +6,19 @@ namespace MetroDom.Conductor.Midi;
 /// <summary>Windows (WinMM) and macOS (CoreMIDI) devices via DryWetMIDI.</summary>
 internal sealed class DryWetMidiBackend : IMidiBackend
 {
-    public IReadOnlyList<string> OutputNames() => OutputDevice.GetAll().Select(Name).ToArray();
+    public IReadOnlyList<MidiPortInfo> Outputs() => OutputDevice.GetAll().Select(Info).ToArray();
 
-    public IReadOnlyList<string> InputNames() => InputDevice.GetAll().Select(Name).ToArray();
+    public IReadOnlyList<MidiPortInfo> Inputs() => InputDevice.GetAll().Select(Info).ToArray();
 
-    public IMidiOutputPort OpenOutput(int index) => new Output(OutputDevice.GetByIndex(index));
+    public IMidiOutputPort OpenOutput(MidiPortInfo port) => new Output(OutputDevice.GetByName(port.Name));
 
-    public IMidiInputPort OpenInput(int index) => new Input(InputDevice.GetByIndex(index));
+    public IMidiInputPort OpenInput(MidiPortInfo port) => new Input(InputDevice.GetByName(port.Name));
 
-    private static string Name(MidiDevice device)
+    private static MidiPortInfo Info(MidiDevice device)
     {
         using (device)
         {
-            return device.Name;
+            return new MidiPortInfo(device.Name, device.Name);
         }
     }
 

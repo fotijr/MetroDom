@@ -13,13 +13,13 @@ internal sealed class AlsaBackend : IMidiBackend
     private const uint Writable = SND_SEQ_PORT_CAP_WRITE | SND_SEQ_PORT_CAP_SUBS_WRITE;
     private const uint Readable = SND_SEQ_PORT_CAP_READ | SND_SEQ_PORT_CAP_SUBS_READ;
 
-    public IReadOnlyList<string> OutputNames() => Ports(Writable).Select(p => p.DisplayName).ToArray();
+    public IReadOnlyList<MidiPortInfo> Outputs() => Ports(Writable);
 
-    public IReadOnlyList<string> InputNames() => Ports(Readable).Select(p => p.DisplayName).ToArray();
+    public IReadOnlyList<MidiPortInfo> Inputs() => Ports(Readable);
 
-    public IMidiOutputPort OpenOutput(int index) => new AlsaOutputPort(Ports(Writable)[index]);
+    public IMidiOutputPort OpenOutput(MidiPortInfo port) => new AlsaOutputPort((AlsaPort)port);
 
-    public IMidiInputPort OpenInput(int index) => new AlsaInputPort(Ports(Readable)[index]);
+    public IMidiInputPort OpenInput(MidiPortInfo port) => new AlsaInputPort((AlsaPort)port);
 
     /// <summary>Opens a sequencer client named "MetroDom", translating "no ALSA" into a clear error.</summary>
     internal static nint OpenSequencer(int streams)
@@ -90,8 +90,9 @@ internal sealed class AlsaBackend : IMidiBackend
     }
 }
 
-/// <summary>An ALSA sequencer address plus a human name.</summary>
+/// <summary>
+/// An ALSA sequencer port. The address can change when a device is replugged; the
+/// "Client:Port" name is what identifies it across replugs.
+/// </summary>
 internal sealed record AlsaPort(int Client, int Port, string Name)
-{
-    public string DisplayName => $"{Name} ({Client}:{Port})";
-}
+    : MidiPortInfo(Name, $"{Name} ({Client}:{Port})");

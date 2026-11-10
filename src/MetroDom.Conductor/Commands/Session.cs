@@ -15,6 +15,7 @@ internal sealed class Session : IDisposable
         var mutes = cli.Channels("mute");
         _output = MidiDevices.OpenOutput(port);
         Orchestra.AssignAll(_output);
+        Orchestra.SendFailed += (output, ex) => Console.Error.WriteLine($"MIDI {output.Name}: send failed ({ex.Message}).");
         foreach (var channel in mutes)
         {
             Orchestra.SetMuted(channel, true);

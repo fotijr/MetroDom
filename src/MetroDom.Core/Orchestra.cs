@@ -10,6 +10,8 @@ namespace MetroDom.Core;
 /// <remarks>
 /// Muting only blocks new notes. Note Offs always pass so a channel muted mid-song can't leave
 /// an actuator stuck on (the bug in the old WinForms Explorer, TD-08).
+/// Outputs are isolated: one that throws (e.g. unplugged) is reported via
+/// <see cref="SendFailed"/> and the rest still get the event, including panic.
 /// </remarks>
 public sealed class Orchestra
 {
@@ -19,6 +21,9 @@ public sealed class Orchestra
     private readonly Lock _gate = new();
     private readonly List<IMidiOutput>[] _routes = Enumerable.Range(0, ChannelCount).Select(_ => new List<IMidiOutput>()).ToArray();
     private readonly bool[] _muted = new bool[ChannelCount];
+
+    /// <summary>Raised when an output throws while sending. The orchestra keeps going.</summary>
+    public event Action<IMidiOutput, Exception>? SendFailed;
 
     /// <summary>Every distinct output with at least one channel assigned.</summary>
     public IReadOnlyCollection<IMidiOutput> Outputs
@@ -77,7 +82,7 @@ public sealed class Orchestra
 
     /// <summary>
     /// Routes one event. Non-channel events (SysEx, meta) are ignored. Returns the number of
-    /// outputs the event was sent to.
+    /// outputs that accepted the event.
     /// </summary>
     public int Route(MidiEvent midiEvent)
     {
@@ -99,12 +104,16 @@ public sealed class Orchestra
             targets = [.. _routes[channel]];
         }
 
+        var sent = 0;
         foreach (var output in targets)
         {
-            output.Send(midiEvent);
+            if (TrySend(output, () => output.Send(midiEvent)))
+            {
+                sent++;
+            }
         }
 
-        return targets.Length;
+        return sent;
     }
 
     /// <summary>
@@ -115,7 +124,7 @@ public sealed class Orchestra
     {
         foreach (var output in Outputs)
         {
-            SendPanic(output);
+            TrySend(output, () => SendPanic(output));
         }
     }
 
@@ -132,6 +141,22 @@ public sealed class Orchestra
                     Channel = (FourBitNumber)channel,
                 });
             }
+        }
+    }
+
+    private bool TrySend(IMidiOutput output, Action send)
+    {
+        try
+        {
+            send();
+            return true;
+        }
+#pragma warning disable CA1031 // Any device failure must not stop the other instruments.
+        catch (Exception ex)
+#pragma warning restore CA1031
+        {
+            SendFailed?.Invoke(output, ex);
+            return false;
         }
     }
 

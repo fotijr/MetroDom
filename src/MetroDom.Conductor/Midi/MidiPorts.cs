@@ -18,16 +18,22 @@ internal interface IMidiInputPort : IDisposable
     void Stop();
 }
 
-/// <summary>One platform's MIDI device API. Indexes match the order of the name lists.</summary>
+/// <summary>
+/// A port as the OS lists it. <see cref="Name"/> survives unplug/replug (used to find the device
+/// again). <see cref="DisplayName"/> may add volatile detail such as the ALSA address.
+/// </summary>
+internal record MidiPortInfo(string Name, string DisplayName);
+
+/// <summary>One platform's MIDI device API.</summary>
 internal interface IMidiBackend
 {
-    IReadOnlyList<string> OutputNames();
+    IReadOnlyList<MidiPortInfo> Outputs();
 
-    IReadOnlyList<string> InputNames();
+    IReadOnlyList<MidiPortInfo> Inputs();
 
-    IMidiOutputPort OpenOutput(int index);
+    IMidiOutputPort OpenOutput(MidiPortInfo port);
 
-    IMidiInputPort OpenInput(int index);
+    IMidiInputPort OpenInput(MidiPortInfo port);
 }
 
 /// <summary>The OS MIDI system is missing or refused a request (no sequencer, port vanished…).</summary>
