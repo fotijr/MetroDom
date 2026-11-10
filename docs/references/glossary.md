@@ -3,7 +3,7 @@
 - **Actuator**: the thing that moves: solenoid, servo, stepper, motor.
 - **Arranger**: Conductor component mapping song tracks/channels onto available instruments.
 - **Click track**: a fixed metronome performers lock to. MetroDom avoids requiring one.
-- **Conductor**: the headless service that runs the band (also the name of today's WinForms app).
+- **Conductor**: the headless service that runs the band (today: the `metrodom` CLI).
 - **Control API**: the single HTTP/WebSocket/OSC interface all apps use.
 - **Control surface**: anything that sends intents to the Conductor: app, keyboard, pad.
 - **Instrument**: one physical instrument + microcontroller + firmware, presented as a MIDI device.

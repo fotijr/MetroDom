@@ -12,13 +12,13 @@ Last reviewed: 2026-11-10
 | Instrument: xylophone (servo) | D | Tester sketch | Partial | Different protocol from solenoid version. `?` reply lacks `Name:` |
 | Instrument firmware standard (USB-MIDI, watchdog) | — | — | Spec only | [ADR 0001](design-docs/0001-midi-is-the-contract.md), [0006](design-docs/0006-swappable-instrument-brains.md) |
 | Instrument discovery (Identity Request, general MIDI) | — | — | ADR | [ADR 0007](design-docs/0007-instrument-discovery.md) |
-| `MetroDom.Core` instrument model | D | 2 trivial | Partial | `Orchestra.Start` is a TODO. `Note` holds servo angles |
-| Conductor: MIDI file explorer | C | None | Partial | Works on Windows. Channel mute can hang notes |
-| Conductor: live MIDI → instrument | F | None | Partial | Routing commented out |
-| Conductor: serial discovery | F | None | Partial | Can loop forever, always returns true (see tech debt) |
+| Core: routing, mute, panic (`Orchestra`) | C | Unit | ARCHITECTURE | No scheduler/latency yet. Single output per run in the CLI |
+| Core: song analysis (`SongAnalyzer`) | C | Unit | ARCHITECTURE | Read-only analysis. No arranger yet |
+| CLI: `inspect` | C | Smoke (manual) | `--help` | Any OS |
+| CLI: `devices` / `play` / `route` / `panic` | D | None | `--help` | Windows/macOS only (TD-14). Not yet tested against a real MIDI device |
 | Scheduler / latency compensation | — | — | ADR | [ADR 0004](design-docs/0004-latency-compensation.md) |
 | Control API | — | — | ADR | [ADR 0003](design-docs/0003-control-api.md) |
 | Policy / roles | — | — | ADR | [ADR 0005](design-docs/0005-deployment-modes-are-policy.md) |
 | Control apps (owner, jukebox, rental) | — | — | Specs | [product-specs](product-specs/index.md) |
-| CI | C | — | — | GitHub Actions: docs lint + legacy Windows build/test. Build job not yet run green (see TD-04) |
+| CI | C | — | — | GitHub Actions: docs lint + build/test on Linux, macOS, Windows. Not yet run on GitHub (TD-04) |
 | Knowledge base | B | `scripts/check_docs.py` | This repo | New. Keep it gardened |

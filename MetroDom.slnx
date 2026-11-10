@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/MetroDom.Conductor/MetroDom.Conductor.csproj" />
+    <Project Path="src/MetroDom.Core/MetroDom.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/MetroDom.Core.Tests/MetroDom.Core.Tests.csproj" />
+  </Folder>
+</Solution>

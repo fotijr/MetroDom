@@ -19,12 +19,20 @@ One system, three ways to use it:
 - [Instruments/](Instruments/README.md): firmware and hardware
 - [AGENTS.md](AGENTS.md): map for coding agents (humans welcome)
 
+## Build
+Needs the [.NET 10 SDK](https://dotnet.microsoft.com/download) on Linux, macOS or Windows.
+
+```bash
+dotnet test
+dotnet run --project src/MetroDom.Conductor -- inspect path/to/song.mid
+```
+
 ## Repository
 | Path | Contents |
 | --- | --- |
-| `MetroDom.Core/` | C# library: instrument interface and song model (prototype) |
-| `MetroDom.Conductor/` | Windows Forms app: MIDI input, MIDI file explorer, serial discovery (prototype) |
-| `MetroDom.Tests/` | xUnit tests |
+| `src/MetroDom.Core/` | C# library: MIDI routing, panic, song analysis |
+| `src/MetroDom.Conductor/` | `metrodom` command-line Conductor |
+| `tests/` | xUnit tests |
 | `Instruments/` | Arduino firmware per instrument |
 | `docs/` | Knowledge base |
 

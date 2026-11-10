@@ -30,9 +30,9 @@ This file is a **map, not a manual**. Read the doc that matches your task, then 
 ```
 AGENTS.md              ← you are here (table of contents only)
 ARCHITECTURE.md        ← layers, boundaries, current code map
-MetroDom.Core/         ← C# class library: instrument interface, song model (prototype)
-MetroDom.Conductor/    ← Windows Forms app: MIDI input, MIDI file explorer, serial discovery (prototype)
-MetroDom.Tests/        ← xUnit tests for Core
+src/MetroDom.Core/     ← C# library: routing, panic, song analysis. Pure logic, no OS I/O
+src/MetroDom.Conductor/ ← `metrodom` CLI + OS MIDI adapters (DryWetMIDI)
+tests/                 ← xUnit v3 tests
 Instruments/           ← Arduino firmware + per-instrument hardware notes
 docs/                  ← knowledge base (Markdown). docs/index.html etc. is the legacy GitHub Pages site.
 scripts/check_docs.py  ← knowledge-base linter (run before committing doc changes)
@@ -49,10 +49,11 @@ the docs describe intent and the code describes reality — check
 
 ```bash
 python3 scripts/check_docs.py          # knowledge-base lint (links, orphans, AGENTS.md length)
-msbuild MetroDom.sln /p:Configuration=Release   # legacy prototype: .NET Framework 4.8, Windows-only
+dotnet build && dotnet test                      # .NET 10 SDK, any OS (Linux/macOS/Windows)
+dotnet run --project src/MetroDom.Conductor -- inspect song.mid
 ```
 
-CI: GitHub Actions (`.github/workflows/`): `docs` (lint) and `build` (legacy solution on Windows).
+CI: GitHub Actions (`.github/workflows/`): `docs` (lint) and `build` (Linux, macOS, Windows).
 New Conductor code is modern C# on .NET LTS ([ADR 0002](docs/design-docs/0002-headless-conductor.md)).
 
 ## Working rules

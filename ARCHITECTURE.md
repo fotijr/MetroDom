@@ -80,27 +80,31 @@ See [ADR 0005](docs/design-docs/0005-deployment-modes-are-policy.md).
 1. Control surfaces → Control API only. Never → instruments.
 2. Conductor core logic has no UI, OS-specific MIDI, or network types. Those are adapters.
 3. Instrument-specific details (servo angles, pin numbers) live in firmware or the instrument
-   profile, never in Conductor core. *(Today `MetroDom.Core/Song.cs` violates this; see tech debt.)*
+   profile, never in Conductor core.
 4. Everything crossing a process boundary uses an open, documented format: MIDI, SMF, JSON,
    OSC. See [core beliefs](docs/design-docs/core-beliefs.md).
 
-## Current code map (prototype, 2016–2017)
+## Current code map
 
-| Path                                   | What it is today                                                        |
-| -------------------------------------- | ----------------------------------------------------------------------- |
-| `MetroDom.Core/Interfaces/IInstrument.cs` | Instrument interface (`PlayNote(IMidiMessage)`, `PlaySong`, `Stop`…) |
-| `MetroDom.Core/Orchestra.cs`           | Holds instruments. `Start(song)` is a TODO                               |
-| `MetroDom.Core/Song.cs`                | Song = key + note list. `Note` hard-codes **servo angles** (temporary hack) |
-| `MetroDom.Conductor/Forms/LiveControlForm.cs` | Picks a MIDI input, discovers serial instruments, note→serial mapping commented out |
-| `MetroDom.Conductor/Forms/Explorer.cs` | Loads a `.mid`, lists tracks/channels, plays to a MIDI out with channel mute |
-| `MetroDom.Conductor/SerialService.cs`  | Probes COM ports with `md?`, parses `Name:`/`Id:` lines (9600 baud ASCII). Replaced by [ADR 0007](docs/design-docs/0007-instrument-discovery.md) |
-| `Instruments/xylophone_solenoid/`      | 3 solenoids on pins 9–11, ASCII `'0' '4' '7'` triggers, 45 ms strike     |
-| `Instruments/xylophone_servo/`         | Spin + strike servo; `<digits>m` moves, `p` strikes, `?` identifies      |
-| `MetroDom.Tests/`                      | Two xUnit tests for `Orchestra.Start` argument handling                  |
+Stack: **C# on .NET 10 (LTS)**, SDK-style projects, `MetroDom.slnx`. Builds and tests on Linux,
+macOS and Windows. MIDI via DryWetMIDI. The 2016–2017 WinForms app was retired in favor of a
+CLI (recover it from git history at commit `266b6b5` if needed).
 
-Stack: .NET Framework 4.8, WinForms, Sanford.Multimedia.Midi (Windows `winmm`), so the
-Conductor runs on Windows only. The legacy serial protocol is documented in
-[references/legacy-serial-protocol.md](docs/references/legacy-serial-protocol.md).
+| Path | What it is today |
+| --- | --- |
+| `src/MetroDom.Core/IMidiOutput.cs` | The instrument contract: a named thing you can send MIDI events to |
+| `src/MetroDom.Core/Orchestra.cs` | Channel → output routing, mute (Note Offs always pass), panic (CC 120/123) |
+| `src/MetroDom.Core/SongAnalyzer.cs` | SMF → tracks, channels, note ranges, tempo, duration (arranger input) |
+| `src/MetroDom.Conductor/` | `metrodom` CLI: `inspect`, `devices`, `play`, `route`, `panic` |
+| `src/MetroDom.Conductor/Midi/` | OS MIDI device adapter (DryWetMIDI: Windows/macOS. Linux pending, TD-14) |
+| `tests/MetroDom.Core.Tests/` | xUnit v3 tests for Core (Microsoft.Testing.Platform runner) |
+| `Instruments/xylophone_solenoid/` | 3 solenoids on pins 9–11, ASCII `'0' '4' '7'` triggers, 45 ms strike |
+| `Instruments/xylophone_servo/` | Spin + strike servo. `<digits>m` moves, `p` strikes, `?` identifies |
+
+Repo-wide build settings: `global.json` (SDK + test runner), `Directory.Build.props`
+(net10.0, nullable, warnings as errors, analyzers), `Directory.Packages.props` (central package
+versions), `.editorconfig`. The firmware still speaks the
+[legacy serial protocol](docs/references/legacy-serial-protocol.md). No host code drives it now.
 
 ## Migration path
 Prototype → target is planned in

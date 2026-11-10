@@ -18,7 +18,8 @@ That is the first milestone of the [live band spec](../../product-specs/live-ban
 - [x] AGENTS.md table of contents + `docs/` knowledge base
 - [x] Docs lint (`scripts/check_docs.py`) in GitHub Actions
 - [ ] Owner reviews and accepts/edits ADRs 0001–0005
-- [x] Replace Travis with a GitHub Actions build + test workflow (retargeted to .NET Framework 4.8)
+- [x] Replace Travis with GitHub Actions
+- [x] Migrate to .NET 10 SDK-style projects, cross-platform. Retire WinForms for the `metrodom` CLI
 - [ ] Confirm `build` workflow runs green on GitHub
 
 ### Phase 1: Instruments speak MIDI
@@ -30,8 +31,10 @@ That is the first milestone of the [live band spec](../../product-specs/live-ban
 - [ ] Measure and record per-note latency
 
 ### Phase 2: Headless Conductor core
-- [ ] New SDK-style `net10.0` projects (Core, Adapters, Host, Tests) with `dotnet test` in CI
-- [ ] Core: SMF loading (DryWetMIDI), arranger (track → instrument), scheduler with fake-clock tests
+- [x] SDK-style `net10.0` Core + CLI + tests, `dotnet test` on Linux/macOS/Windows CI
+- [x] Core: SMF analysis (DryWetMIDI), channel routing with safe mute, panic
+- [ ] Linux MIDI device adapter (ALSA), TD-14
+- [ ] Core: arranger (track → instrument), scheduler with fake-clock tests
 - [ ] Adapters: OS MIDI in/out + hot-plug. Verify Linux MIDI library on a Pi
 - [ ] Discovery per [ADR 0007](../../design-docs/0007-instrument-discovery.md): MetroDom + general MIDI devices
 - [ ] Safety governor + panic, tested
@@ -40,7 +43,7 @@ That is the first milestone of the [live band spec](../../product-specs/live-ban
 ### Phase 3: Control API v0
 - [ ] OpenAPI spec: transport, queue, instruments, panic
 - [ ] WebSocket state stream
-- [ ] Minimal web UI served by the Conductor (replaces WinForms Explorer for daily use)
+- [ ] Minimal web UI served by the Conductor
 
 ## Decisions log
 - 2026-11-10: Adopted harness-engineering style repo knowledge base. Architecture written as
@@ -48,7 +51,9 @@ That is the first milestone of the [live band spec](../../product-specs/live-ban
 - 2026-11-10: Conductor stays modern C# / .NET LTS (ADR 0002 accepted). Hardware priorities:
   ease of programming, cost, interchangeable brains (ADR 0006). Discovery keeps the `md?`
   auto-detect intent using standard SysEx Identity + general MIDI support (ADR 0007).
+- 2026-11-10: Migrated to .NET 10 (latest stable, LTS. .NET 11 still RC). Must build and test
+  on any OS. WinForms app and serial discovery deleted (git history keeps them). The Explorer
+  and live-control ideas live on as `metrodom inspect/play/route`.
 
 ## Open questions
 - Target box model and Linux MIDI library (ADR 0002).
-- Keep the WinForms Conductor as a dev tool or retire it at Phase 3?

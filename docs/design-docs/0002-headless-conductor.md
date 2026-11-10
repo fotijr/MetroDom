@@ -3,13 +3,15 @@
 Status: **Accepted** (2026-11-10). Runtime: modern C# / .NET LTS.
 
 ## Context
-Today the Conductor is a Windows Forms app on .NET Framework using Sanford.Multimedia.Midi
-(Windows `winmm`). Business logic lives in form event handlers. A band delivered to someone's
+The 2017 Conductor was a Windows Forms app on .NET Framework using Sanford.Multimedia.Midi
+(Windows `winmm`), with business logic in form event handlers. It was retired on 2026-11-10 for
+a cross-platform .NET 10 CLI. A band delivered to someone's
 house, or installed in a bar, needs a small box that boots straight into "ready", with no
 Windows desktop and no monitor.
 
 ## Decision
-- **Language/runtime: modern C# on the current .NET LTS** (net10.0 as of 2026-11), kept
+- **Language/runtime: modern C# on the current .NET LTS** (net10.0 as of 2026-11. .NET 11 is
+  STS, so move when the next LTS ships unless a feature is needed sooner), kept
   unless a compelling reason appears (record it as a new ADR that supersedes this one).
   Continuity with the existing code and owner familiarity win over marginal real-time gains.
 - The Conductor is a **headless long-running service** (.NET Generic Host / Worker Service,
@@ -19,20 +21,20 @@ Windows desktop and no monitor.
   linux-arm64). It must also run on a dev laptop (macOS/Windows/Linux).
 - Structure, as separate projects:
   - **Core**: pure logic (arranger, scheduler, queue, policy). No I/O, no OS types. Uses an
-    injected clock (`TimeProvider`) and `IMidiPort` abstractions, so it is fully testable with a
+    injected clock (`TimeProvider`) and `IMidiOutput` abstractions, so it is fully testable with a
     fake clock and fake instruments.
   - **Adapters**: OS MIDI I/O per platform, HTTP/WebSocket host, storage.
   - **Host**: composition root / service executable.
 - Reuse over build: use **DryWetMIDI** (Melanchall, netstandard2.0, MIT) for SMF parsing and MIDI
-  types in Core. Device I/O sits behind `IMidiPort` so the platform library can change
+  types in Core. Device I/O sits behind `IMidiOutput` so the platform library can change
   (DryWetMIDI devices on Windows/macOS. On Linux, ALSA via a maintained wrapper such as RtMidi,
   to be verified on a Pi in Phase 2).
-- The WinForms app is kept only as a legacy dev tool until the web admin UI replaces it.
+- Until the service and web UI exist, the Conductor ships as the `metrodom` CLI. Nothing may
+  require a specific OS to build or test.
 
 ## Consequences
-- `MetroDom.Core` concepts carry forward. Sanford MIDI is removed from Core (it stays in the
-  legacy WinForms app only).
-- New projects are SDK-style, `net10.0`, nullable enabled, warnings as errors, and tested with
+- Sanford MIDI and WinForms are gone. Core depends only on DryWetMIDI's OS-independent types.
+- Projects are SDK-style, `net10.0`, nullable enabled, warnings as errors, and tested with
   `dotnet test` on Linux CI.
 - Scheduling must be tested against a virtual clock, not wall-clock sleeps.
 - Timing-sensitive paths avoid allocations (GC pauses). Measure on the target box.

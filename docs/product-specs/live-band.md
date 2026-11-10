@@ -11,7 +11,7 @@ click.
 - Route a live MIDI controller to any instrument (channel or keyboard-split mapping).
 - Setlist of Standard MIDI Files. Start/stop/next from the controller (MIDI Start/Stop/CC) or phone.
 - Tempo from a human: tap tempo, incoming MIDI Clock, nudge ±. Songs follow it in real time.
-- Per-track mute/solo and instrument assignment (the prototype Explorer's channel toggles grew up).
+- Per-track mute/solo and instrument assignment (`metrodom play --mute` is the seed).
 - Panic: one button on controller *and* phone stops every actuator immediately.
 - Instrument health at a glance (connected, latency calibrated, overheating).
 

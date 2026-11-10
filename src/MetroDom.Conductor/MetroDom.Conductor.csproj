@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>metrodom</AssemblyName>
+    <RootNamespace>MetroDom.Conductor</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\MetroDom.Core\MetroDom.Core.csproj" />
+    <PackageReference Include="Melanchall.DryWetMidi" />
+  </ItemGroup>
+</Project>
