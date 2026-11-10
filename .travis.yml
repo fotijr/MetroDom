@@ -1,5 +1,0 @@
-language: csharp
-solution: MetroDom.sln
-script:
-  - xbuild /p:Configuration=Release MetroDom.sln
-  - mono ./packages/xunit.runner.console.*/tools/xunit.console.exe ./MetroDom.Tests/bin/Release/MetroDom.Tests.dll

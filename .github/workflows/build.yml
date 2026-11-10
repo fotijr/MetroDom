@@ -1,0 +1,25 @@
+name: build
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  legacy-dotnet-framework:
+    # Prototype solution: .NET Framework 4.8 + WinForms, Windows-only.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: microsoft/setup-msbuild@v2
+      - uses: nuget/setup-nuget@v2
+      - name: Restore
+        run: nuget restore MetroDom.sln
+      - name: Build
+        run: msbuild MetroDom.sln /p:Configuration=Release /m /v:minimal
+      - name: Test
+        shell: pwsh
+        run: |
+          $runner = Get-ChildItem packages -Recurse -Filter xunit.console.exe | Select-Object -First 1
+          & $runner.FullName MetroDom.Tests\bin\Release\MetroDom.Tests.dll
+          exit $LASTEXITCODE
