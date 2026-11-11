@@ -51,7 +51,7 @@ That is the first milestone of the [live band spec](../../product-specs/live-ban
 
 ### Phase 2b: Play-along ([ADR 0012](../../design-docs/0012-humans-in-the-band.md))
 - [x] Track roles (track names, GM drums channel, saved per-song mapping): `metrodom roles`, [song roles](../../references/song-roles.md)
-- [ ] Seats: a human takes a role, arranger mutes it (generalize `--mute`)
+- [x] Seats: a human takes a role, arranger mutes it (generalize `--mute`): `--seat ROLE[=PLAYER]` on `play`/`simulate`/`arrange`
 - [ ] Count-in on a chosen instrument. SMF marker sections. Vamp / jump to outro
 - [ ] Foot controller mapping in the live-band policy (start/stop, next, tap, vamp, panic)
 - [ ] Tempo tracker with beat prediction, tested with recorded human timings + fake clock
@@ -152,6 +152,13 @@ That is the first milestone of the [live band spec](../../product-specs/live-ban
   song, keyed by name, `#TRACK` or `#TRACK:CHANNEL`, so it survives the file being re-exported
   with the same track layout and stays readable in a diff. Roles live on `SongPart` so seats can
   mute by role without another pass over the file.
+
+- 2026-11-11: Seats. A seat removes its role's notes from a copy of the song before arranging or
+  routing, rather than living in the arranger: one mechanism for both `play` paths, and the
+  arranger can't hand a human's part to a robot. Per part, not per channel, so a shared channel
+  keeps its other parts; `--mute` stays for whole channels. Only notes are removed (tempo,
+  markers, controllers stay). The idle instrument stays in the band, so lookahead doesn't jump
+  when someone sits in. Seats are flags until session/policy profiles exist (ADR 0005).
 
 ## Open questions
 - Target box model (ADR 0002).

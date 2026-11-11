@@ -2,8 +2,8 @@
 
 Status: **Draft**. Implements the "tracks are tagged with roles" part of
 [ADR 0012](../design-docs/0012-humans-in-the-band.md). Code: `src/MetroDom.Core/Arranging/Roles.cs`
-(`Roles`, `RoleDetector`, `RoleMapping`), used by `Arranger.Parts`/`Arrange`. Seats (a human
-takes a role, the arranger mutes it) build on this and aren't done yet.
+(`Roles`, `RoleDetector`, `RoleMapping`), used by `Arranger.Parts`/`Arrange`, and by seats
+(`Seating.cs`, below).
 
 ## Vocabulary
 
@@ -47,3 +47,21 @@ metrodom roles song.mid --unset "#3"                      # back to detection
 `arrange`, `play --arrange` and `simulate --arrange` load the mapping automatically and show each
 part's role. A broken roles file is a usage error naming the file. A `--set` key that matches no
 part is saved with a warning (the song may change).
+
+## Seats (minus-one)
+
+`--seat ROLE[=PLAYER]` (`-s`, repeatable) on `play`, `simulate` and `arrange`: a human plays that
+role, so every part with it loses its notes before the song reaches the arranger or the router.
+
+```bash
+metrodom play song.mid -o "MetroDom xylo=1" -o "MetroDom drums=10" --seat drums=Dom
+metrodom arrange song.mid --seat guitar --seat bass
+```
+
+- Each seat prints what it took: `Seat drums (Dom): band leaves out Drums (#2:10)`. A seat whose
+  role no part has is a warning, and nothing is left out.
+- Unlike `--mute CHANNELS`, a seat removes exactly the parts with that role, even when another part
+  shares the channel. Tempo, markers and controllers stay. `--mute` still works for whole channels.
+- The instrument that would have played the part stays in the band (idle, or given another part
+  by `--arrange`), so lookahead doesn't change.
+- Measured: demo song to `virtual` with `--seat drums=Dom`: xylophone played, drums got no notes.

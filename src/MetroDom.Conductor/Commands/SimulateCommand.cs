@@ -40,6 +40,12 @@ internal sealed class SimulateCommand : Command<SimulateCommand.Settings>
         [DefaultValue(0)]
         public int Seed { get; init; }
 
+        [CommandOption("-s|--seat <ROLE>")]
+        [Description(SeatList.Help)]
+        public string[]? Seat { get; init; }
+
+        public IReadOnlyList<Core.Arranging.Seat> Seats => SeatList.TryParse(Seat, out var seats, out _) ? seats : [];
+
         [CommandOption("-a|--arrange")]
         [Description("Let the arranger give each instrument the part it plays best (transposed, folded, thinned to fit), instead of routing by channel.")]
         public bool Arrange { get; init; }
@@ -53,6 +59,11 @@ internal sealed class SimulateCommand : Command<SimulateCommand.Settings>
 
         public override ValidationResult Validate()
         {
+            if (!SeatList.TryParse(Seat, out _, out var seatError))
+            {
+                return ValidationResult.Error($"--seat: {seatError}");
+            }
+
             if (Path is not null && !File.Exists(Path))
             {
                 return ValidationResult.Error($"file not found: {Path}");
@@ -71,7 +82,8 @@ internal sealed class SimulateCommand : Command<SimulateCommand.Settings>
 
     public override int Execute(CommandContext context, Settings settings, CancellationToken cancellationToken)
     {
-        var midiFile = settings.Path is null ? DemoSong.Create() : MidiFile.Read(settings.Path);
+        var roles = SongRoles.Load(settings.Path);
+        var midiFile = SeatList.Apply(settings.Path is null ? DemoSong.Create() : MidiFile.Read(settings.Path), settings.Seats, roles);
         var songName = settings.Path is null ? "built-in demo" : System.IO.Path.GetFileName(settings.Path);
         var band = settings.Band;
         var options = new SimulationOptions
@@ -86,7 +98,7 @@ internal sealed class SimulateCommand : Command<SimulateCommand.Settings>
         if (settings.Arrange)
         {
             var members = band.Select(b => b.ToBandMember()).ToArray();
-            var arrangement = Arranger.Arrange(midiFile, members, new ArrangerOptions { Roles = SongRoles.Load(settings.Path) });
+            var arrangement = Arranger.Arrange(midiFile, members, new ArrangerOptions { Roles = roles });
             ArrangementView.Write(arrangement, members);
             AnsiConsole.WriteLine();
             timeline = arrangement.Timeline;

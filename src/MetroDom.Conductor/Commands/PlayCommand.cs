@@ -46,6 +46,12 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
 
         public TapTrigger Trigger => TapTrigger.TryParse(TapOn, out var trigger, out _) ? trigger : new TapTrigger();
 
+        [CommandOption("-s|--seat <ROLE>")]
+        [Description(SeatList.Help)]
+        public string[]? Seat { get; init; }
+
+        public IReadOnlyList<Core.Arranging.Seat> Seats => SeatList.TryParse(Seat, out var seats, out _) ? seats : [];
+
         [CommandOption("-t|--tempo <BPM>")]
         [Description("Start at this tempo instead of the file's. Tempo changes in the file scale with it.")]
         public double? Tempo { get; init; }
@@ -55,6 +61,11 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
             if (!File.Exists(Path))
             {
                 return ValidationResult.Error($"file not found: {Path}");
+            }
+
+            if (!SeatList.TryParse(Seat, out _, out var seatError))
+            {
+                return ValidationResult.Error($"--seat: {seatError}");
             }
 
             if (Tempo is not (null or (>= TapTempo.MinBpm and <= TapTempo.MaxBpm)))
@@ -80,7 +91,8 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
 
     public override int Execute(CommandContext context, Settings settings, CancellationToken cancellationToken)
     {
-        var midiFile = MidiFile.Read(settings.Path);
+        var roles = SongRoles.Load(settings.Path);
+        var midiFile = SeatList.Apply(MidiFile.Read(settings.Path), settings.Seats, roles);
         var tempoMap = midiFile.GetTempoMap();
         var song = System.IO.Path.GetFileName(settings.Path);
         var fileBpm = FileBpm(tempoMap, TimeSpan.Zero);
@@ -98,7 +110,7 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
             if (settings.Arrange)
             {
                 var band = session.Outputs.Select(o => new BandMember(o.Profile, o.Channels[0])).ToArray();
-                var arrangement = Arranger.Arrange(midiFile, band, new ArrangerOptions { Roles = SongRoles.Load(settings.Path) });
+                var arrangement = Arranger.Arrange(midiFile, band, new ArrangerOptions { Roles = roles });
                 ArrangementView.Write(arrangement, band);
                 timeline = arrangement.Timeline;
             }
