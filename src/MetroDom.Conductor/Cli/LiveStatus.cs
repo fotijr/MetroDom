@@ -77,7 +77,10 @@ internal static class LiveStatus
     /// Shows <paramref name="render"/> until <paramref name="session"/> stops. In a terminal it
     /// redraws in place; when piped it just waits, so logs and scripts see plain lines.
     /// </summary>
-    public static void Run(Session session, Func<IRenderable> render)
+    /// <param name="session">Stops the view when it stops.</param>
+    /// <param name="render">Builds the panel, called every refresh.</param>
+    /// <param name="onKey">Keys pressed in the terminal (interactive only), on the UI thread.</param>
+    public static void Run(Session session, Func<IRenderable> render, Action<ConsoleKeyInfo>? onKey = null)
     {
         if (!Ui.IsInteractive)
         {
@@ -95,6 +98,11 @@ internal static class LiveStatus
                 {
                     while (!session.WaitForStop(Refresh))
                     {
+                        while (onKey is not null && Console.KeyAvailable)
+                        {
+                            onKey(Console.ReadKey(intercept: true));
+                        }
+
                         ctx.UpdateTarget(render());
                     }
 
@@ -107,15 +115,30 @@ internal static class LiveStatus
         }
     }
 
-    public static IRenderable Panel(string title, Session session, IRenderable? progress)
+    /// <param name="title">Panel header.</param>
+    /// <param name="session">Outputs, mutes, activity, warnings.</param>
+    /// <param name="progress">Progress bar, or null for live routing.</param>
+    /// <param name="detail">Extra line under the progress (e.g. tempo), or null.</param>
+    /// <param name="keys">Key help shown before "Ctrl+C to stop", or null.</param>
+    public static IRenderable Panel(string title, Session session, IRenderable? progress, IRenderable? detail = null, string? keys = null)
     {
-        var rows = new List<IRenderable>
+        var rows = new List<IRenderable>();
+        foreach (var output in session.Outputs)
         {
-            new Markup($"[grey]Output[/]  {Markup.Escape(session.OutputName)}  {Connection(session.IsOutputConnected)}"),
-        };
+            var routing = session.Outputs.Count == 1 && output.Latency == TimeSpan.Zero
+                ? ""
+                : string.Create(CultureInfo.InvariantCulture, $"[grey]ch {ChannelList.Format(output.Channels)} · {output.Latency.TotalMilliseconds:0.#} ms[/]  ");
+            rows.Add(new Markup($"[grey]Output[/]  {Markup.Escape(output.Port.Name)}  {routing}{Connection(output.IsConnected)}"));
+        }
+
         if (progress is not null)
         {
             rows.Add(progress);
+        }
+
+        if (detail is not null)
+        {
+            rows.Add(detail);
         }
 
         rows.Add(Channels(session));
@@ -126,7 +149,7 @@ internal static class LiveStatus
 
         rows.Add(new Markup(session.IsStopping
             ? "[red]Stopping…[/]"
-            : "[grey]Ctrl+C to stop (sends panic)[/]"));
+            : $"[grey]{(keys is null ? "" : Markup.Escape(keys) + " · ")}Ctrl+C to stop (sends panic)[/]"));
 
         return new Panel(new Rows(rows))
             .Header($" {title} ", Justify.Left)

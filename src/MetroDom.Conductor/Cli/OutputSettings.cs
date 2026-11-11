@@ -1,15 +1,17 @@
 using System.ComponentModel;
+using System.Globalization;
+using System.Text.RegularExpressions;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
 namespace MetroDom.Conductor.Cli;
 
-/// <summary>Options shared by every command that drives an output (instruments).</summary>
+/// <summary>Options shared by every command that drives outputs (instruments).</summary>
 internal class OutputSettings : CommandSettings
 {
     [CommandOption("-o|--output <PORT>")]
-    [Description("Output port: index, name, or unique part of a name from [bold]metrodom devices[/] (on Linux the ALSA address works too, e.g. 20:0). Prompted for when omitted in a terminal.")]
-    public string? Output { get; init; }
+    [Description("Output port: index, name, or unique part of a name from [bold]metrodom devices[/] (on Linux the ALSA address works too, e.g. 20:0). Repeat for several instruments, optionally as [bold]PORT=CHANNELS@LATENCY_MS[/] (e.g. -o \"xylo=1-9,11-16@10\" -o \"drums=10@35\"). Without channels a port gets every channel. Prompted for when omitted in a terminal.")]
+    public string[]? Outputs { get; init; }
 
     [CommandOption("-m|--mute <CHANNELS>")]
     [Description("Channels to mute, 1-16, comma separated, ranges allowed (e.g. 10 for drums, 1-9).")]
@@ -18,10 +20,73 @@ internal class OutputSettings : CommandSettings
     /// <summary>Zero-based muted channels, valid after <see cref="Validate"/>.</summary>
     public IReadOnlyList<int> MutedChannels => ChannelList.TryParse(Mute, out var channels, out _) ? channels : [];
 
-    public override ValidationResult Validate() =>
-        ChannelList.TryParse(Mute, out _, out var error)
-            ? ValidationResult.Success()
-            : ValidationResult.Error($"--mute: {error}");
+    /// <summary>Parsed <c>--output</c> values, valid after <see cref="Validate"/>. Empty means "prompt".</summary>
+    public IReadOnlyList<OutputSpec> OutputSpecs =>
+        (Outputs ?? []).Select(o => OutputSpec.TryParse(o, out var spec, out _) ? spec : null).OfType<OutputSpec>().ToArray();
+
+    public override ValidationResult Validate()
+    {
+        if (!ChannelList.TryParse(Mute, out _, out var error))
+        {
+            return ValidationResult.Error($"--mute: {error}");
+        }
+
+        foreach (var output in Outputs ?? [])
+        {
+            if (!OutputSpec.TryParse(output, out _, out error))
+            {
+                return ValidationResult.Error($"--output: {error}");
+            }
+        }
+
+        return ValidationResult.Success();
+    }
+}
+
+/// <summary>
+/// One <c>--output</c>: <c>PORT[=CHANNELS][@LATENCY_MS]</c>. <c>"MetroDom drums=10@35"</c>
+/// sends channel 10 to the port matching "MetroDom drums", 35 ms early. A plain port gets every channel.
+/// </summary>
+internal sealed partial record OutputSpec(string Port, IReadOnlyList<int> Channels, TimeSpan Latency)
+{
+    public static bool TryParse(string raw, out OutputSpec spec, out string? error)
+    {
+        spec = null!;
+        var match = Pattern().Match(raw);
+        if (!match.Success || match.Groups["port"].Value.TrimStart() is ['=' or '@', ..])
+        {
+            error = $"'{raw}' is not PORT[=CHANNELS][@LATENCY_MS] (e.g. drums=10@35).";
+            return false;
+        }
+
+        IReadOnlyList<int> channels = InstrumentSpec.AllChannels;
+        if (match.Groups["ch"].Success && !ChannelList.TryParse(match.Groups["ch"].Value, out channels, out var channelError))
+        {
+            error = $"'{raw}': {channelError}";
+            return false;
+        }
+
+        var latency = 0.0;
+        if (match.Groups["lat"].Success
+            && (!double.TryParse(match.Groups["lat"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out latency) || latency > 10_000))
+        {
+            error = $"'{raw}': latency must be 0-10000 ms.";
+            return false;
+        }
+
+        if (channels.Count == 0)
+        {
+            error = $"'{raw}': no channels.";
+            return false;
+        }
+
+        spec = new OutputSpec(match.Groups["port"].Value.Trim(), channels, TimeSpan.FromMilliseconds(latency));
+        error = null;
+        return true;
+    }
+
+    [GeneratedRegex(@"^(?<port>.*?\S.*?)(?:=(?<ch>[0-9,\-\s]+))?(?:@(?<lat>[0-9]+(?:\.[0-9]+)?)\s*(?:ms)?)?\s*$", RegexOptions.IgnoreCase)]
+    private static partial Regex Pattern();
 }
 
 /// <summary>Channel lists as musicians write them (1-16), stored as MIDI's 0-15.</summary>

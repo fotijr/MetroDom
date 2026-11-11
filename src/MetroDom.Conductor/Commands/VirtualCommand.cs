@@ -27,7 +27,7 @@ internal sealed class VirtualCommand : Command<VirtualCommand.Settings>
     public sealed class Settings : CommandSettings
     {
         [CommandOption("-i|--instrument <SPEC>")]
-        [Description("A virtual instrument, NAME[=CHANNELS]@LATENCY_MS, repeatable (e.g. [bold]-i xylo=1@10 -i drums=10@35[/]). It only listens on its channels. Default: xylo on every channel but 10 at 10 ms, drums on 10 at 35 ms.")]
+        [Description("A virtual instrument, NAME[=CHANNELS]@LATENCY_MS[/NOTES], repeatable (e.g. [bold]-i xylo=1@10 -i drums=10@35[/]). It only listens on its channels. Default: xylo on every channel but 10 at 10 ms, drums on 10 at 35 ms.")]
         public string[]? Instruments { get; init; }
 
         public IReadOnlyList<InstrumentSpec> Band =>
@@ -98,7 +98,7 @@ internal sealed class VirtualCommand : Command<VirtualCommand.Settings>
         TimeSpan? lastPanic = null;
         instrument.Struck += (_, s) => Print(console, s.ReceivedAt, spec.Name, string.Create(
             CultureInfo.InvariantCulture,
-            $"ch {s.Channel + 1,2}  {NoteName(s.Note),-4} [grey]({s.Note,3})[/]  vel {s.Velocity,3}  [grey]heard +{(s.SoundsAt - s.ReceivedAt).TotalMilliseconds:0.#} ms[/]"));
+            $"ch {s.Channel + 1,2}  {NoteName(s.Note),-4} [grey]({s.Note,3})[/]  vel {s.Velocity,3}  [grey]→ heard at[/] {s.SoundsAt.TotalSeconds:0.000} [grey](+{(s.SoundsAt - s.ReceivedAt).TotalMilliseconds:0.#} ms)[/]"));
         instrument.Rejected += (_, note, reason) => Print(console, clock.Now, spec.Name, $"[yellow]skipped {NoteName(note)} ({note}): {Markup.Escape(reason)}[/]");
 
         port.EventReceived += e =>

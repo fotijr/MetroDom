@@ -28,9 +28,10 @@ internal static class MetroDomApp
                 .WithDescription("List MIDI outputs (instruments) and inputs (controllers).")
                 .WithExample("devices");
             config.AddCommand<PlayCommand>("play")
-                .WithDescription("Play a song to an output, with a live status view. Ctrl+C stops and sends panic.")
+                .WithDescription("Play a song to one or more outputs, each sent early by its latency. Tap or nudge the tempo live. Ctrl+C stops and sends panic.")
                 .WithExample("play", "song.mid", "--output", "0")
-                .WithExample("play", "song.mid", "-o", "fluid", "--mute", "10");
+                .WithExample("play", "song.mid", "-o", "fluid", "--mute", "10")
+                .WithExample("play", "song.mid", "-o", "\"MetroDom xylo=1-9,11-16@10\"", "-o", "\"MetroDom drums=10@35\"", "--tempo", "92");
             config.AddCommand<RouteCommand>("route")
                 .WithDescription("Route a live controller to an output. Ctrl+C stops and sends panic.")
                 .WithExample("route", "--input", "keystation", "--output", "1");

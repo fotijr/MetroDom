@@ -167,4 +167,85 @@ public class LatencySchedulerTests
         Assert.Equal(2, _xylo.Strikes.Count);
         Assert.Equal(2, _drums.Strikes.Count);
     }
+
+    [Fact]
+    public void SetSpeed_RetimesWhatIsLeft_FromTheCurrentPosition_AndKeepsInstrumentsAligned()
+    {
+        var scheduler = Scheduler();
+        scheduler.Start(TwoBeats());
+        while (scheduler.NextDue <= Ms(100))
+        {
+            _clock.AdvanceTo(scheduler.NextDue!.Value);
+            scheduler.Pump();
+        }
+
+        _clock.AdvanceTo(Ms(100));
+        scheduler.SetSpeed(2); // At 100 ms the song clock is at 100 ms; beat 2 (500) is 400 song-ms away = 200 clock-ms.
+        RunToEnd(scheduler, _clock);
+
+        Assert.Equal([Ms(35), Ms(335)], _drums.Strikes.Select(s => s.SoundsAt));
+        Assert.Equal(_drums.Strikes.Select(s => s.SoundsAt), _xylo.Strikes.Select(s => s.SoundsAt));
+        Assert.Equal([Ms(25), Ms(325)], _xylo.Strikes.Select(s => s.ReceivedAt)); // Latency is mechanical: not scaled.
+    }
+
+    [Fact]
+    public void Start_AtASpeed_PlaysFasterFromTheTop()
+    {
+        var scheduler = Scheduler();
+        scheduler.Start(TwoBeats(), speed: 0.5);
+        RunToEnd(scheduler, _clock);
+
+        Assert.Equal([Ms(35), Ms(1035)], _drums.Strikes.Select(s => s.SoundsAt));
+        Assert.Equal(0.5, scheduler.Speed);
+    }
+
+    [Fact]
+    public void Position_FollowsWhatIsHeard_AcrossSpeedChanges()
+    {
+        var scheduler = Scheduler();
+        scheduler.Start(TwoBeats());
+
+        Assert.Equal(TimeSpan.Zero, scheduler.Position); // Still inside the 35 ms lookahead.
+        _clock.AdvanceTo(Ms(135));
+        Assert.Equal(Ms(100), scheduler.Position);
+        scheduler.SetSpeed(2);
+        _clock.AdvanceTo(Ms(235));
+        Assert.Equal(Ms(265), scheduler.Position); // Heard = song clock 35 ms ago: 135 + 65 × 2.
+        _clock.AdvanceTo(TimeSpan.FromSeconds(10));
+        Assert.Equal(scheduler.Duration, scheduler.Position);
+    }
+
+    [Fact]
+    public void Preroll_DelaysTheWholeSong()
+    {
+        var scheduler = Scheduler();
+        scheduler.Start(TwoBeats(), preroll: Ms(250));
+
+        Assert.Equal(Ms(250), scheduler.NextDue);
+        Assert.Equal(TimeSpan.Zero, scheduler.Position);
+        RunToEnd(scheduler, _clock);
+        Assert.Equal([Ms(285), Ms(785)], _drums.Strikes.Select(s => s.SoundsAt));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(0.1)]
+    [InlineData(5)]
+    [InlineData(double.NaN)]
+    public void SetSpeed_RejectsSpeedsOutOfRange(double speed) =>
+        Assert.Throws<ArgumentOutOfRangeException>(() => Scheduler().SetSpeed(speed));
+
+    [Fact]
+    public void Sent_IsRaisedForEveryAcceptedEvent()
+    {
+        var scheduler = Scheduler();
+        var sent = new List<ScheduledSend>();
+        scheduler.Sent += sent.Add;
+        _orchestra.SetMuted(0, true);
+        scheduler.Start(TwoBeats());
+        RunToEnd(scheduler, _clock);
+
+        Assert.Equal([_drums, _drums], sent.Select(s => s.Output));
+        Assert.Equal([Ms(0), Ms(500)], sent.Select(s => s.SongTime));
+    }
 }

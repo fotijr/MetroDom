@@ -38,12 +38,13 @@ That is the first milestone of the [live band spec](../../product-specs/live-ban
 - [ ] Core: arranger (track → instrument)
 - [x] Core: latency-compensating scheduler with fake-clock tests (`LatencyScheduler`, `VirtualClock`)
 - [x] Virtual band: `VirtualInstrument`, `metrodom simulate` (virtual clock), `metrodom virtual` (OS ports), `demo-song`. See [virtual band](../../references/virtual-band.md)
-- [ ] `play` drives real ports through the scheduler (compensation on hardware), musical-time re-timing for tap tempo (TD-20)
+- [x] `play` drives real ports through the scheduler, several outputs with per-output channels and latency, re-timing on tempo change
 - [x] Adapters: unplug goes silent, replug reconnects with a panic first. One failing output can't block others
 - [ ] Measure ALSA latency on a Pi
 - [ ] Discovery per [ADR 0007](../../design-docs/0007-instrument-discovery.md): MetroDom + general MIDI devices
 - [ ] Safety governor + panic, tested
-- [ ] Tap tempo / MIDI Clock in
+- [x] Tap tempo (terminal keys) and `--tempo`
+- [ ] Tap from a MIDI input (foot pedal) / MIDI Clock in
 
 ### Phase 2b: Play-along ([ADR 0012](../../design-docs/0012-humans-in-the-band.md))
 - [ ] Track roles (track names, GM drums channel, saved per-song mapping)
@@ -86,6 +87,12 @@ That is the first milestone of the [live band spec](../../product-specs/live-ban
   takes the default band's spread from 25 ms to 0 ms, and under 4 ms with ±2 ms jitter. The
   scheduler polls (`Pump` at `NextDue`) instead of owning a thread, so the same code runs on a
   fake clock in tests and on a real clock later.
+- 2026-11-10: `play` moved from DryWetMIDI `Playback` to `LatencyScheduler` + `SchedulerLoop`.
+  Events stay in song time; a speed factor (× the file's tempo) re-anchors at the current
+  position, so tap tempo works without re-reading the file and respects tempo maps. Outputs
+  became `-o PORT[=CHANNELS][@LATENCY_MS]`, repeatable. The first real-time run had beat one
+  13 ms late (cold send path); a panic before starting (start from silence) plus a 250 ms
+  pre-roll fixed it. Measured ≤ 1 ms between a 10 ms and a 35 ms virtual instrument.
 
 ## Open questions
 - Target box model (ADR 0002).

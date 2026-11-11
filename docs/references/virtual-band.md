@@ -22,11 +22,11 @@ metrodom simulate --no-compensation                 # see the 25 ms smear compen
 metrodom simulate song.mid -i xylo=1@10 -i drums=10@35 --jitter 2 --notes
 metrodom demo-song demo.mid                         # the demo as a file for play/DAWs
 metrodom virtual                                    # terminal 1: ports "MetroDom xylo", "MetroDom drums"
-metrodom play demo.mid -o "MetroDom xylo"           # terminal 2
+metrodom play demo.mid -o "MetroDom xylo=1-9,11-16@10" -o "MetroDom drums=10@35"   # terminal 2
 ```
 
 Instrument spec: `NAME[=CHANNELS]@LATENCY_MS`. Channels are 1-16 with ranges (`1-9,11-16`),
-omitted means all. Default band (roadmap S1): `xylo` on every channel except 10 at 10 ms,
+omitted means all. `play -o` takes the same `=CHANNELS@LATENCY` after the port name. Default band (roadmap S1): `xylo` on every channel except 10 at 10 ms,
 `drums` on 10 at 35 ms.
 
 ## What a virtual instrument does
@@ -47,8 +47,24 @@ between instruments meant to sound together. The proposed budget is ≤ 5 ms.
 
 Demo song, default band: compensation on → 0 ms. Off → 25 ms. On with ±2 ms jitter → under 4 ms.
 
+## Real time: `metrodom play` uses the same scheduler
+
+`play` takes several outputs, each `PORT[=CHANNELS][@LATENCY_MS]`, and drives them through
+`LatencyScheduler` on a real clock (`SchedulerLoop`: sleeps, then spins the last 2 ms; 16 ms on
+Windows). It panics every output first (start from silence, and warms the send path so beat one
+isn't late), then starts after a 250 ms pre-roll.
+
+Tempo comes from a human: `--tempo BPM` to start, then in the terminal **Space/T** taps
+(`TapTempo`: average of the last 4 intervals, resets after 2 s, ignores double-triggers),
+**+/-** nudge 2%, **0** returns to the file's tempo. Events stay in song time and are re-timed
+from the current position on every change ([ADR 0004](../design-docs/0004-latency-compensation.md)).
+Latency is mechanical, so it is never scaled.
+
+Measured on macOS (`play` → `virtual`, demo song, 10 ms + 35 ms): drums sent ~24 ms before the
+xylophone, heard within 1 ms of each other (the log's resolution) on every beat, at 100 and 150 BPM.
+
 ## Not yet (see [tech debt](../exec-plans/tech-debt-tracker.md))
 
-- `metrodom play` still uses DryWetMIDI playback, not the scheduler: no compensation on real ports yet.
-- Tempo is fixed when the song loads. Tap tempo and live tempo changes don't re-time yet (TD-20).
+- Tap tempo from a MIDI pedal or MIDI Clock in. The keys are covered only by unit tests of `TapTempo` and `SetSpeed`, not by driving a terminal (TD-20).
+- `route` (live input) ignores latency: ADR 0004's "delay to the slowest" isn't built.
 - Latency comes from the command line, not profile files or SysEx discovery.
