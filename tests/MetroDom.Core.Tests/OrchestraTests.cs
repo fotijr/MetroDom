@@ -134,4 +134,37 @@ public class OrchestraTests
 
         Assert.Equal(Orchestra.ChannelCount * 2, healthy.Sent.Count);
     }
+
+    [Fact]
+    public void RouteTo_SendsOnlyIfThatOutputIsAssignedAndRespectsMute()
+    {
+        var xylo = new FakeOutput("xylo");
+        var drums = new FakeOutput("drums");
+        var orchestra = new Orchestra();
+        orchestra.Assign(0, xylo);
+        orchestra.Assign(9, drums);
+
+        Assert.True(orchestra.RouteTo(xylo, NoteOn(0)));
+        Assert.False(orchestra.RouteTo(drums, NoteOn(0)));
+        orchestra.SetMuted(0, true);
+        Assert.False(orchestra.RouteTo(xylo, NoteOn(0)));
+        Assert.True(orchestra.RouteTo(xylo, NoteOff(0)));
+
+        Assert.Equal(2, xylo.Sent.Count);
+        Assert.Empty(drums.Sent);
+        Assert.Equal([xylo], orchestra.OutputsFor(0));
+    }
+
+    [Fact]
+    public void RouteTo_ReportsAFailingOutputInsteadOfThrowing()
+    {
+        var broken = new FakeOutput("broken") { Broken = true };
+        var orchestra = new Orchestra();
+        orchestra.Assign(0, broken);
+        IMidiOutput? failed = null;
+        orchestra.SendFailed += (output, _) => failed = output;
+
+        Assert.False(orchestra.RouteTo(broken, NoteOn(0)));
+        Assert.Same(broken, failed);
+    }
 }

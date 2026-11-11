@@ -14,7 +14,7 @@ Exchange.
   "id": "xylophone-solenoid",
   "name": "Xylophone (solenoid)",
   "firmwareVersion": "0.1.0",
-  "midi": { "channel": 1, "identity": { "manufacturer": "7D", "family": 1, "model": 1 } },
+  "midi": { "channel": 1, "identity": { "manufacturer": "7D", "family": 8781, "model": 1 } },
   "notes": [
     { "note": 60, "latencyMs": 9,  "minIntervalMs": 60 },
     { "note": 64, "latencyMs": 10, "minIntervalMs": 60 },
@@ -27,6 +27,8 @@ Exchange.
 ```
 
 Fields:
+- `midi.identity`: what the instrument answers to a MIDI Identity Request. Family 8781 is
+  MetroDom ("MD"), see [midi-identity.md](midi-identity.md).
 - `notes[]`: the only notes the instrument can play. Latency (command → audible onset) is
   measured, not guessed. `minIntervalMs` is the fastest repeat of that note.
 - `polyphony`: max simultaneous notes (power-supply / actuator limit).

@@ -18,9 +18,15 @@ internal sealed class RouteCommand : Command<RouteCommand.Settings>
     public override int Execute(CommandContext context, Settings settings, CancellationToken cancellationToken)
     {
         string output;
+        string[] heldBack;
         using (var session = new Session(settings))
         {
             output = session.OutputName;
+            if (session.Outputs.Any(o => o.Latency > TimeSpan.Zero))
+            {
+                Ui.Warn("Latency is ignored for live input: it can't be sent early (ADR 0004 delays to the slowest instrument instead, not built yet).");
+            }
+
             using var input = PortPicker.Input(settings.Input);
             input.EventReceived += e =>
             {
@@ -41,6 +47,12 @@ internal sealed class RouteCommand : Command<RouteCommand.Settings>
                 session,
                 progress: null));
             input.Stop();
+            heldBack = [.. session.SafetySummary()];
+        }
+
+        foreach (var line in heldBack)
+        {
+            Ui.Warn($"Safety governor, {line}.");
         }
 
         Ui.Success($"Stopped. Panic sent to {output}.");

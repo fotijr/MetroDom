@@ -142,6 +142,8 @@ public class ResilientPortTests
             return opened;
         }
 
+        public IVirtualPort CreateVirtualInput(string name) => throw new NotSupportedException();
+
         public IMidiInputPort OpenInput(MidiPortInfo port)
         {
             ThrowIfFailing();

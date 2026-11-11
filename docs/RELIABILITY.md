@@ -21,10 +21,18 @@ but is polled (1 ms full-speed frames).
    - Duty-cycle / thermal limit per actuator. Refuse or thin notes when exceeded.
    - Watchdog: no host traffic or USB disconnect for N ms means all actuators off.
    - All-off on boot and on reset.
-2. **Conductor safety governor**
-   - Panic (CC 120/123 + MetroDom SysEx all-off) to every instrument, bypassing queues.
-   - Rate limits, velocity caps and quiet hours from the active policy profile.
-   - Rejects notes outside an instrument's declared range or minimum inter-note interval.
+2. **Conductor safety governor** (`SafetyGovernor`, one in front of every output in `play` and `route`)
+   - Panic (CC 120/123 + MetroDom SysEx all-off) to every instrument, bypassing queues. Built:
+     CC 120/123. Not yet: MetroDom SysEx all-off.
+   - Rate limits, velocity caps and quiet hours from the active policy profile. Built as flags
+     until policy profiles exist: `--max-rate N` (strikes per second per output, extra notes held
+     back), `--max-velocity N` (louder notes turned down, never dropped), `--quiet 23:00-07:00[@VEL]`
+     (local time, may cross midnight; no new notes, or capped at VEL).
+   - Rejects notes outside an instrument's declared range or minimum inter-note interval. Built:
+     notes from `-o PORT.../NOTES`; min interval waits for profile files.
+   - Only new notes are ever held back or changed. Note Off, panic and every other message pass,
+     so the governor can never leave an actuator on. Held-back counts show in the status panel
+     and are printed when the run ends.
 3. **Lights**
    - Flashing capped at 3 per second unless the venue policy enables strobe (photosensitive epilepsy).
    - LEDs on their own fused 5 V supply with software brightness caps.

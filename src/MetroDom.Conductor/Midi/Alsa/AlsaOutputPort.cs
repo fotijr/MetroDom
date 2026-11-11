@@ -46,34 +46,39 @@ internal sealed unsafe class AlsaOutputPort : IMidiOutputPort
         lock (_lock)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
-            var bytes = _toBytes.Convert(midiEvent);
-            var ev = stackalloc byte[EventSize];
-            snd_midi_event_reset_encode(_encoder);
-            fixed (byte* data = bytes)
+            SendToSubscribers(_seq, _encoder, _port, _toBytes.Convert(midiEvent), Name, midiEvent.EventType.ToString());
+        }
+    }
+
+    /// <summary>Encodes MIDI bytes to sequencer events and sends them, unqueued, to the port's subscribers.</summary>
+    internal static void SendToSubscribers(nint seq, nint encoder, int port, byte[] bytes, string name, string what)
+    {
+        var ev = stackalloc byte[EventSize];
+        snd_midi_event_reset_encode(encoder);
+        fixed (byte* data = bytes)
+        {
+            nint offset = 0;
+            while (offset < bytes.Length)
             {
-                nint offset = 0;
-                while (offset < bytes.Length)
+                new Span<byte>(ev, EventSize).Clear();
+                var used = snd_midi_event_encode(encoder, data + offset, bytes.Length - offset, ev);
+                if (used <= 0)
                 {
-                    new Span<byte>(ev, EventSize).Clear();
-                    var used = snd_midi_event_encode(_encoder, data + offset, bytes.Length - offset, ev);
-                    if (used <= 0)
-                    {
-                        throw new MidiDeviceException($"ALSA couldn't encode {midiEvent.EventType} for {Name}.");
-                    }
-
-                    offset += used;
-                    if (ev[EventTypeOffset] == SND_SEQ_EVENT_NONE)
-                    {
-                        continue; // Message not complete yet (long SysEx spans calls).
-                    }
-
-                    // snd_seq_ev_set_source / set_subs / set_direct (header-only macros in C).
-                    ev[EventQueueOffset] = SND_SEQ_QUEUE_DIRECT;
-                    ev[EventSourcePortOffset] = (byte)_port;
-                    ev[EventDestClientOffset] = SND_SEQ_ADDRESS_SUBSCRIBERS;
-                    ev[EventDestPortOffset] = SND_SEQ_ADDRESS_UNKNOWN;
-                    Check(snd_seq_event_output_direct(_seq, ev), $"send to {Name}");
+                    throw new MidiDeviceException($"ALSA couldn't encode {what} for {name}.");
                 }
+
+                offset += used;
+                if (ev[EventTypeOffset] == SND_SEQ_EVENT_NONE)
+                {
+                    continue; // Message not complete yet (long SysEx spans calls).
+                }
+
+                // snd_seq_ev_set_source / set_subs / set_direct (header-only macros in C).
+                ev[EventQueueOffset] = SND_SEQ_QUEUE_DIRECT;
+                ev[EventSourcePortOffset] = (byte)port;
+                ev[EventDestClientOffset] = SND_SEQ_ADDRESS_SUBSCRIBERS;
+                ev[EventDestPortOffset] = SND_SEQ_ADDRESS_UNKNOWN;
+                Check(snd_seq_event_output_direct(seq, ev), $"send to {name}");
             }
         }
     }

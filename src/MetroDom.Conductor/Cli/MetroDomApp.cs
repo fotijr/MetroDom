@@ -26,14 +26,32 @@ internal static class MetroDomApp
                 .WithExample("inspect", "song.mid");
             config.AddCommand<DevicesCommand>("devices")
                 .WithDescription("List MIDI outputs (instruments) and inputs (controllers).")
-                .WithExample("devices");
+                .WithExample("devices")
+                .WithExample("devices", "--identify");
             config.AddCommand<PlayCommand>("play")
-                .WithDescription("Play a song to an output, with a live status view. Ctrl+C stops and sends panic.")
+                .WithDescription("Play a song to one or more outputs, each sent early by its latency. Tap or nudge the tempo live. Ctrl+C stops and sends panic.")
                 .WithExample("play", "song.mid", "--output", "0")
-                .WithExample("play", "song.mid", "-o", "fluid", "--mute", "10");
+                .WithExample("play", "song.mid", "-o", "fluid", "--mute", "10")
+                .WithExample("play", "song.mid", "-o", "\"MetroDom xylo=1-9,11-16@10\"", "-o", "\"MetroDom drums=10@35\"", "--tempo", "92");
             config.AddCommand<RouteCommand>("route")
                 .WithDescription("Route a live controller to an output. Ctrl+C stops and sends panic.")
                 .WithExample("route", "--input", "keystation", "--output", "1");
+            config.AddCommand<ArrangeCommand>("arrange")
+                .WithDescription("Show which part of a song each instrument would play, and what had to change to fit.")
+                .WithExample("arrange", "song.mid", "-i", "xylo=1@10/C4-C6", "-i", "drums=10@35/36,38,76");
+            config.AddCommand<SimulateCommand>("simulate")
+                .WithDescription("Play a song to virtual instruments on a virtual clock and report how well they line up. No devices needed.")
+                .WithExample("simulate")
+                .WithExample("simulate", "song.mid", "-i", "xylo=1@10", "-i", "drums=10@35", "--jitter", "2")
+                .WithExample("simulate", "--no-compensation")
+                .WithExample("simulate", "song.mid", "--arrange", "-i", "xylo=1@10/60,64,67", "-i", "drums=10@35/36,38");
+            config.AddCommand<VirtualCommand>("virtual")
+                .WithDescription("Create virtual instruments as OS MIDI ports (Linux, macOS) that play, a DAW or a keyboard can send to.")
+                .WithExample("virtual")
+                .WithExample("virtual", "-i", "xylo=1@10", "-i", "drums=10@35");
+            config.AddCommand<DemoSongCommand>("demo-song")
+                .WithDescription("Write the built-in two-piece demo song (xylophone + drums) to a .mid file.")
+                .WithExample("demo-song", "demo.mid");
             config.AddCommand<PanicCommand>("panic")
                 .WithDescription("All sound and notes off on every channel of an output.")
                 .WithExample("panic", "--output", "0");

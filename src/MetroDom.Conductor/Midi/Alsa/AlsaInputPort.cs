@@ -9,27 +9,50 @@ namespace MetroDom.Conductor.Midi.Alsa;
 /// sequencer events back to MIDI bytes and then to DryWetMIDI events.
 /// </summary>
 [SupportedOSPlatform("linux")]
-internal sealed unsafe class AlsaInputPort : IMidiInputPort
+internal sealed unsafe class AlsaInputPort : IVirtualPort
 {
     private const int PollTimeoutMs = 100;
     private readonly nint _seq;
     private readonly nint _decoder;
+    private readonly Lock _sendLock = new();
+    private readonly int _port;
+    private readonly bool _virtual;
+    private nint _encoder;
+    private MidiEventToBytesConverter? _toBytes;
     private Thread? _thread;
     private volatile bool _running;
     private bool _disposed;
 
     public AlsaInputPort(AlsaPort source)
+        : this(source.DisplayName, "in", source)
     {
-        Name = source.DisplayName;
-        _seq = AlsaBackend.OpenSequencer(SND_SEQ_OPEN_INPUT);
+    }
+
+    private AlsaInputPort(string name, string portName, AlsaPort? source)
+    {
+        Name = name;
+        _virtual = source is null;
+
+        // A virtual port is duplex: others send to it and can subscribe to its answers.
+        _seq = AlsaBackend.OpenSequencer(_virtual ? SND_SEQ_OPEN_DUPLEX : SND_SEQ_OPEN_INPUT);
         try
         {
-            var port = Check(snd_seq_create_simple_port(
+            var caps = SND_SEQ_PORT_CAP_WRITE | SND_SEQ_PORT_CAP_SUBS_WRITE;
+            if (_virtual)
+            {
+                caps |= SND_SEQ_PORT_CAP_READ | SND_SEQ_PORT_CAP_SUBS_READ;
+            }
+
+            _port = Check(snd_seq_create_simple_port(
                 _seq,
-                "in",
-                SND_SEQ_PORT_CAP_WRITE | SND_SEQ_PORT_CAP_SUBS_WRITE,
+                portName,
+                caps,
                 SND_SEQ_PORT_TYPE_MIDI_GENERIC | SND_SEQ_PORT_TYPE_APPLICATION), "create_simple_port");
-            Check(snd_seq_connect_from(_seq, port, source.Client, source.Port), $"connect from {source.DisplayName}");
+            if (source is not null)
+            {
+                Check(snd_seq_connect_from(_seq, _port, source.Client, source.Port), $"connect from {source.DisplayName}");
+            }
+
             Check(snd_seq_nonblock(_seq, 1), "nonblock");
             Check(snd_midi_event_new(4096, out _decoder), "midi_event_new");
             snd_midi_event_no_status(_decoder, 1); // Always emit status bytes (no running status).
@@ -42,6 +65,12 @@ internal sealed unsafe class AlsaInputPort : IMidiInputPort
     }
 
     public event Action<MidiEvent>? EventReceived;
+
+    /// <summary>
+    /// A port named "MetroDom:<paramref name="portName"/>" that any ALSA client can connect
+    /// to and send to (e.g. <c>metrodom play -o "MetroDom:xylo"</c> or <c>aconnect</c>).
+    /// </summary>
+    public static AlsaInputPort CreateVirtual(string portName) => new($"MetroDom:{portName}", portName, null);
 
     public string Name { get; }
 
@@ -65,6 +94,27 @@ internal sealed unsafe class AlsaInputPort : IMidiInputPort
         _thread = null;
     }
 
+    /// <summary>Sends to whoever subscribed to this port. Virtual ports only.</summary>
+    public void Send(MidiEvent midiEvent)
+    {
+        if (!_virtual)
+        {
+            throw new NotSupportedException($"{Name} is an input; only virtual ports can send.");
+        }
+
+        lock (_sendLock)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (_toBytes is null)
+            {
+                Check(snd_midi_event_new(4096, out _encoder), "midi_event_new");
+                _toBytes = new MidiEventToBytesConverter();
+            }
+
+            AlsaOutputPort.SendToSubscribers(_seq, _encoder, _port, _toBytes.Convert(midiEvent), Name, midiEvent.EventType.ToString());
+        }
+    }
+
     public void Dispose()
     {
         if (_disposed)
@@ -73,7 +123,16 @@ internal sealed unsafe class AlsaInputPort : IMidiInputPort
         }
 
         Stop();
-        _disposed = true;
+        lock (_sendLock)
+        {
+            _disposed = true;
+            if (_toBytes is not null)
+            {
+                snd_midi_event_free(_encoder);
+                _toBytes.Dispose();
+            }
+        }
+
         snd_midi_event_free(_decoder);
         _ = snd_seq_close(_seq);
     }

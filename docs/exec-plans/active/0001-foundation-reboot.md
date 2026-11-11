@@ -35,12 +35,17 @@ That is the first milestone of the [live band spec](../../product-specs/live-ban
 - [x] SDK-style `net10.0` Core + CLI + tests, `dotnet test` on Linux/macOS/Windows CI
 - [x] Core: SMF analysis (DryWetMIDI), channel routing with safe mute, panic
 - [x] Linux MIDI device adapter (ALSA sequencer), round trip tested (locally; hosted CI can't load the module, TD-18)
-- [ ] Core: arranger (track → instrument), scheduler with fake-clock tests
+- [x] Core: arranger (song part → instrument by fit, transpose, fold, drop, thin). `metrodom arrange`, `--arrange` on `simulate`/`play`. Limits: TD-21
+- [x] Core: latency-compensating scheduler with fake-clock tests (`LatencyScheduler`, `VirtualClock`)
+- [x] Virtual band: `VirtualInstrument`, `metrodom simulate` (virtual clock), `metrodom virtual` (OS ports), `demo-song`. See [virtual band](../../references/virtual-band.md)
+- [x] `play` drives real ports through the scheduler, several outputs with per-output channels and latency, re-timing on tempo change
 - [x] Adapters: unplug goes silent, replug reconnects with a panic first. One failing output can't block others
 - [ ] Measure ALSA latency on a Pi
-- [ ] Discovery per [ADR 0007](../../design-docs/0007-instrument-discovery.md): MetroDom + general MIDI devices
-- [ ] Safety governor + panic, tested
-- [ ] Tap tempo / MIDI Clock in
+- [x] Discovery steps 1-2 per [ADR 0007](../../design-docs/0007-instrument-discovery.md): list ports, Identity Request, MetroDom vs general MIDI (`devices --identify`, [midi-identity](../../references/midi-identity.md))
+- [ ] Discovery steps 3-4: profile fetch, identify on hot-plug, remember assignments (TD-23)
+- [x] Safety governor + panic, tested (`SafetyGovernor` in front of every output; `--max-velocity`, `--max-rate`, `--quiet`). Limits: TD-22
+- [x] Tap tempo (terminal keys) and `--tempo`
+- [ ] Tap from a MIDI input (foot pedal) / MIDI Clock in
 
 ### Phase 2b: Play-along ([ADR 0012](../../design-docs/0012-humans-in-the-band.md))
 - [ ] Track roles (track names, GM drums channel, saved per-song mapping)
@@ -75,6 +80,41 @@ That is the first milestone of the [live band spec](../../product-specs/live-ban
 - 2026-11-10: Linux MIDI talks to the ALSA sequencer directly (P/Invoke to libasound) rather
   than RtMidi: no native library to build per architecture, and the sequencer sees USB devices,
   interfaces, soft synths and virtual ports alike.
+
+- 2026-11-10: Virtual band for roadmap S1. Two layers: an in-process simulation on a virtual
+  clock (deterministic, CI-friendly, proves the scheduler math) and OS virtual MIDI ports (proves
+  the device path with stock tools). Virtual instruments mimic the generic firmware: strike on
+  Note On, Note Off ignored, drop unplayable notes, refuse too-fast repeats. Result: compensation
+  takes the default band's spread from 25 ms to 0 ms, and under 4 ms with ±2 ms jitter. The
+  scheduler polls (`Pump` at `NextDue`) instead of owning a thread, so the same code runs on a
+  fake clock in tests and on a real clock later.
+- 2026-11-10: `play` moved from DryWetMIDI `Playback` to `LatencyScheduler` + `SchedulerLoop`.
+  Events stay in song time; a speed factor (× the file's tempo) re-anchors at the current
+  position, so tap tempo works without re-reading the file and respects tempo maps. Outputs
+  became `-o PORT[=CHANNELS][@LATENCY_MS]`, repeatable. The first real-time run had beat one
+  13 ms late (cold send path); a panic before starting (start from silence) plus a 250 ms
+  pre-roll fixed it. Measured ≤ 1 ms between a 10 ms and a 35 ms virtual instrument.
+- 2026-11-11: Arranger first cut. A part is one track on one channel. Each instrument gets at
+  most one part, chosen greedily by how many of its notes it can play after the best octave
+  shift; channel 10 (GM percussion) pairs only with percussion instruments and is never
+  transposed. Out-of-range notes fold to the same pitch class, else drop; repeats faster than
+  `MinInterval` are thinned. The arranged timeline puts each part on its instrument's first
+  channel, so routing, mutes and the scheduler are unchanged. Instrument notes are given as
+  `/NOTES` on the CLI until profile files and discovery exist. Pinning parts waits for roles.
+- 2026-11-11: Safety governor is an `IMidiOutput` decorator per instrument, so the orchestra,
+  scheduler and live routing all go through it without knowing it exists. It only ever holds
+  back or turns down new notes (Note On, velocity > 0); everything else passes, so panic can't be
+  blocked. A velocity cap sends a copy because the scheduler shares event objects between
+  instruments. Policy limits are flags until policy profiles (ADR 0005) exist. Measured: demo song
+  with `--max-rate 3 --max-velocity 50` into `virtual` never exceeded 3 strikes in any second
+  and nothing louder than 50; silent quiet hours sent no notes but both panics.
+- 2026-11-11: Discovery step 2. MetroDom identifies as manufacturer `7D` (non-commercial) with
+  family bytes ASCII "MD"; model 0 = software instrument. Draft, needs owner review. Every
+  output is asked at once and paired with the same-named input, so a scan costs one 250 ms wait,
+  not one per port. Only replies count, because loopback ports echo the request. It runs only
+  on `devices --identify` (ADR 0007: ask once per port, not repeatedly). Virtual ports became
+  duplex so `virtual` can answer. Measured on macOS: two virtual instruments identified, the
+  whole command 0.4 s.
 
 ## Open questions
 - Target box model (ADR 0002).
