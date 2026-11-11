@@ -96,6 +96,7 @@ internal sealed class VirtualCommand : Command<VirtualCommand.Settings>
     private static void Wire(IVirtualPort port, InstrumentSpec spec, VirtualInstrument instrument, SystemClock clock, Lock console)
     {
         var channels = spec.Channels.ToHashSet();
+        var profileJson = InstrumentProfileJson.Write(instrument.Profile);
         TimeSpan? lastPanic = null;
         instrument.Struck += (_, s) => Print(console, s.ReceivedAt, spec.Name, string.Create(
             CultureInfo.InvariantCulture,
@@ -108,6 +109,17 @@ internal sealed class VirtualCommand : Command<VirtualCommand.Settings>
             {
                 port.Send(reply); // ADR 0007: answer "who are you?" like a MetroDom instrument.
                 Print(console, clock.Now, spec.Name, "[grey]identity request: answered as a MetroDom virtual instrument[/]");
+                return;
+            }
+
+            if (ProfileExchange.IsRequest(e))
+            {
+                foreach (var chunk in ProfileExchange.Reply(profileJson))
+                {
+                    port.Send(chunk); // ADR 0007 step 3: describe ourselves.
+                }
+
+                Print(console, clock.Now, spec.Name, "[grey]profile request: sent its profile[/]");
                 return;
             }
 

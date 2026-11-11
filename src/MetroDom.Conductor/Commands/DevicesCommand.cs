@@ -1,4 +1,6 @@
 using System.ComponentModel;
+using System.Globalization;
+using MetroDom.Conductor.Cli;
 using MetroDom.Conductor.Midi;
 using Spectre.Console;
 using Spectre.Console.Cli;
@@ -52,12 +54,31 @@ internal sealed class DevicesCommand : Command<DevicesCommand.Settings>
 
     internal static string Describe(IdentifiedPort port) => port.Kind switch
     {
-        PortKind.MetroDom => $"[green]{Markup.Escape(port.Identity!.Describe())}[/]",
+        PortKind.MetroDom => $"[green]{Markup.Escape(port.Identity!.Describe())}[/]\n" + DescribeProfile(port),
         PortKind.MidiDevice => Markup.Escape(port.Identity!.Describe()),
         PortKind.NoReply => "[grey]no reply (still usable)[/]",
         PortKind.OutputOnly => "[grey]output only, can't answer[/]",
         _ => $"[yellow]couldn't ask: {Markup.Escape(port.Error ?? "")}[/]",
     };
+
+    /// <summary>Step 3's answer: "profile: xylo · notes 60,64,67 (3) · 9-10 ms · repeat ≥ 60 ms".</summary>
+    internal static string DescribeProfile(IdentifiedPort port)
+    {
+        if (port.Profile is not { } profile)
+        {
+            return $"[yellow]no profile: {Markup.Escape(port.ProfileError ?? "")}[/]";
+        }
+
+        var notes = profile.Notes is null ? "any note" : $"notes {NoteList.Format(profile.Notes)} ({profile.Notes.Count})";
+        var fastest = profile.NoteLatency.Values.Append(profile.Latency).Min();
+        var latency = fastest == profile.MaxLatency
+            ? string.Create(CultureInfo.InvariantCulture, $"{fastest.TotalMilliseconds:0.#} ms")
+            : string.Create(CultureInfo.InvariantCulture, $"{fastest.TotalMilliseconds:0.#}-{profile.MaxLatency.TotalMilliseconds:0.#} ms");
+        var interval = profile.MinInterval > TimeSpan.Zero
+            ? string.Create(CultureInfo.InvariantCulture, $" · repeat ≥ {profile.MinInterval.TotalMilliseconds:0.#} ms")
+            : "";
+        return $"[grey]profile: {Markup.Escape(profile.Name)} · {Markup.Escape(notes)} · {latency}{interval}[/]";
+    }
 
     private static Table Ports(IReadOnlyList<string> names)
     {

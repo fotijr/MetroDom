@@ -32,7 +32,7 @@ once), and waits up to 250 ms, or less if every port has answered. Then it close
 
 | Result | Meaning |
 | --- | --- |
-| MetroDom instrument | `7D` + family "MD". Step 3 (fetch the profile) comes next, not built |
+| MetroDom instrument | `7D` + family "MD". Then its profile is fetched ([step 3](midi-profile-exchange.md)) |
 | Manufacturer · family · model · version | A general MIDI device that answered. A few manufacturer IDs have names; others show as hex |
 | no reply (still usable) | Has an input but didn't answer, as many devices don't |
 | output only | No input with the same name, e.g. a software synth |
@@ -43,7 +43,6 @@ counts. `metrodom virtual` instruments answer as model 0.
 
 ## Not yet
 
-- Step 3: profile fetch over SysEx / MIDI-CI Property Exchange (sub-ID layout is ADR 0007's open question).
 - Identify on hot-plug and remember assignments by identity (today it runs only when asked).
 - MIDI 2.0 UMP Endpoint Discovery, mDNS network MIDI.
 - Model numbers for real instruments.

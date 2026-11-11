@@ -48,5 +48,5 @@ a pid.codes VID/PID for MetroDom brains.
   owners save profiles.
 
 ## Open questions
-- MetroDom SysEx sub-ID layout for profile get/set (document in `references/` when defined).
+- MetroDom SysEx sub-ID layout for profile get/set. Draft for get: [midi-profile-exchange](../references/midi-profile-exchange.md). Set is undefined.
 - How far to go with MIDI 2.0 now vs when OS and library support is solid on Linux/ARM.

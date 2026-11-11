@@ -5,8 +5,9 @@ by the scheduler ([ADR 0004](../design-docs/0004-latency-compensation.md)).
 
 Each instrument describes itself so the Conductor can arrange, schedule and protect it without
 instrument-specific code. Today: a JSON file in the instrument's folder
-(`Instruments/<name>/profile.json`). Later: served by the firmware via SysEx / MIDI-CI Property
-Exchange.
+(`Instruments/<name>/profile.json`). Instruments serve it over SysEx when asked
+([profile exchange](midi-profile-exchange.md)); MIDI-CI Property Exchange may replace that later.
+Parsed by `src/MetroDom.Core/InstrumentProfileJson.cs`.
 
 ```json
 {
@@ -34,5 +35,11 @@ Fields:
 - `polyphony`: max simultaneous notes (power-supply / actuator limit).
 - `safety`: limits the **firmware enforces itself**. The Conductor uses them to avoid sending
   notes that would be refused.
+
+- `latencyMs` (optional, top level): latency for notes without their own. Default: the slowest note's.
+- `minIntervalMs` (optional, top level or per note): the Conductor uses one interval per
+  instrument today, the largest given, so no note is refused.
+- No `notes` array means the instrument plays any note (software instruments).
+- Not read yet: `midi`, `polyphony`, `velocity`, `safety`, `firmwareVersion` (TD-22).
 
 Example values above are illustrative, not measured.

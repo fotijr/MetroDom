@@ -1,6 +1,6 @@
 # 0001: Foundation reboot
 
-Status: Active · Last updated: 2026-11-10
+Status: Active · Last updated: 2026-11-11
 
 ## Goal
 Go from the 2017 prototype to the smallest version of the target
@@ -42,7 +42,8 @@ That is the first milestone of the [live band spec](../../product-specs/live-ban
 - [x] Adapters: unplug goes silent, replug reconnects with a panic first. One failing output can't block others
 - [ ] Measure ALSA latency on a Pi
 - [x] Discovery steps 1-2 per [ADR 0007](../../design-docs/0007-instrument-discovery.md): list ports, Identity Request, MetroDom vs general MIDI (`devices --identify`, [midi-identity](../../references/midi-identity.md))
-- [ ] Discovery steps 3-4: profile fetch, identify on hot-plug, remember assignments (TD-23)
+- [x] Discovery step 3: profile fetch over MetroDom SysEx, shown by `devices --identify` ([profile exchange](../../references/midi-profile-exchange.md))
+- [ ] Discovery step 4: use fetched profiles in `play`/`arrange`, identify on hot-plug, remember assignments (TD-23)
 - [x] Safety governor + panic, tested (`SafetyGovernor` in front of every output; `--max-velocity`, `--max-rate`, `--quiet`). Limits: TD-22
 - [x] Tap tempo (terminal keys) and `--tempo`
 - [ ] Tap from a MIDI input (foot pedal) / MIDI Clock in
@@ -115,6 +116,15 @@ That is the first milestone of the [live band spec](../../product-specs/live-ban
   on `devices --identify` (ADR 0007: ask once per port, not repeatedly). Virtual ports became
   duplex so `virtual` can answer. Measured on macOS: two virtual instruments identified, the
   whole command 0.4 s.
+
+- 2026-11-11: Discovery step 3. Profile Request `F0 7D 4D 44 01 F7`; the reply is the profile
+  JSON in numbered chunks of ≤ 128 ASCII bytes (`02 <index> <count> <text>`). Draft, needs owner
+  review. JSON over SysEx rather than a binary layout: the same file an instrument folder holds,
+  readable in a SysEx dump, and firmware can store it verbatim in the body EEPROM. MetroDom SysEx
+  goes only to ports that identified as MetroDom, since `7D` is shared. The profile round runs
+  after the identity round, all ports at once, so a scan stays ≤ 2 × 250 ms. One `MinInterval`
+  per instrument for now: the largest per-note value. Measured on macOS: two virtual instruments
+  identified and described in 0.19 s.
 
 ## Open questions
 - Target box model (ADR 0002).
