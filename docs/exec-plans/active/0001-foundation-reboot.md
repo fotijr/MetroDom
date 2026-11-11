@@ -60,7 +60,7 @@ That is the first milestone of the [live band spec](../../product-specs/live-ban
 ### Phase 3: Control API v0
 - [x] OpenAPI spec: transport, queue, instruments, panic: `play --api`, `src/MetroDom.Conductor/Api/openapi.json` ([control API](../../references/control-api.md))
 - [x] WebSocket state stream: `GET /api/v0/stream`, events in `src/MetroDom.Conductor/Api/events.schema.json`
-- [ ] Minimal web UI served by the Conductor
+- [x] Minimal web UI served by the Conductor: the remote at `/` with pairing link, live state and panic ([control API](../../references/control-api.md#web-remote))
 
 ## Decisions log
 - 2026-11-10: Adopted harness-engineering style repo knowledge base. Architecture written as
@@ -215,6 +215,16 @@ That is the first milestone of the [live band spec](../../product-specs/live-ban
   as a `token.<token>` subprotocol, which keeps it out of URLs and logs. Capped at 16 streams.
   The close handshake needed care: cancelling a pending server read aborts the socket, so the
   server sends or answers Close and waits up to 1 s before aborting.
+
+- 2026-11-11: Web remote. Plain HTML/CSS/JS embedded in the binary, no framework and no build
+  step: one page doesn't justify a JS toolchain in a .NET repo, and the Pi serves it with nothing
+  extra. It is a thin client (ADR 0003): state from `/stream`, intents to the HTTP routes, no logic
+  of its own beyond nudging ±2%. Pairing puts the token in the URL fragment (never sent to a
+  server, so it can't land in logs or a referrer), then local storage. A QR code of the same link
+  is the obvious next step for phones. Strict CSP with no inline code, text-only DOM updates
+  because song titles come from files. Found in the browser: a fragment-only link doesn't reload an
+  open page, so the page listens for `hashchange`; a refused token is now dropped from storage;
+  replies and stream messages were shown twice.
 
 ## Open questions
 - Target box model (ADR 0002).

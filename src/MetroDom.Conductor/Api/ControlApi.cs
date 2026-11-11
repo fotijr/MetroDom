@@ -148,6 +148,7 @@ internal sealed class ControlApi : IAsyncDisposable
             .SelectMany(d => d.Endpoints)
             .OfType<RouteEndpoint>()
             .SelectMany(e => (e.Metadata.GetMetadata<HttpMethodMetadata>()?.HttpMethods ?? []).Select(m => (m, "/" + e.RoutePattern.RawText!.TrimStart('/'))))
+            .Where(r => r.Item2.StartsWith(Prefix + "/", StringComparison.Ordinal))
             .Select(r => (r.m, r.Item2[Prefix.Length..]));
 
     internal static void Map(WebApplication app, string token, LiveControl live, Session session)
@@ -156,6 +157,7 @@ internal sealed class ControlApi : IAsyncDisposable
         var spec = Spec();
         var schema = EventSchema();
         app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TimeSpan.FromSeconds(15) });
+        MapWebApp(app);
         var api = app.MapGroup(Prefix);
         api.MapGet("/openapi.json", () => Results.Text(spec, "application/json"));
         api.MapGet("/events.schema.json", () => Results.Text(schema, "application/json"));
@@ -232,6 +234,63 @@ internal sealed class ControlApi : IAsyncDisposable
 
     private static IResult Navigate(LiveControl live, ControlAction action) =>
         live.Navigate(action) is { } message ? Results.Json(new { message }) : Conflict("Nothing is playing.");
+
+    /// <summary>The web remote's files: (path, embedded name, content type).</summary>
+    internal static readonly (string Path, string Resource, string ContentType)[] WebFiles =
+    [
+        ("/", "web.index.html", "text/html; charset=utf-8"),
+        ("/app.js", "web.app.js", "text/javascript; charset=utf-8"),
+        ("/app.css", "web.app.css", "text/css; charset=utf-8"),
+    ];
+
+    /// <summary>
+    /// Locks the page down: only its own files and this server's API (HTTP and WebSocket), no
+    /// inline script, no framing, no referrer (the token lives in a fragment and local storage).
+    /// </summary>
+    internal const string ContentSecurityPolicy =
+        "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; " +
+        "base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+
+    /// <summary>Serves the web remote at <c>/</c>. Public: it holds no secrets, and every call it makes needs the token.</summary>
+    private static void MapWebApp(WebApplication app)
+    {
+        foreach (var (path, resource, contentType) in WebFiles)
+        {
+            var bytes = Encoding.UTF8.GetBytes(Resource(resource));
+            app.MapGet(path, (HttpContext context) =>
+            {
+                var headers = context.Response.Headers;
+                headers.ContentSecurityPolicy = ContentSecurityPolicy;
+                headers.XContentTypeOptions = "nosniff";
+                headers["Referrer-Policy"] = "no-referrer";
+                headers.CacheControl = "no-cache";
+                return Results.Bytes(bytes, contentType);
+            });
+        }
+    }
+
+    /// <summary>
+    /// The link to open on a phone: the web remote with the token in the fragment, which browsers
+    /// never send to a server. Null token: the link without it (the person types it in).
+    /// </summary>
+    internal static Uri PairingUrl(Uri apiAddress, ApiEndpoint endpoint, string? token)
+    {
+        var host = endpoint.Address.Equals(IPAddress.Any) || endpoint.Address.Equals(IPAddress.IPv6Any)
+            ? LanAddress() ?? "127.0.0.1"
+            : endpoint.Address.ToUriHost();
+        var root = $"http://{host}:{apiAddress.Port}/";
+        return new Uri(token is null ? root : $"{root}#token={Uri.EscapeDataString(token)}");
+    }
+
+    /// <summary>This computer's first LAN IPv4 address, for links phones can open.</summary>
+    private static string? LanAddress() =>
+        System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces()
+            .Where(n => n.OperationalStatus == System.Net.NetworkInformation.OperationalStatus.Up
+                && n.NetworkInterfaceType != System.Net.NetworkInformation.NetworkInterfaceType.Loopback)
+            .SelectMany(n => n.GetIPProperties().UnicastAddresses)
+            .Select(a => a.Address)
+            .FirstOrDefault(a => a.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork && !IPAddress.IsLoopback(a) && !a.ToString().StartsWith("169.254.", StringComparison.Ordinal))
+            ?.ToString();
 
     /// <summary>The instruments as the API shows them (GET /instruments, stream events).</summary>
     internal static object[] Instruments(Session session) => [.. session.Outputs.Select(o => new

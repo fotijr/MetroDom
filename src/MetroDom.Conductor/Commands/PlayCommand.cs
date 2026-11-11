@@ -475,10 +475,13 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
             return null;
         }
 
-        var token = Environment.GetEnvironmentVariable("METRODOM_API_TOKEN") is { Length: > 0 } fromEnv ? fromEnv : ControlApi.NewToken();
+        var fromEnv = Environment.GetEnvironmentVariable("METRODOM_API_TOKEN") is { Length: > 0 } set ? set : null;
+        var token = fromEnv ?? ControlApi.NewToken();
         var api = ControlApi.Start(endpoint, token, live, session);
-        var shown = token == Environment.GetEnvironmentVariable("METRODOM_API_TOKEN") ? "from METRODOM_API_TOKEN" : token;
-        Ui.Note($"Control API at {api.Address} · token {shown}");
+        Ui.Note(fromEnv is null
+            ? $"Control API at {api.Address} · token {token}"
+            : $"Control API at {api.Address} · token from METRODOM_API_TOKEN");
+        Ui.Note($"Remote: open {ControlApi.PairingUrl(api.Address, endpoint, fromEnv is null ? token : null)} on a phone or browser.");
         if (!endpoint.IsLoopback)
         {
             Ui.Warn("The Control API is open to the network over plain HTTP: anyone who sees the token can drive the band. Use it on a network you trust.");

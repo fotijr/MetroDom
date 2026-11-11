@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <meta name="referrer" content="no-referrer">
+  <title>MetroDom</title>
+  <link rel="stylesheet" href="app.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <main id="pair" hidden>
+    <h1>MetroDom</h1>
+    <p>Open the link the Conductor printed, or paste its token.</p>
+    <form id="pair-form">
+      <label for="token">Token</label>
+      <input id="token" name="token" autocomplete="off" autocapitalize="off" spellcheck="false" required>
+      <button type="submit">Connect</button>
+    </form>
+    <p id="pair-error" class="error" role="alert"></p>
+  </main>
+
+  <main id="band" hidden>
+    <header>
+      <span id="link" class="dot" title="Connection" aria-label="Connection"></span>
+      <div class="title">
+        <div id="song">–</div>
+        <div id="status" class="muted">Connecting…</div>
+      </div>
+      <button id="forget" class="ghost" type="button" title="Forget this token on this device">Forget</button>
+    </header>
+
+    <section class="now" aria-live="polite">
+      <div class="bar"><div id="progress"></div></div>
+      <div class="row muted"><span id="time">0:00 / 0:00</span><span id="section"></span></div>
+      <div class="tempo"><span id="bpm">–</span><span class="muted"> BPM</span> <span id="tempo-detail" class="muted"></span></div>
+      <div id="following" class="muted"></div>
+    </section>
+
+    <section class="controls">
+      <button id="startstop" type="button" class="primary">Start</button>
+      <button id="next" type="button">Next</button>
+      <button id="slower" type="button" aria-label="Slower">− Tempo</button>
+      <button id="faster" type="button" aria-label="Faster">Tempo +</button>
+      <button id="tap" type="button">Tap</button>
+      <button id="vamp" type="button">Vamp</button>
+      <button id="outro" type="button">Outro</button>
+    </section>
+
+    <button id="panic" type="button" class="panic">PANIC</button>
+
+    <section>
+      <h2>Setlist</h2>
+      <ol id="setlist"></ol>
+    </section>
+    <section>
+      <h2>Instruments</h2>
+      <ul id="instruments"></ul>
+    </section>
+    <section>
+      <h2>Messages</h2>
+      <ul id="messages" class="muted"></ul>
+    </section>
+  </main>
+</body>
+</html>

@@ -38,7 +38,8 @@ All of this runs on Linux, macOS or Windows, with no hardware needed.
   tempo, vamp, outro and panic, mapped in a policy file you can edit.
 - **Be driven by an app.** A small HTTP API (`--api`) to start, stop, skip, set the tempo, vamp
   and panic from a phone or script, plus a live WebSocket feed of what the band is doing, with a
-  token and an OpenAPI description.
+  token and an OpenAPI description. It serves a phone remote too: open the link it prints and you
+  get the song, tempo and a big panic button.
 - **Find instruments by itself.** It asks each MIDI port who it is and fetches a MetroDom
   instrument's profile (its notes, latency and limits) without any setup.
 - **Stay safe.** Every instrument sits behind a safety governor: velocity caps, note-rate limits,
@@ -57,7 +58,7 @@ From the [roadmap](docs/ROADMAP.md), roughly in order. Each step is small, cheap
   song in time, with a human playing guitar over it.
 - **A home-built foot controller.** Stomp switches on the same brain as the instruments.
 - **Lights.** LED strips and accents that flash with the notes, driven from the same timeline.
-- **A home band.** A full xylophone and drum pieces, setlists, a phone panic button, and regular
+- **A home band.** A full xylophone and drum pieces, setlists, and regular
   play-along sessions.
 - **Follow the drummer on a real kit.** Piezo triggers on an acoustic kit feeding the beat
   follower, tuned on the owner's own recorded drumming.

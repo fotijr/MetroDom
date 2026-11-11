@@ -19,6 +19,26 @@ METRODOM_API_TOKEN=… metrodom play song.mid -o 0 --api 0.0.0.0:7890    # the L
   (pairing by looking at the box, [SECURITY](../SECURITY.md)). Not a CLI flag, so it doesn't land
   in shell history or `ps`.
 
+## Web remote
+
+`play --api` also serves a phone-sized remote at `/` (`src/MetroDom.Conductor/Api/web/`: plain
+HTML, CSS and JS embedded in the binary, no framework or build step). It shows the song, progress,
+section, tempo, setlist, instruments and messages live from `/stream`, and has start/stop, next,
+tempo ±2%, tap, vamp, outro and a big **PANIC** button.
+
+- **Pairing:** the Conductor prints `Remote: open http://HOST:PORT/#token=…`. The token sits in the
+  URL fragment, which browsers never send to a server; the page moves it to local storage and
+  strips it from the address bar. With `0.0.0.0` the link uses this computer's LAN address. With
+  `METRODOM_API_TOKEN` the link has no token and the page asks for it.
+- **Forget** removes the token from the device. A refused token is dropped and the page asks again.
+  Opening a new pairing link in an open tab switches to it without a reload.
+- The page is public (it holds no secrets); every call it makes needs the token.
+- Locked down: `Content-Security-Policy` allows only its own files and this server (no inline
+  script or style, no framing), `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`.
+  Song titles and messages are inserted as text, never HTML.
+- Checked in a browser against a live set: pairing, tap tempo while waiting, start, tempo +, vamp,
+  panic, wrong and stale tokens, phone width (375 px, no sideways scroll), light and dark.
+
 ## Rules
 
 - Every route except the spec needs `Authorization: Bearer <token>` (compared in constant time).
@@ -34,6 +54,7 @@ METRODOM_API_TOKEN=… metrodom play song.mid -o 0 --api 0.0.0.0:7890    # the L
 
 | Method | Path | Does | Errors |
 | --- | --- | --- | --- |
+| GET | `/` (outside `/api/v0`) | The web remote (no token), plus `/app.js`, `/app.css` | |
 | GET | `/openapi.json` | The spec (no token) | |
 | GET | `/state` | `waiting`/`playing`, song, position, duration, tempo (bpm, speed, pending, source), section, following | |
 | GET | `/queue` | Setlist titles and the current index | |

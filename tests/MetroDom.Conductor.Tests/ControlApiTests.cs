@@ -409,6 +409,54 @@ public sealed class ControlApiTests : IAsyncDisposable
         Assert.Equal(["hello", "state", "position", "instruments", "message"], types);
     }
 
+    [Theory]
+    [InlineData("/", "text/html", "<script src=\"app.js\" defer>")]
+    [InlineData("/app.js", "text/javascript", "api/v0/")]
+    [InlineData("/app.css", "text/css", "--panic")]
+    public async Task Web_remote_is_served_without_a_token_and_locked_down(string path, string contentType, string contains)
+    {
+        using var client = new HttpClient();
+        using var response = await client.GetAsync(new Uri(_api.Address, path), Ct);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(contentType, response.Content.Headers.ContentType!.MediaType);
+        Assert.Contains(contains, await response.Content.ReadAsStringAsync(Ct), StringComparison.Ordinal);
+
+        var csp = response.Headers.GetValues("Content-Security-Policy").Single();
+        Assert.Contains("script-src 'self'", csp, StringComparison.Ordinal);
+        Assert.Contains("frame-ancestors 'none'", csp, StringComparison.Ordinal);
+        Assert.DoesNotContain("unsafe", csp, StringComparison.Ordinal);
+        Assert.Equal("nosniff", response.Headers.GetValues("X-Content-Type-Options").Single());
+        Assert.Equal("no-referrer", response.Headers.GetValues("Referrer-Policy").Single());
+    }
+
+    [Fact]
+    public void Web_remote_has_no_inline_script_or_style_and_no_secrets()
+    {
+        var html = ControlApi.WebFiles.Select(f => f.Resource).First(r => r.EndsWith(".html", StringComparison.Ordinal));
+        using var stream = typeof(ControlApi).Assembly.GetManifestResourceStream("MetroDom.Conductor.Api." + html)!;
+        var page = new StreamReader(stream).ReadToEnd();
+        Assert.DoesNotMatch("<script>|<script [^>]*>[^<]+</script>|<style|\\sstyle=|\\son[a-z]+=", page);
+
+        using var js = typeof(ControlApi).Assembly.GetManifestResourceStream("MetroDom.Conductor.Api.web.app.js")!;
+        var script = new StreamReader(js).ReadToEnd();
+        Assert.DoesNotContain("innerHTML", script, StringComparison.Ordinal); // Titles and messages go in as text.
+        Assert.DoesNotContain("eval(", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Pairing_url_carries_the_token_in_the_fragment_only()
+    {
+        var address = new Uri("http://127.0.0.1:7890/api/v0/");
+        var url = ControlApi.PairingUrl(address, new ApiEndpoint(IPAddress.Loopback, 7890), "a+b/c");
+        Assert.Equal("http://127.0.0.1:7890/", url.GetLeftPart(UriPartial.Path));
+        Assert.Equal("#token=a%2Bb%2Fc", url.Fragment);
+        Assert.Empty(url.Query);
+
+        Assert.Equal("", ControlApi.PairingUrl(address, new ApiEndpoint(IPAddress.Loopback, 7890), null).Fragment);
+        var lan = ControlApi.PairingUrl(address, new ApiEndpoint(IPAddress.Any, 7890), "t");
+        Assert.NotEqual("0.0.0.0", lan.Host); // A phone can't open 0.0.0.0.
+    }
+
     private sealed class Port : IMidiOutputPort
     {
         public string Name => "band";
