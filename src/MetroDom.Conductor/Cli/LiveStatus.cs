@@ -123,12 +123,15 @@ internal static class LiveStatus
     public static IRenderable Panel(string title, Session session, IRenderable? progress, IRenderable? detail = null, string? keys = null)
     {
         var rows = new List<IRenderable>();
-        foreach (var output in session.Outputs)
+        for (var i = 0; i < session.Outputs.Count; i++)
         {
+            var output = session.Outputs[i];
+            var held = session.Governors[i].TotalBlocked;
+            var blocked = held == 0 ? "" : string.Create(CultureInfo.InvariantCulture, $"  [yellow]{held} held back[/]");
             var routing = session.Outputs.Count == 1 && output.Latency == TimeSpan.Zero
                 ? ""
                 : string.Create(CultureInfo.InvariantCulture, $"[grey]ch {ChannelList.Format(output.Channels)} · {output.Latency.TotalMilliseconds:0.#} ms[/]  ");
-            rows.Add(new Markup($"[grey]Output[/]  {Markup.Escape(output.Port.Name)}  {routing}{Connection(output.IsConnected)}"));
+            rows.Add(new Markup($"[grey]Output[/]  {Markup.Escape(output.Port.Name)}  {routing}{Connection(output.IsConnected)}{blocked}"));
         }
 
         if (progress is not null)

@@ -18,6 +18,7 @@ internal sealed class RouteCommand : Command<RouteCommand.Settings>
     public override int Execute(CommandContext context, Settings settings, CancellationToken cancellationToken)
     {
         string output;
+        string[] heldBack;
         using (var session = new Session(settings))
         {
             output = session.OutputName;
@@ -46,6 +47,12 @@ internal sealed class RouteCommand : Command<RouteCommand.Settings>
                 session,
                 progress: null));
             input.Stop();
+            heldBack = [.. session.SafetySummary()];
+        }
+
+        foreach (var line in heldBack)
+        {
+            Ui.Warn($"Safety governor, {line}.");
         }
 
         Ui.Success($"Stopped. Panic sent to {output}.");

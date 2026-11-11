@@ -1,6 +1,8 @@
 using MetroDom.Conductor.Cli;
 using MetroDom.Conductor.Midi;
 using MetroDom.Core;
+using MetroDom.Core.Safety;
+using MetroDom.Core.Timing;
 
 namespace MetroDom.Conductor.Commands;
 
@@ -12,14 +14,17 @@ internal sealed record SessionOutput(IMidiOutputPort Port, IReadOnlyList<int> Ch
     public bool IsConnected => Port is not ResilientOutput resilient || resilient.IsConnected;
 }
 
-/// <summary>Shared setup for commands that drive outputs: orchestra, mutes, Ctrl+C → panic.</summary>
+/// <summary>
+/// Shared setup for commands that drive outputs: a safety governor per output, orchestra, mutes,
+/// Ctrl+C → panic. Everything sent goes through the governors (docs/RELIABILITY.md, layer 2).
+/// </summary>
 internal sealed class Session : IDisposable
 {
     private readonly ManualResetEventSlim _stop = new();
     private Action<string> _log = Ui.Warn;
 
     public Session(OutputSettings settings)
-        : this(Open(settings.OutputSpecs), settings.MutedChannels)
+        : this(Open(settings.OutputSpecs), settings.MutedChannels, settings.Limits)
     {
     }
 
@@ -29,14 +34,16 @@ internal sealed class Session : IDisposable
     {
     }
 
-    internal Session(IReadOnlyList<SessionOutput> outputs, IReadOnlyList<int> mutedChannels)
+    internal Session(IReadOnlyList<SessionOutput> outputs, IReadOnlyList<int> mutedChannels, SafetyLimits? limits = null, IClock? clock = null)
     {
         Outputs = outputs;
-        foreach (var output in outputs)
+        clock ??= new SystemClock();
+        Governors = outputs.Select(o => new SafetyGovernor(o.Port, o.Profile, limits ?? SafetyLimits.None, clock)).ToArray();
+        for (var i = 0; i < outputs.Count; i++)
         {
-            foreach (var channel in output.Channels)
+            foreach (var channel in outputs[i].Channels)
             {
-                Orchestra.Assign(channel, output.Port);
+                Orchestra.Assign(channel, Governors[i]);
             }
         }
 
@@ -53,6 +60,9 @@ internal sealed class Session : IDisposable
 
     public IReadOnlyList<SessionOutput> Outputs { get; }
 
+    /// <summary>The governor in front of each output, in the same order as <see cref="Outputs"/>.</summary>
+    public IReadOnlyList<SafetyGovernor> Governors { get; }
+
     public ChannelActivity Activity { get; } = new();
 
     public MessageLog Messages { get; } = new();
@@ -61,9 +71,13 @@ internal sealed class Session : IDisposable
 
     public bool IsOutputConnected => Outputs.All(o => o.IsConnected);
 
-    /// <summary>Declared latency per output, for the scheduler.</summary>
+    /// <summary>Declared latency per output (keyed by its governor, which is what the orchestra routes to), for the scheduler.</summary>
     public IReadOnlyDictionary<IMidiOutput, InstrumentProfile> Profiles =>
-        Outputs.ToDictionary(o => (IMidiOutput)o.Port, o => o.Profile);
+        Governors.ToDictionary(g => (IMidiOutput)g, g => g.Profile);
+
+    /// <summary>One line per output that had notes held back or turned down, for the end of a run.</summary>
+    public IEnumerable<string> SafetySummary() =>
+        Governors.Where(g => g.Summary() is not null).Select(g => $"{g.Name}: {g.Summary()}");
 
     public bool IsStopping => _stop.IsSet;
 

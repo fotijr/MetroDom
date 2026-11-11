@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Globalization;
 using System.Text.RegularExpressions;
+using MetroDom.Core.Safety;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
@@ -17,6 +18,26 @@ internal class OutputSettings : CommandSettings
     [Description("Channels to mute, 1-16, comma separated, ranges allowed (e.g. 10 for drums, 1-9).")]
     public string? Mute { get; init; }
 
+    [CommandOption("--max-velocity <1-127>")]
+    [Description("Safety: turn down any note louder than this.")]
+    public int? MaxVelocity { get; init; }
+
+    [CommandOption("--max-rate <NOTES>")]
+    [Description("Safety: most notes per second any one output may play. Extra notes are held back.")]
+    public int? MaxRate { get; init; }
+
+    [CommandOption("--quiet <HH:MM-HH:MM[@VELOCITY]>")]
+    [Description("Safety: quiet hours, local time, may cross midnight. No new notes inside them, or with [bold]@VELOCITY[/] notes are turned down to that (e.g. [bold]--quiet 23:00-07:00@40[/]).")]
+    public string? Quiet { get; init; }
+
+    /// <summary>Policy limits for the safety governors, valid after <see cref="Validate"/>.</summary>
+    public SafetyLimits Limits => new()
+    {
+        MaxVelocity = MaxVelocity,
+        MaxNotesPerSecond = MaxRate,
+        Quiet = QuietHoursSpec.TryParse(Quiet, out var quiet, out _) ? quiet : null,
+    };
+
     /// <summary>Zero-based muted channels, valid after <see cref="Validate"/>.</summary>
     public IReadOnlyList<int> MutedChannels => ChannelList.TryParse(Mute, out var channels, out _) ? channels : [];
 
@@ -29,6 +50,21 @@ internal class OutputSettings : CommandSettings
         if (!ChannelList.TryParse(Mute, out _, out var error))
         {
             return ValidationResult.Error($"--mute: {error}");
+        }
+
+        if (MaxVelocity is < 1 or > 127)
+        {
+            return ValidationResult.Error("--max-velocity must be 1-127.");
+        }
+
+        if (MaxRate is < 1)
+        {
+            return ValidationResult.Error("--max-rate must be at least 1 note per second.");
+        }
+
+        if (!QuietHoursSpec.TryParse(Quiet, out _, out error))
+        {
+            return ValidationResult.Error($"--quiet: {error}");
         }
 
         foreach (var output in Outputs ?? [])
@@ -105,6 +141,49 @@ internal sealed partial record OutputSpec(string Port, IReadOnlyList<int> Channe
     /// <summary>"/NOTES" at the end: note numbers, names (C4, F#3, Bb2), commas and ranges.</summary>
     [GeneratedRegex(@"/(?<notes>[A-Ga-g0-9#,\-\s]+)$")]
     private static partial Regex NotesSuffix();
+}
+
+/// <summary>Quiet hours as written on the command line: <c>HH:MM-HH:MM[@VELOCITY]</c>.</summary>
+internal static partial class QuietHoursSpec
+{
+    public static bool TryParse(string? raw, out QuietHours? quiet, out string? error)
+    {
+        quiet = null;
+        error = null;
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return true;
+        }
+
+        var match = Pattern().Match(raw);
+        if (!match.Success
+            || !TimeOnly.TryParseExact(match.Groups["start"].Value, ["H:mm", "HH:mm"], CultureInfo.InvariantCulture, DateTimeStyles.None, out var start)
+            || !TimeOnly.TryParseExact(match.Groups["end"].Value, ["H:mm", "HH:mm"], CultureInfo.InvariantCulture, DateTimeStyles.None, out var end))
+        {
+            error = $"'{raw}' is not HH:MM-HH:MM[@VELOCITY] (e.g. 23:00-07:00 or 22:00-08:00@40).";
+            return false;
+        }
+
+        var velocity = 0;
+        if (match.Groups["vel"].Success
+            && (!int.TryParse(match.Groups["vel"].Value, CultureInfo.InvariantCulture, out velocity) || velocity > 127))
+        {
+            error = $"'{raw}': velocity must be 0-127.";
+            return false;
+        }
+
+        if (start == end)
+        {
+            error = $"'{raw}': start and end are the same.";
+            return false;
+        }
+
+        quiet = new QuietHours(start, end, velocity);
+        return true;
+    }
+
+    [GeneratedRegex(@"^\s*(?<start>\d{1,2}:\d{2})\s*-\s*(?<end>\d{1,2}:\d{2})\s*(?:@\s*(?<vel>\d+))?\s*$")]
+    private static partial Regex Pattern();
 }
 
 /// <summary>Channel lists as musicians write them (1-16), stored as MIDI's 0-15.</summary>

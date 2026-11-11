@@ -65,7 +65,8 @@ public class PlaySchedulingTests
             session.Orchestra.Route(new NoteOnEvent((SevenBitNumber)60, (SevenBitNumber)100) { Channel = (FourBitNumber)0 });
             session.Orchestra.Route(new NoteOnEvent((SevenBitNumber)36, (SevenBitNumber)100) { Channel = (FourBitNumber)9 });
 
-            Assert.Equal(Ms(35), session.Profiles[drums].Latency);
+            Assert.Equal(Ms(35), session.Profiles[session.Governors[1]].Latency);
+            Assert.Same(drums, session.Governors[1].Inner);
             Assert.Equal("xylo, drums", session.OutputName);
         }
 

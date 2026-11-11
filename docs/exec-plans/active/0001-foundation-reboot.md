@@ -42,7 +42,7 @@ That is the first milestone of the [live band spec](../../product-specs/live-ban
 - [x] Adapters: unplug goes silent, replug reconnects with a panic first. One failing output can't block others
 - [ ] Measure ALSA latency on a Pi
 - [ ] Discovery per [ADR 0007](../../design-docs/0007-instrument-discovery.md): MetroDom + general MIDI devices
-- [ ] Safety governor + panic, tested
+- [x] Safety governor + panic, tested (`SafetyGovernor` in front of every output; `--max-velocity`, `--max-rate`, `--quiet`). Limits: TD-22
 - [x] Tap tempo (terminal keys) and `--tempo`
 - [ ] Tap from a MIDI input (foot pedal) / MIDI Clock in
 
@@ -100,6 +100,13 @@ That is the first milestone of the [live band spec](../../product-specs/live-ban
   `MinInterval` are thinned. The arranged timeline puts each part on its instrument's first
   channel, so routing, mutes and the scheduler are unchanged. Instrument notes are given as
   `/NOTES` on the CLI until profile files and discovery exist. Pinning parts waits for roles.
+- 2026-11-11: Safety governor is an `IMidiOutput` decorator per instrument, so the orchestra,
+  scheduler and live routing all go through it without knowing it exists. It only ever holds
+  back or turns down new notes (Note On, velocity > 0); everything else passes, so panic can't be
+  blocked. A velocity cap sends a copy because the scheduler shares event objects between
+  instruments. Policy limits are flags until policy profiles (ADR 0005) exist. Measured: demo song
+  with `--max-rate 3 --max-velocity 50` into `virtual` never exceeded 3 strikes in any second
+  and nothing louder than 50; silent quiet hours sent no notes but both panics.
 
 ## Open questions
 - Target box model (ADR 0002).

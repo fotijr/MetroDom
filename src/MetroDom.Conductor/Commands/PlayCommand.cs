@@ -58,6 +58,7 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
         var startSpeed = settings.Tempo is { } bpm ? Clamp(bpm / fileBpm) : 1;
 
         string output;
+        string[] heldBack;
         using (var session = new Session(settings))
         {
             output = session.OutputName;
@@ -133,6 +134,12 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
                             break;
                     }
                 });
+            heldBack = [.. session.SafetySummary()];
+        }
+
+        foreach (var line in heldBack)
+        {
+            Ui.Warn($"Safety governor, {line}.");
         }
 
         Ui.Success($"Stopped. Panic sent to {output}.");

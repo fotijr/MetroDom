@@ -4,7 +4,7 @@ Honest grades per component, so agents know what to trust. Update in the same ch
 a grade. Scale: **A** production-ready · **B** solid, minor gaps · **C** works, fragile or
 untested · **D** prototype/partial · **F** stub or broken · **—** not started.
 
-Last reviewed: 2026-11-10
+Last reviewed: 2026-11-11
 
 | Component | Grade | Tests | Docs | Notes |
 | --- | --- | --- | --- | --- |
@@ -17,6 +17,7 @@ Last reviewed: 2026-11-10
 | Play-along (seats, count-in, foot control, tempo following) | D | Unit (tap tempo) | [ADR 0012](design-docs/0012-humans-in-the-band.md) | Seeds: `play --mute`, `--tempo`, tap/nudge keys. No pedal, seats or count-in yet |
 | Shared hardware modules (striker, driver, power, frame) | — | — | [ADR 0009](design-docs/0009-shared-hardware-modules.md) | [Exec plan 0002](exec-plans/active/0002-hardware-bootstrap.md) |
 | Instrument discovery (Identity Request, general MIDI) | — | — | ADR | [ADR 0007](design-docs/0007-instrument-discovery.md) |
+| Core: safety governor (`SafetyGovernor`) | C | Unit (fake clock), CLI, measured `play` → `virtual` | [RELIABILITY](RELIABILITY.md) | In front of every output in `play`/`route`: instrument notes and min interval, `--max-velocity`, `--max-rate`, `--quiet`. Note Offs and panic always pass. No duty-cycle/polyphony limit, no MetroDom SysEx all-off, limits from flags not policy profiles (TD-22) |
 | Core: routing, mute, panic (`Orchestra`) | C | Unit | ARCHITECTURE | Per-output routing for the scheduler. `play`/`route` take several outputs, each with its own channels |
 | Core: song analysis (`SongAnalyzer`) | C | Unit | ARCHITECTURE | Read-only analysis for `inspect` |
 | Core: arranger (`Arranger`) | D | Unit, CLI, `play --arrange` → note-limited `virtual` (0 skipped) | [virtual band](references/virtual-band.md) | One part per instrument by fit. No roles, seats, pins, polyphony limit or drum-note substitution yet (TD-21) |

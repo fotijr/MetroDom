@@ -95,6 +95,7 @@ CLI (recover it from git history at commit `266b6b5` if needed).
 | Path | What it is today |
 | --- | --- |
 | `src/MetroDom.Core/IMidiOutput.cs` | The instrument contract: a named thing you can send MIDI events to |
+| `src/MetroDom.Core/Safety/` | `SafetyGovernor`: wraps one output; holds back notes the instrument can't play, repeats under its min interval, notes over the rate limit or in silent quiet hours; caps velocity. Note Offs and panic always pass |
 | `src/MetroDom.Core/Orchestra.cs` | Channel → output routing, mute (Note Offs always pass), panic (CC 120/123). A throwing output is reported and skipped |
 | `src/MetroDom.Core/Timing/` | `IClock` (system + virtual), `SongTimeline` (SMF → timed events), `LatencyScheduler` (sends early per instrument latency, re-times on tempo change, ADR 0004), `TapTempo` |
 | `src/MetroDom.Core/Simulation/` | `VirtualInstrument` (firmware stand-in with latency, jitter, note set, min interval), `BandSimulation`, `DemoSong`. See [virtual band](docs/references/virtual-band.md) |
