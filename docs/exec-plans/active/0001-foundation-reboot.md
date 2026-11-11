@@ -35,7 +35,7 @@ That is the first milestone of the [live band spec](../../product-specs/live-ban
 - [x] SDK-style `net10.0` Core + CLI + tests, `dotnet test` on Linux/macOS/Windows CI
 - [x] Core: SMF analysis (DryWetMIDI), channel routing with safe mute, panic
 - [x] Linux MIDI device adapter (ALSA sequencer), round trip tested (locally; hosted CI can't load the module, TD-18)
-- [ ] Core: arranger (track → instrument)
+- [x] Core: arranger (song part → instrument by fit, transpose, fold, drop, thin). `metrodom arrange`, `--arrange` on `simulate`/`play`. Limits: TD-21
 - [x] Core: latency-compensating scheduler with fake-clock tests (`LatencyScheduler`, `VirtualClock`)
 - [x] Virtual band: `VirtualInstrument`, `metrodom simulate` (virtual clock), `metrodom virtual` (OS ports), `demo-song`. See [virtual band](../../references/virtual-band.md)
 - [x] `play` drives real ports through the scheduler, several outputs with per-output channels and latency, re-timing on tempo change
@@ -93,6 +93,13 @@ That is the first milestone of the [live band spec](../../product-specs/live-ban
   became `-o PORT[=CHANNELS][@LATENCY_MS]`, repeatable. The first real-time run had beat one
   13 ms late (cold send path); a panic before starting (start from silence) plus a 250 ms
   pre-roll fixed it. Measured ≤ 1 ms between a 10 ms and a 35 ms virtual instrument.
+- 2026-11-11: Arranger first cut. A part is one track on one channel. Each instrument gets at
+  most one part, chosen greedily by how many of its notes it can play after the best octave
+  shift; channel 10 (GM percussion) pairs only with percussion instruments and is never
+  transposed. Out-of-range notes fold to the same pitch class, else drop; repeats faster than
+  `MinInterval` are thinned. The arranged timeline puts each part on its instrument's first
+  channel, so routing, mutes and the scheduler are unchanged. Instrument notes are given as
+  `/NOTES` on the CLI until profile files and discovery exist. Pinning parts waits for roles.
 
 ## Open questions
 - Target box model (ADR 0002).

@@ -35,11 +35,15 @@ internal static class MetroDomApp
             config.AddCommand<RouteCommand>("route")
                 .WithDescription("Route a live controller to an output. Ctrl+C stops and sends panic.")
                 .WithExample("route", "--input", "keystation", "--output", "1");
+            config.AddCommand<ArrangeCommand>("arrange")
+                .WithDescription("Show which part of a song each instrument would play, and what had to change to fit.")
+                .WithExample("arrange", "song.mid", "-i", "xylo=1@10/C4-C6", "-i", "drums=10@35/36,38,76");
             config.AddCommand<SimulateCommand>("simulate")
                 .WithDescription("Play a song to virtual instruments on a virtual clock and report how well they line up. No devices needed.")
                 .WithExample("simulate")
                 .WithExample("simulate", "song.mid", "-i", "xylo=1@10", "-i", "drums=10@35", "--jitter", "2")
-                .WithExample("simulate", "--no-compensation");
+                .WithExample("simulate", "--no-compensation")
+                .WithExample("simulate", "song.mid", "--arrange", "-i", "xylo=1@10/60,64,67", "-i", "drums=10@35/36,38");
             config.AddCommand<VirtualCommand>("virtual")
                 .WithDescription("Create virtual instruments as OS MIDI ports (Linux, macOS) that play, a DAW or a keyboard can send to.")
                 .WithExample("virtual")

@@ -4,6 +4,7 @@ using Melanchall.DryWetMidi.Core;
 using Melanchall.DryWetMidi.Interaction;
 using MetroDom.Conductor.Cli;
 using MetroDom.Conductor.Midi;
+using MetroDom.Core.Arranging;
 using MetroDom.Core.Timing;
 using Spectre.Console;
 using Spectre.Console.Cli;
@@ -27,6 +28,9 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
         [Description("Standard MIDI File to play (.mid).")]
         public string Path { get; init; } = "";
 
+        [CommandOption("-a|--arrange")]
+        [Description("Let the arranger give each output the part it plays best, on its first channel, using its /NOTES (transposed, folded, thinned to fit). Without it, outputs get their channels as written in the file.")]
+        public bool Arrange { get; init; }
 
         [CommandOption("-t|--tempo <BPM>")]
         [Description("Start at this tempo instead of the file's. Tempo changes in the file scale with it.")]
@@ -61,6 +65,13 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
             var scheduler = new LatencyScheduler(session.Orchestra, clock, session.Profiles);
             scheduler.Sent += s => session.Activity.Record(s.Event);
             var timeline = SongTimeline.From(midiFile);
+            if (settings.Arrange)
+            {
+                var band = session.Outputs.Select(o => new BandMember(o.Profile, o.Channels[0])).ToArray();
+                var arrangement = Arranger.Arrange(midiFile, band);
+                ArrangementView.Write(arrangement, band);
+                timeline = arrangement.Timeline;
+            }
 
             // Start from silence. Also warms up every output's send path, so the first note isn't late.
             session.Orchestra.Panic();

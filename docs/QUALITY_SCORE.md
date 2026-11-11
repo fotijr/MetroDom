@@ -18,7 +18,8 @@ Last reviewed: 2026-11-10
 | Shared hardware modules (striker, driver, power, frame) | — | — | [ADR 0009](design-docs/0009-shared-hardware-modules.md) | [Exec plan 0002](exec-plans/active/0002-hardware-bootstrap.md) |
 | Instrument discovery (Identity Request, general MIDI) | — | — | ADR | [ADR 0007](design-docs/0007-instrument-discovery.md) |
 | Core: routing, mute, panic (`Orchestra`) | C | Unit | ARCHITECTURE | Per-output routing for the scheduler. `play`/`route` take several outputs, each with its own channels |
-| Core: song analysis (`SongAnalyzer`) | C | Unit | ARCHITECTURE | Read-only analysis. No arranger yet |
+| Core: song analysis (`SongAnalyzer`) | C | Unit | ARCHITECTURE | Read-only analysis for `inspect` |
+| Core: arranger (`Arranger`) | D | Unit, CLI, `play --arrange` → note-limited `virtual` (0 skipped) | [virtual band](references/virtual-band.md) | One part per instrument by fit. No roles, seats, pins, polyphony limit or drum-note substitution yet (TD-21) |
 | CLI: `inspect` | C | Unit (exit codes) | `--help` | Any OS. Spectre.Console tables |
 | CLI: `devices` / `play` / `route` / `panic` | D | ALSA loopback (local only, skipped on hosted CI: TD-18), unit (validation, status panel) | `--help` | Linux (ALSA), macOS, Windows. `play` goes through the scheduler with several outputs and live tempo keys (keys not yet exercised by an automated test). Live status panel and port prompt in a terminal, plain lines when piped. Survives unplug/replug (unit tested with a fake backend). Not yet tested against a real instrument (TD-15) |
 | Scheduler / latency compensation | C | Unit (fake clock), real-time loop test, measured `play` → `virtual` | [ADR 0004](design-docs/0004-latency-compensation.md), [virtual band](references/virtual-band.md) | Drives `play`. Re-times on tempo change. Measured ≤ 1 ms between instruments on macOS virtual ports. Not yet on hardware or a Pi. Live input (`route`) not compensated |

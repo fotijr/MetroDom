@@ -5,9 +5,9 @@ using MetroDom.Core;
 namespace MetroDom.Conductor.Commands;
 
 /// <summary>An open output and what it plays: its channels and declared latency.</summary>
-internal sealed record SessionOutput(IMidiOutputPort Port, IReadOnlyList<int> Channels, TimeSpan Latency)
+internal sealed record SessionOutput(IMidiOutputPort Port, IReadOnlyList<int> Channels, TimeSpan Latency, IReadOnlySet<int>? Notes = null)
 {
-    public InstrumentProfile Profile => new(Port.Name, Latency);
+    public InstrumentProfile Profile => new(Port.Name, Latency) { Notes = Notes };
 
     public bool IsConnected => Port is not ResilientOutput resilient || resilient.IsConnected;
 }
@@ -105,7 +105,7 @@ internal sealed class Session : IDisposable
         {
             foreach (var spec in specs)
             {
-                opened.Add(new SessionOutput(PortPicker.Output(spec.Port), spec.Channels, spec.Latency));
+                opened.Add(new SessionOutput(PortPicker.Output(spec.Port), spec.Channels, spec.Latency, spec.Notes));
             }
 
             return opened;

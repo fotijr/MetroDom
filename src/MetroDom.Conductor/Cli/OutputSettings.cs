@@ -10,7 +10,7 @@ namespace MetroDom.Conductor.Cli;
 internal class OutputSettings : CommandSettings
 {
     [CommandOption("-o|--output <PORT>")]
-    [Description("Output port: index, name, or unique part of a name from [bold]metrodom devices[/] (on Linux the ALSA address works too, e.g. 20:0). Repeat for several instruments, optionally as [bold]PORT=CHANNELS@LATENCY_MS[/] (e.g. -o \"xylo=1-9,11-16@10\" -o \"drums=10@35\"). Without channels a port gets every channel. Prompted for when omitted in a terminal.")]
+    [Description("Output port: index, name, or unique part of a name from [bold]metrodom devices[/] (on Linux the ALSA address works too, e.g. 20:0). Repeat for several instruments, optionally as [bold]PORT=CHANNELS@LATENCY_MS/NOTES[/] (e.g. -o \"xylo=1@10/C4-C6\" -o \"drums=10@35/36,38\"; notes are what [bold]--arrange[/] may use). Without channels a port gets every channel. Prompted for when omitted in a terminal.")]
     public string[]? Outputs { get; init; }
 
     [CommandOption("-m|--mute <CHANNELS>")]
@@ -44,14 +44,28 @@ internal class OutputSettings : CommandSettings
 }
 
 /// <summary>
-/// One <c>--output</c>: <c>PORT[=CHANNELS][@LATENCY_MS]</c>. <c>"MetroDom drums=10@35"</c>
-/// sends channel 10 to the port matching "MetroDom drums", 35 ms early. A plain port gets every channel.
+/// One <c>--output</c>: <c>PORT[=CHANNELS][@LATENCY_MS][/NOTES]</c>. <c>"MetroDom drums=10@35/36,38"</c>
+/// sends channel 10 to the port matching "MetroDom drums", 35 ms early, and tells the arranger it
+/// can play notes 36 and 38. A plain port gets every channel and every note.
 /// </summary>
-internal sealed partial record OutputSpec(string Port, IReadOnlyList<int> Channels, TimeSpan Latency)
+internal sealed partial record OutputSpec(string Port, IReadOnlyList<int> Channels, TimeSpan Latency, IReadOnlySet<int>? Notes = null)
 {
     public static bool TryParse(string raw, out OutputSpec spec, out string? error)
     {
         spec = null!;
+        IReadOnlySet<int>? notes = null;
+        if (NotesSuffix().Match(raw) is { Success: true } suffix)
+        {
+            if (!NoteList.TryParse(suffix.Groups["notes"].Value, out var parsedNotes, out var noteError))
+            {
+                error = $"'{raw}': {noteError}";
+                return false;
+            }
+
+            notes = parsedNotes;
+            raw = raw[..suffix.Index];
+        }
+
         var match = Pattern().Match(raw);
         if (!match.Success || match.Groups["port"].Value.TrimStart() is ['=' or '@', ..])
         {
@@ -80,13 +94,17 @@ internal sealed partial record OutputSpec(string Port, IReadOnlyList<int> Channe
             return false;
         }
 
-        spec = new OutputSpec(match.Groups["port"].Value.Trim(), channels, TimeSpan.FromMilliseconds(latency));
+        spec = new OutputSpec(match.Groups["port"].Value.Trim(), channels, TimeSpan.FromMilliseconds(latency), notes);
         error = null;
         return true;
     }
 
     [GeneratedRegex(@"^(?<port>.*?\S.*?)(?:=(?<ch>[0-9,\-\s]+))?(?:@(?<lat>[0-9]+(?:\.[0-9]+)?)\s*(?:ms)?)?\s*$", RegexOptions.IgnoreCase)]
     private static partial Regex Pattern();
+
+    /// <summary>"/NOTES" at the end: note numbers, names (C4, F#3, Bb2), commas and ranges.</summary>
+    [GeneratedRegex(@"/(?<notes>[A-Ga-g0-9#,\-\s]+)$")]
+    private static partial Regex NotesSuffix();
 }
 
 /// <summary>Channel lists as musicians write them (1-16), stored as MIDI's 0-15.</summary>

@@ -25,9 +25,28 @@ metrodom virtual                                    # terminal 1: ports "MetroDo
 metrodom play demo.mid -o "MetroDom xylo=1-9,11-16@10" -o "MetroDom drums=10@35"   # terminal 2
 ```
 
-Instrument spec: `NAME[=CHANNELS]@LATENCY_MS`. Channels are 1-16 with ranges (`1-9,11-16`),
-omitted means all. `play -o` takes the same `=CHANNELS@LATENCY` after the port name. Default band (roadmap S1): `xylo` on every channel except 10 at 10 ms,
+Instrument spec: `NAME[=CHANNELS]@LATENCY_MS[/NOTES]`. Channels are 1-16 with ranges (`1-9,11-16`),
+omitted means all. Notes are numbers or names (middle C = 60 = C4) with ranges: `/60,64,67`,
+`/C4-C6`, `/36,38,76`; omitted means any note. `play -o` takes the same `=CHANNELS@LATENCY/NOTES`
+after the port name. Default band (roadmap S1): `xylo` on every channel except 10 at 10 ms,
 `drums` on 10 at 35 ms.
+
+## Arranging a song onto the band
+
+Real robots have few notes, so a song's channels rarely line up with them. `--arrange` (on
+`simulate` and `play`, or `metrodom arrange` to just look) hands each instrument the part it
+covers best, on its first channel. Channel 10 instruments only take drum parts.
+
+```bash
+metrodom arrange song.mid -i xylo=1@10/60,64,67 -i drums=10@35/36,38,76
+metrodom play song.mid --arrange -o "MetroDom xylo=1@10/60,64,67" -o "MetroDom drums=10@35/36,38"
+```
+
+Rules (`Arranger`): a part is one track on one channel. Greedy pairing, most playable notes
+first, one part per instrument. Pitched parts move by whole octaves to fit, then leftover notes
+fold to the nearest playable note of the same name (`--no-fold` drops them), then repeats faster
+than the instrument's minimum interval are thinned. Only notes are kept. Every change is counted
+in the table. Played to note-limited `virtual` instruments, an arranged song skips nothing.
 
 ## What a virtual instrument does
 

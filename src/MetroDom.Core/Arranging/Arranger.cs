@@ -1,0 +1,253 @@
+using Melanchall.DryWetMidi.Common;
+using Melanchall.DryWetMidi.Core;
+using Melanchall.DryWetMidi.Interaction;
+using MetroDom.Core.Timing;
+
+namespace MetroDom.Core.Arranging;
+
+/// <summary>An instrument available to the arranger and the MIDI channel it listens on.</summary>
+/// <param name="Profile">What it can play: notes, minimum repeat interval.</param>
+/// <param name="Channel">Zero-based channel the arranged part is sent on. Channel 9 (MIDI 10) means percussion.</param>
+public sealed record BandMember(InstrumentProfile Profile, int Channel)
+{
+    /// <summary>General MIDI convention: channel 10 is percussion. Its notes are drum sounds, never transposed.</summary>
+    public bool IsPercussion => Channel == GeneralMidi.PercussionChannel;
+}
+
+/// <summary>One part of a song: the notes of one track on one channel.</summary>
+/// <param name="Track">Zero-based track index.</param>
+/// <param name="Channel">Zero-based channel.</param>
+/// <param name="Name">Track name, or "Track N".</param>
+/// <param name="NoteCount">Number of notes.</param>
+/// <param name="LowestNote">Lowest note number.</param>
+/// <param name="HighestNote">Highest note number.</param>
+public sealed record SongPart(int Track, int Channel, string Name, int NoteCount, int LowestNote, int HighestNote)
+{
+    public bool IsPercussion => Channel == GeneralMidi.PercussionChannel;
+}
+
+/// <summary>A part given to an instrument, and what had to change for it to fit.</summary>
+/// <param name="Part">The song part.</param>
+/// <param name="Instrument">Instrument name.</param>
+/// <param name="Transpose">Semitones the whole part was moved (whole octaves).</param>
+/// <param name="Played">Notes the instrument will play.</param>
+/// <param name="Folded">Notes still out of range after transposing, moved by octaves to the nearest playable same note name.</param>
+/// <param name="Dropped">Notes with no playable equivalent.</param>
+/// <param name="Thinned">Notes removed because they repeat faster than the instrument can, or collide after folding.</param>
+public sealed record PartAssignment(SongPart Part, string Instrument, int Transpose, int Played, int Folded, int Dropped, int Thinned);
+
+/// <summary>The arranger's result: who plays what, and the events to send.</summary>
+/// <param name="Assignments">One per instrument that got a part, in band order.</param>
+/// <param name="Unassigned">Song parts nobody plays.</param>
+/// <param name="Idle">Instruments with no part they can play.</param>
+/// <param name="Timeline">Note events on each instrument's channel, in time order, ready for the scheduler.</param>
+public sealed record Arrangement(
+    IReadOnlyList<PartAssignment> Assignments,
+    IReadOnlyList<SongPart> Unassigned,
+    IReadOnlyList<string> Idle,
+    IReadOnlyList<TimedMidiEvent> Timeline);
+
+/// <summary>Options for <see cref="Arranger.Arrange"/>.</summary>
+public sealed record ArrangerOptions
+{
+    /// <summary>Move notes that don't fit by octaves to a playable note of the same name. Pitched parts only.</summary>
+    public bool FoldOctaves { get; init; } = true;
+}
+
+/// <summary>General MIDI facts the arranger relies on.</summary>
+public static class GeneralMidi
+{
+    /// <summary>Zero-based percussion channel (MIDI channel 10).</summary>
+    public const int PercussionChannel = 9;
+}
+
+/// <summary>
+/// Maps song parts onto the instruments in the band (ARCHITECTURE: Arranger). Each instrument
+/// plays at most one part: the one it can cover best. Percussion parts only go to percussion
+/// instruments and are never transposed; pitched parts are moved by whole octaves to fit, then
+/// leftover notes are folded or dropped, and repeats faster than the instrument's minimum
+/// interval are thinned (ADR 0004). Only notes are kept: robots have no use for program changes,
+/// pitch bend or controllers. Everything removed is counted, never silently lost.
+/// </summary>
+public static class Arranger
+{
+    private const int MaxOctaveShift = 4;
+
+    /// <summary>Splits a song into parts: one per track and channel that has notes.</summary>
+    public static IReadOnlyList<SongPart> Parts(MidiFile midiFile)
+    {
+        ArgumentNullException.ThrowIfNull(midiFile);
+        return ReadParts(midiFile).Select(p => p.Part).ToArray();
+    }
+
+    public static Arrangement Arrange(MidiFile midiFile, IReadOnlyList<BandMember> band, ArrangerOptions? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(midiFile);
+        ArgumentNullException.ThrowIfNull(band);
+        options ??= new ArrangerOptions();
+        if (band.Select(m => m.Profile.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count() != band.Count)
+        {
+            throw new ArgumentException("Instrument names must be unique.", nameof(band));
+        }
+
+        var parts = ReadParts(midiFile);
+        var choices = new List<(int Member, int Part, int Score, int Transpose)>();
+        for (var m = 0; m < band.Count; m++)
+        {
+            for (var p = 0; p < parts.Count; p++)
+            {
+                if (band[m].IsPercussion != parts[p].Part.IsPercussion)
+                {
+                    continue;
+                }
+
+                var (transpose, score) = BestFit(band[m], parts[p].Notes);
+                if (score > 0)
+                {
+                    choices.Add((m, p, score, transpose));
+                }
+            }
+        }
+
+        // Greedy: the best (most notes playable) pairing first, then the next among what's left.
+        var memberPart = new Dictionary<int, (int Part, int Transpose)>();
+        var takenParts = new HashSet<int>();
+        foreach (var c in choices.OrderByDescending(c => c.Score).ThenBy(c => c.Part).ThenBy(c => c.Member))
+        {
+            if (!memberPart.ContainsKey(c.Member) && takenParts.Add(c.Part))
+            {
+                memberPart[c.Member] = (c.Part, c.Transpose);
+            }
+        }
+
+        var assignments = new List<PartAssignment>();
+        var timeline = new List<(TimeSpan At, bool IsOn, MidiEvent Event)>();
+        for (var m = 0; m < band.Count; m++)
+        {
+            if (!memberPart.TryGetValue(m, out var pick))
+            {
+                continue;
+            }
+
+            var (assignment, notes) = Fit(band[m], parts[pick.Part], pick.Transpose, options);
+            assignments.Add(assignment);
+            foreach (var n in notes)
+            {
+                var channel = (FourBitNumber)band[m].Channel;
+                timeline.Add((n.Start, true, new NoteOnEvent((SevenBitNumber)n.Number, (SevenBitNumber)n.Velocity) { Channel = channel }));
+                timeline.Add((n.End, false, new NoteOffEvent((SevenBitNumber)n.Number, SevenBitNumber.MinValue) { Channel = channel }));
+            }
+        }
+
+        return new Arrangement(
+            assignments,
+            parts.Where((_, p) => !takenParts.Contains(p)).Select(p => p.Part).ToArray(),
+            band.Where((_, m) => !memberPart.ContainsKey(m)).Select(b => b.Profile.Name).ToArray(),
+            timeline
+                .OrderBy(e => e.At)
+                .ThenBy(e => e.IsOn) // Note Offs first, so a re-struck note isn't cut by its own release.
+                .Select(e => new TimedMidiEvent(e.At, e.Event))
+                .ToArray());
+    }
+
+    /// <summary>Octave shift that makes the most notes playable as written (smallest shift wins ties).</summary>
+    private static (int Transpose, int Score) BestFit(BandMember member, IReadOnlyList<PartNote> notes)
+    {
+        var profile = member.Profile;
+        if (member.IsPercussion || profile.Notes is null)
+        {
+            return (0, notes.Count(n => profile.CanPlay(n.Number)));
+        }
+
+        return Enumerable.Range(-MaxOctaveShift, (MaxOctaveShift * 2) + 1)
+            .Select(octaves => octaves * 12)
+            .Select(shift => (Transpose: shift, Score: notes.Count(n => profile.CanPlay(n.Number + shift))))
+            .OrderByDescending(f => f.Score)
+            .ThenBy(f => Math.Abs(f.Transpose))
+            .ThenBy(f => f.Transpose)
+            .First();
+    }
+
+    private static (PartAssignment Assignment, List<PartNote> Notes) Fit(BandMember member, ParsedPart part, int transpose, ArrangerOptions options)
+    {
+        var profile = member.Profile;
+        int folded = 0, dropped = 0, thinned = 0;
+        var placed = new List<PartNote>();
+        foreach (var note in part.Notes)
+        {
+            var number = note.Number + transpose;
+            if (!profile.CanPlay(number))
+            {
+                if (!member.IsPercussion && options.FoldOctaves && Fold(profile, number) is { } fold)
+                {
+                    number = fold;
+                    folded++;
+                }
+                else
+                {
+                    dropped++;
+                    continue;
+                }
+            }
+
+            placed.Add(note with { Number = number });
+        }
+
+        var kept = new List<PartNote>();
+        var lastStart = new Dictionary<int, TimeSpan>();
+        foreach (var note in placed.OrderBy(n => n.Start).ThenBy(n => n.Number))
+        {
+            var minGap = profile.MinInterval > TimeSpan.Zero ? profile.MinInterval : TimeSpan.FromTicks(1);
+            if (lastStart.TryGetValue(note.Number, out var last) && note.Start - last < minGap)
+            {
+                thinned++; // Too fast to repeat, or the same note twice at once after folding.
+                continue;
+            }
+
+            lastStart[note.Number] = note.Start;
+            kept.Add(note);
+        }
+
+        return (new PartAssignment(part.Part, profile.Name, transpose, kept.Count, folded, dropped, thinned), kept);
+    }
+
+    /// <summary>The playable note with the same name (pitch class) nearest to <paramref name="number"/>.</summary>
+    private static int? Fold(InstrumentProfile profile, int number) =>
+        profile.Notes!
+            .Where(n => ((n - number) % 12 + 12) % 12 == 0)
+            .OrderBy(n => Math.Abs(n - number))
+            .Cast<int?>()
+            .FirstOrDefault();
+
+    private static List<ParsedPart> ReadParts(MidiFile midiFile)
+    {
+        var tempoMap = midiFile.GetTempoMap();
+        return midiFile.GetTrackChunks()
+            .SelectMany((chunk, track) =>
+            {
+                var name = chunk.Events.OfType<SequenceTrackNameEvent>().FirstOrDefault()?.Text;
+                return chunk.GetNotes()
+                    .GroupBy(n => (int)n.Channel)
+                    .OrderBy(g => g.Key)
+                    .Select(g =>
+                    {
+                        var notes = g
+                            .Select(n => new PartNote(
+                                n.TimeAs<MetricTimeSpan>(tempoMap),
+                                n.EndTimeAs<MetricTimeSpan>(tempoMap),
+                                n.NoteNumber,
+                                n.Velocity))
+                            .ToArray();
+                        var partName = string.IsNullOrWhiteSpace(name) ? $"Track {track + 1}" : name.Trim();
+                        return new ParsedPart(
+                            new SongPart(track, g.Key, partName, notes.Length, notes.Min(n => n.Number), notes.Max(n => n.Number)),
+                            notes);
+                    });
+            })
+            .ToList();
+    }
+
+    private sealed record ParsedPart(SongPart Part, IReadOnlyList<PartNote> Notes);
+
+    private readonly record struct PartNote(TimeSpan Start, TimeSpan End, int Number, int Velocity);
+}

@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Globalization;
 using Melanchall.DryWetMidi.Core;
 using MetroDom.Conductor.Cli;
+using MetroDom.Core.Arranging;
 using MetroDom.Core.Simulation;
 using MetroDom.Core.Timing;
 using Spectre.Console;
@@ -22,7 +23,7 @@ internal sealed class SimulateCommand : Command<SimulateCommand.Settings>
         public string? Path { get; init; }
 
         [CommandOption("-i|--instrument <SPEC>")]
-        [Description("A virtual instrument, NAME[=CHANNELS]@LATENCY_MS, repeatable (e.g. [bold]-i xylo=1@10 -i drums=10@35[/]). Default: xylo on every channel but 10 at 10 ms, drums on 10 at 35 ms.")]
+        [Description("A virtual instrument, NAME[=CHANNELS]@LATENCY_MS[/NOTES], repeatable (e.g. [bold]-i xylo=1@10 -i drums=10@35[/]). Default: xylo on every channel but 10 at 10 ms, drums on 10 at 35 ms.")]
         public string[]? Instruments { get; init; }
 
         [CommandOption("--no-compensation")]
@@ -38,6 +39,10 @@ internal sealed class SimulateCommand : Command<SimulateCommand.Settings>
         [Description("Seed for --jitter. Same seed, same result.")]
         [DefaultValue(0)]
         public int Seed { get; init; }
+
+        [CommandOption("-a|--arrange")]
+        [Description("Let the arranger give each instrument the part it plays best (transposed, folded, thinned to fit), instead of routing by channel.")]
+        public bool Arrange { get; init; }
 
         [CommandOption("--notes")]
         [Description("Also list every note as heard, with its offset.")]
@@ -76,10 +81,24 @@ internal sealed class SimulateCommand : Command<SimulateCommand.Settings>
             Seed = settings.Seed,
         };
 
-        var result = BandSimulation.Run(
-            SongTimeline.From(midiFile),
-            band.Select(b => new SimulatedPart(b.ToProfile(), b.Channels)).ToArray(),
-            options);
+        IReadOnlyList<TimedMidiEvent> timeline;
+        IReadOnlyList<SimulatedPart> parts;
+        if (settings.Arrange)
+        {
+            var members = band.Select(b => b.ToBandMember()).ToArray();
+            var arrangement = Arranger.Arrange(midiFile, members);
+            ArrangementView.Write(arrangement, members);
+            AnsiConsole.WriteLine();
+            timeline = arrangement.Timeline;
+            parts = members.Select(m => new SimulatedPart(m.Profile, [m.Channel])).ToArray();
+        }
+        else
+        {
+            timeline = SongTimeline.From(midiFile);
+            parts = band.Select(b => new SimulatedPart(b.ToProfile(), b.Channels)).ToArray();
+        }
+
+        var result = BandSimulation.Run(timeline, parts, options);
 
         Report(songName, band, options, result, settings.ShowNotes);
         return 0;
