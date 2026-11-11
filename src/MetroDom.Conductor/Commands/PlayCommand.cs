@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Globalization;
 using Melanchall.DryWetMidi.Core;
 using Melanchall.DryWetMidi.Interaction;
+using MetroDom.Conductor.Api;
 using MetroDom.Conductor.Cli;
 using MetroDom.Conductor.Midi;
 using MetroDom.Core.Arranging;
@@ -90,6 +91,12 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
 
         public (int Channel, int Note) ClickNote => TryParseClick(Click, out var click, out _) ? click : (9, 76);
 
+        [CommandOption("--api <ADDRESS>")]
+        [Description("Serve the Control API (HTTP + JSON at /api/v0) for apps: [bold]PORT[/] on this computer only (e.g. [bold]7890[/]) or [bold]HOST:PORT[/] (e.g. [bold]0.0.0.0:7890[/] for the LAN). Calls need the token shown at start, or set METRODOM_API_TOKEN.")]
+        public string? Api { get; init; }
+
+        public ApiEndpoint? ApiAt => Api is not null && MetroDom.Conductor.Api.ApiEndpoint.TryParse(Api, out var endpoint, out _) ? endpoint : null;
+
         [CommandOption("-t|--tempo <BPM>")]
         [Description("Start at this tempo instead of the file's. Tempo changes in the file scale with it.")]
         public double? Tempo { get; init; }
@@ -99,6 +106,11 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
             if (Paths.Length == 0)
             {
                 return ValidationResult.Error("give at least one SONG.");
+            }
+
+            if (Api is not null && !MetroDom.Conductor.Api.ApiEndpoint.TryParse(Api, out _, out var apiError))
+            {
+                return ValidationResult.Error($"--api: {apiError}");
             }
 
             if (Paths.FirstOrDefault(p => !File.Exists(p)) is { } missing)
@@ -216,9 +228,16 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
             var canRestart = startPedal || following || Ui.IsInteractive;
             var wait = startPedal || following;
             var inputs = TempoFrom(tapInput, clockInput, followInput) + (controlInput is null ? "" : $" · controls from {controlInput.Name}");
+            live.UseSetlist([.. songs.Select((_, i) => SongTitle(songs, i))]);
+            using var api = StartApi(settings, live, session);
+            if (api is not null)
+            {
+                inputs += $" · API {api.Address}";
+            }
 
             for (var i = 0; i < songs.Length && !session.IsStopping;)
             {
+                live.Cue(i);
                 if (wait)
                 {
                     live.Begin(null);
@@ -328,7 +347,8 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
         var tempoMap = midiFile.GetTempoMap();
         var song = SongTitle(songs, index);
         var fileBpm = FileBpm(tempoMap, TimeSpan.Zero);
-        var startBpm = live.TakePendingBpm() ?? settings.Tempo;
+        var pendingBpm = live.TakePendingBpm(out var pendingSource);
+        var startBpm = pendingBpm ?? settings.Tempo;
         var startSpeed = startBpm is { } bpm ? Clamp(bpm / fileBpm) : 1;
 
         var clock = live.Clock;
@@ -365,7 +385,7 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
             session.RequestStop();
         };
 
-        live.TempoSource = startBpm is null || settings.Tempo == startBpm ? null : "tapped";
+        live.TempoSource = pendingBpm is null ? null : pendingSource;
         void SetTempo(double bpm, string source)
         {
             scheduler.SetSpeed(Clamp(bpm / FileBpm(tempoMap, SongPosition())));
@@ -380,7 +400,7 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
             loop.Wake();
         }
 
-        live.Begin(new ActiveSong(scheduler, sections, SetTempo, loop.Wake));
+        live.Begin(new ActiveSong(scheduler, sections, SetTempo, loop.Wake, () => FileBpm(tempoMap, SongPosition())));
         if (!Ui.IsInteractive)
         {
             Console.WriteLine(string.Create(
@@ -445,6 +465,34 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
         live.Begin(null);
         scheduler.Stop(); // Whatever ended the song, nothing is left sounding.
         return session.IsStopping ? null : signal;
+    }
+
+    /// <summary>Starts <c>--api</c>, if asked, and says where and with which token.</summary>
+    private static ApiHandle? StartApi(Settings settings, LiveControl live, Session session)
+    {
+        if (settings.ApiAt is not { } endpoint)
+        {
+            return null;
+        }
+
+        var token = Environment.GetEnvironmentVariable("METRODOM_API_TOKEN") is { Length: > 0 } fromEnv ? fromEnv : ControlApi.NewToken();
+        var api = ControlApi.Start(endpoint, token, live, session);
+        var shown = token == Environment.GetEnvironmentVariable("METRODOM_API_TOKEN") ? "from METRODOM_API_TOKEN" : token;
+        Ui.Note($"Control API at {api.Address} · token {shown}");
+        if (!endpoint.IsLoopback)
+        {
+            Ui.Warn("The Control API is open to the network over plain HTTP: anyone who sees the token can drive the band. Use it on a network you trust.");
+        }
+
+        return new ApiHandle(api);
+    }
+
+    /// <summary>Stops the API synchronously at the end of the set.</summary>
+    private sealed class ApiHandle(ControlApi api) : IDisposable
+    {
+        public Uri Address => api.Address;
+
+        public void Dispose() => api.DisposeAsync().AsTask().GetAwaiter().GetResult();
     }
 
     private static string SongTitle(string[] songs, int index) =>

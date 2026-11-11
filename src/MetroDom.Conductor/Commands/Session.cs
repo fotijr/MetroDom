@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using MetroDom.Conductor.Cli;
 using MetroDom.Conductor.Midi;
 using MetroDom.Core;
@@ -47,6 +48,7 @@ internal sealed record SessionOutput(IMidiOutputPort Port, IReadOnlyList<int> Ch
 /// </summary>
 internal sealed class Session : IDisposable
 {
+    private readonly PosixSignalRegistration _sigterm;
     private readonly ManualResetEventSlim _stop = new();
     private Action<string> _log = Ui.Warn;
 
@@ -81,6 +83,13 @@ internal sealed class Session : IDisposable
         }
 
         Console.CancelKeyPress += OnCancel;
+
+        // Headless stops (systemd, docker stop) mean the same as Ctrl+C: panic, then exit cleanly.
+        _sigterm = PosixSignalRegistration.Create(PosixSignal.SIGTERM, e =>
+        {
+            e.Cancel = true;
+            RequestStop();
+        });
     }
 
     public Orchestra Orchestra { get; } = new();
@@ -124,6 +133,7 @@ internal sealed class Session : IDisposable
     public void Dispose()
     {
         Console.CancelKeyPress -= OnCancel;
+        _sigterm.Dispose();
         Orchestra.Panic();
         foreach (var output in Outputs)
         {

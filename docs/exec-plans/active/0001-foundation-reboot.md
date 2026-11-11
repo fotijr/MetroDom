@@ -58,7 +58,7 @@ That is the first milestone of the [live band spec](../../product-specs/live-ban
 - [ ] Human-leads input from drum triggers (`trigger-piezo`)
 
 ### Phase 3: Control API v0
-- [ ] OpenAPI spec: transport, queue, instruments, panic
+- [x] OpenAPI spec: transport, queue, instruments, panic: `play --api`, `src/MetroDom.Conductor/Api/openapi.json` ([control API](../../references/control-api.md))
 - [ ] WebSocket state stream
 - [ ] Minimal web UI served by the Conductor
 
@@ -193,6 +193,18 @@ That is the first milestone of the [live band spec](../../product-specs/live-ban
   `simulate --follow`. Measured: 0 ms on a steady player, median ≤ 15 ms at 12 ms σ jitter, and
   live on CoreMIDI ports median 16.9 ms. A steady ramp lags ~18 ms (first-order tempo loop),
   accepted for now. Limits: TD-26.
+
+- 2026-11-11: Control API v0. It lives inside `play --api` rather than a new `serve` command:
+  the set loop, `LiveControl` and session already are the transport, queue and instruments, so
+  the API is one more input next to keys and pedals, and can't bypass the governor or panic path.
+  A daemon that owns sessions comes when the queue gets a library. ASP.NET Core minimal APIs (a
+  shared framework, no new packages). The spec is a hand-written, checked-in `openapi.json`
+  embedded in the binary and served, and a test makes routes and spec equal both ways, so the
+  contract can't drift. Pairing draft: a bearer token from `METRODOM_API_TOKEN` or random and
+  shown on the box, loopback unless a host is named. Every token is an operator until roles and
+  sessions exist. Found while testing: the ASP.NET host swallowed SIGTERM, so `play` ignored
+  `systemd stop`. Now the host ignores signals and `Session` treats SIGTERM like Ctrl+C (panic,
+  exit). Limits: TD-27.
 
 ## Open questions
 - Target box model (ADR 0002).

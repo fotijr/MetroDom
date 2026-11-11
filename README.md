@@ -36,6 +36,8 @@ All of this runs on Linux, macOS or Windows, with no hardware needed.
   click), then **vamp** a section until you're ready, or **jump to the outro**.
 - **Run a set hands-free.** Play a setlist from a MIDI foot controller: start/stop, next song, tap
   tempo, vamp, outro and panic, mapped in a policy file you can edit.
+- **Be driven by an app.** A small HTTP API (`--api`) to start, stop, skip, set the tempo, vamp
+  and panic from a phone or script, with a token and an OpenAPI description.
 - **Find instruments by itself.** It asks each MIDI port who it is and fetches a MetroDom
   instrument's profile (its notes, latency and limits) without any setup.
 - **Stay safe.** Every instrument sits behind a safety governor: velocity caps, note-rate limits,
