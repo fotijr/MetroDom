@@ -44,7 +44,7 @@ That is the first milestone of the [live band spec](../../product-specs/live-ban
 - [x] Discovery steps 1-2 per [ADR 0007](../../design-docs/0007-instrument-discovery.md): list ports, Identity Request, MetroDom vs general MIDI (`devices --identify`, [midi-identity](../../references/midi-identity.md))
 - [x] Discovery step 3: profile fetch over MetroDom SysEx, shown by `devices --identify` ([profile exchange](../../references/midi-profile-exchange.md))
 - [x] Discovery step 4a: `play`/`route` use the profile an instrument sends for whatever `-o` leaves out (`--no-identify` to skip)
-- [ ] Discovery step 4b: identify on hot-plug, remember assignments, auto-add instruments (TD-23)
+- [x] Discovery step 4b: identify on hot-plug, remember assignments, auto-add instruments (TD-23)
 - [x] Safety governor + panic, tested (`SafetyGovernor` in front of every output; `--max-velocity`, `--max-rate`, `--quiet`). Limits: TD-22
 - [x] Tap tempo (terminal keys) and `--tempo`
 - [x] Tap from a MIDI input (foot pedal) / MIDI Clock in (`play --tap PORT [--tap-on TRIGGER]`, `--clock-in PORT`)
@@ -225,6 +225,21 @@ That is the first milestone of the [live band spec](../../product-specs/live-ban
   because song titles come from files. Found in the browser: a fragment-only link doesn't reload an
   open page, so the page listens for `hashchange`; a refused token is now dropped from storage;
   replies and stream messages were shown twice.
+
+- 2026-11-11: Discovery step 4b. The band is automatic only when `-o` is absent: naming outputs
+  still means exactly those, so scripts and the bar-band setup behave as before. Assignments are a
+  per-user JSON file (Core parses it, the Conductor stores it) written by `devices --assign` in the
+  `-o` syntax, because the registry and Control API that would own roles don't exist yet; moving
+  them there later keeps the format. Key = identity without version + port name, falling back to
+  port name: firmware updates keep roles, and USB serials aren't reachable through CoreMIDI or
+  DryWetMIDI. Auto-added MetroDom instruments get one channel (profile's `midi.channel`, now
+  parsed, else first free) and assignments claim channels first. General devices are only offered:
+  guessing what a stranger's synth should play is how a bar gets a surprise. Hot-plugged devices
+  join between songs, never mid-song, because the scheduler's lookahead is fixed per song and a
+  slower instrument joining mid-song would play late. Hot-plug is a 1 s port listing (the same
+  cadence as reconnect) and asks each new port once. Found in passing: `--help` crashed on
+  `virtual`, `arrange`, `simulate` and `play` (unescaped `[=X]` markup); fixed, with a test over
+  every command. Headless `play` now prints the live panel's messages as plain lines.
 
 ## Open questions
 - Target box model (ADR 0002).

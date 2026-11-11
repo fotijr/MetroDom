@@ -8,6 +8,7 @@ Protocol and format facts agents need while coding. Keep each file factual and t
 | [instrument-profile.md](instrument-profile.md) | Building an instrument or the Conductor registry |
 | [midi-identity.md](midi-identity.md) | Identity Request/Reply bytes, MetroDom's identity, `devices --identify` |
 | [midi-profile-exchange.md](midi-profile-exchange.md) | MetroDom SysEx profile request/reply, discovery step 3 |
+| [auto-band.md](auto-band.md) | `play` without `-o`, hot-plug, `devices --assign/--forget`, `metrodom.assignments/0` (discovery step 4) |
 | [control-api.md](control-api.md) | Control API v0: `play --api`, token, routes, the `openapi.json` contract |
 | [policy-profile.md](policy-profile.md) | `metrodom.policy/0`, foot-controller mapping, `play --control`, setlists |
 | [beat-following.md](beat-following.md) | Human leads: `BeatTracker`, `BeatFollower`, `play --follow`, `beats`, `simulate --follow`, hit files |

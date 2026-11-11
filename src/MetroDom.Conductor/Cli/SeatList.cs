@@ -7,7 +7,7 @@ namespace MetroDom.Conductor.Cli;
 /// <summary><c>--seat ROLE[=PLAYER]</c> values, and the report of what filling them did.</summary>
 internal static class SeatList
 {
-    public const string Help = "A human plays this role, so the band leaves its parts out (a minus-one mix): [bold]ROLE[=PLAYER][/], repeatable (e.g. [bold]--seat guitar=Dom[/], [bold]--seat drums[/]). Roles come from [bold]metrodom roles SONG[/].";
+    public const string Help = "A human plays this role, so the band leaves its parts out (a minus-one mix): [bold]ROLE[[=PLAYER]][/], repeatable (e.g. [bold]--seat guitar=Dom[/], [bold]--seat drums[/]). Roles come from [bold]metrodom roles SONG[/].";
 
     public static bool TryParse(IEnumerable<string>? raw, out IReadOnlyList<Seat> seats, out string? error)
     {

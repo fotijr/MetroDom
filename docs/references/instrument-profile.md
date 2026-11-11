@@ -40,6 +40,7 @@ Fields:
 - `minIntervalMs` (optional, top level or per note): the Conductor uses one interval per
   instrument today, the largest given, so no note is refused.
 - No `notes` array means the instrument plays any note (software instruments).
-- Not read yet: `midi`, `polyphony`, `velocity`, `safety`, `firmwareVersion` (TD-22).
+- `midi.channel` (1-16) is where the [auto band](auto-band.md) puts the instrument when it isn't assigned.
+- Not read yet: `midi.identity`, `polyphony`, `velocity`, `safety`, `firmwareVersion` (TD-22).
 
 Example values above are illustrative, not measured.

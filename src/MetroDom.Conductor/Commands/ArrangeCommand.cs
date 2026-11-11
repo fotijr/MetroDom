@@ -18,7 +18,7 @@ internal sealed class ArrangeCommand : Command<ArrangeCommand.Settings>
         public string? Path { get; init; }
 
         [CommandOption("-i|--instrument <SPEC>")]
-        [Description("An instrument, NAME[=CHANNELS]@LATENCY_MS[/NOTES], repeatable (e.g. [bold]-i xylo=1@10/C4-C6 -i drums=10@35/36,38,76[/]). It plays on its first channel; channel 10 means drums. Default: xylo and drums, any notes.")]
+        [Description("An instrument, NAME[[=CHANNELS]]@LATENCY_MS[[/NOTES]], repeatable (e.g. [bold]-i xylo=1@10/C4-C6 -i drums=10@35/36,38,76[/]). It plays on its first channel; channel 10 means drums. Default: xylo and drums, any notes.")]
         public string[]? Instruments { get; init; }
 
         [CommandOption("-s|--seat <ROLE>")]

@@ -43,6 +43,6 @@ counts. `metrodom virtual` instruments answer as model 0.
 
 ## Not yet
 
-- Identify on hot-plug and remember assignments by identity (today it runs only when asked).
+- Keys from USB serial or product strings (assignments use identity + port name, [auto-band](auto-band.md)).
 - MIDI 2.0 UMP Endpoint Discovery, mDNS network MIDI.
 - Model numbers for real instruments.

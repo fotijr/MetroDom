@@ -30,7 +30,9 @@ omitted means all. Notes are numbers or names (middle C = 60 = C4) with ranges: 
 `/C4-C6`, `/36,38,76`; omitted means any note. `play -o` takes the same `=CHANNELS@LATENCY/NOTES`
 after the port name. Leave out `@LATENCY` or `/NOTES` and `play` asks the instrument for its
 profile ([profile exchange](midi-profile-exchange.md)) and uses what it sends; what you do write
-wins. `--no-identify` skips the question. Default band (roadmap S1): `xylo` on every channel except 10 at 10 ms,
+wins. `--no-identify` skips the question. Without any `-o`, `play` uses every MetroDom
+instrument it finds, each on the first channel of its spec, and picks up ones started mid-set at
+the next song ([auto band](auto-band.md)). Default band (roadmap S1): `xylo` on every channel except 10 at 10 ms,
 `drums` on 10 at 35 ms.
 
 ## Arranging a song onto the band

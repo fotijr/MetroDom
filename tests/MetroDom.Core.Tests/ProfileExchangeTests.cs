@@ -36,6 +36,18 @@ public class ProfileExchangeTests
         Assert.Equal(TimeSpan.FromMilliseconds(10), profile.MaxLatency);
         Assert.Equal(TimeSpan.FromMilliseconds(80), profile.MinInterval); // slowest note wins
         Assert.False(profile.CanPlay(62));
+        Assert.Equal(0, profile.Channel); // "midi": { "channel": 1 }
+    }
+
+    [Fact]
+    public void Channel_IsOptional_AndRoundTrips()
+    {
+        Assert.True(InstrumentProfileJson.TryParse("""{"schema":"metrodom.instrument-profile/0","name":"x"}""", out var none, out _));
+        Assert.Null(none.Channel);
+
+        var drums = new InstrumentProfile("drums", TimeSpan.FromMilliseconds(35)) { Channel = 9 };
+        Assert.True(InstrumentProfileJson.TryParse(InstrumentProfileJson.Write(drums), out var back, out var error), error);
+        Assert.Equal(9, back.Channel);
     }
 
     [Theory]
@@ -48,6 +60,8 @@ public class ProfileExchangeTests
     [InlineData("""{"schema":"metrodom.instrument-profile/0","name":"x","notes":[{"note":1},{"note":1}]}""", "listed twice")]
     [InlineData("""{"schema":"metrodom.instrument-profile/0","name":"x","latencyMs":"fast"}""", "wrong type")]
     [InlineData("""{"schema":"metrodom.instrument-profile/0","name":"x","latencyMs":-1}""", "negative")]
+    [InlineData("""{"schema":"metrodom.instrument-profile/0","name":"x","midi":{"channel":17}}""", "must be 1-16")]
+    [InlineData("""{"schema":"metrodom.instrument-profile/0","name":"x","midi":{"channel":0}}""", "must be 1-16")]
     public void Parse_RejectsBadProfiles_WithAReason(string json, string reason)
     {
         Assert.False(InstrumentProfileJson.TryParse(json, out _, out var error));

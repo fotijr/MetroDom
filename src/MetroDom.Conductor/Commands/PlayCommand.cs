@@ -55,7 +55,7 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
         public string? Tap { get; init; }
 
         [CommandOption("--tap-on <TRIGGER>")]
-        [Description("Which messages from [bold]--tap[/] count: [bold]any[/] (default: Note On or a pedal press), [bold]note[/][:N], [bold]cc[/][:N] (press = value ≥ 64), [bold]pc[/][:N], optionally @CHANNEL (e.g. [bold]cc:64[/], [bold]note:36@10[/]).")]
+        [Description("Which messages from [bold]--tap[/] count: [bold]any[/] (default: Note On or a pedal press), [bold]note[/][[:N]], [bold]cc[/][[:N]] (press = value ≥ 64), [bold]pc[/][[:N]], optionally @CHANNEL (e.g. [bold]cc:64[/], [bold]note:36@10[/]).")]
         public string? TapOn { get; init; }
 
         [CommandOption("--clock-in <PORT>")]
@@ -217,7 +217,12 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
         string[] heldBack;
         using (var session = new Session(settings))
         {
-            output = session.OutputName;
+            if (!Ui.IsInteractive)
+            {
+                // No live panel to show them in: logs and scripts get plain lines (hot-plug, vamp, panic).
+                session.Messages.Added += Console.WriteLine;
+            }
+
             using var live = new LiveControl(session, new SystemClock());
             using var tapInput = settings.Tap is null ? null : TapInput(settings, live.Tap);
             using var clockInput = settings.ClockIn is null ? null : ClockInput(settings, live.Clock, live.FollowClock);
@@ -230,6 +235,7 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
             var inputs = TempoFrom(tapInput, clockInput, followInput) + (controlInput is null ? "" : $" · controls from {controlInput.Name}");
             live.UseSetlist([.. songs.Select((_, i) => SongTitle(songs, i))]);
             using var api = StartApi(settings, live, session);
+            session.WatchForDevices(MidiDevices.Backend.Value);
             if (api is not null)
             {
                 inputs += $" · API {api.Address}";
@@ -259,6 +265,8 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
                     }
                 }
 
+                // Hot-plugged devices join here, between songs, so the scheduler plans for their latency.
+                session.AdmitPending();
                 var end = PlaySong(session, live, settings, songs, i, inputs);
                 switch (end)
                 {
@@ -288,6 +296,7 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
                 }
             }
 
+            output = session.OutputName; // The band may have grown during the set.
             heldBack = [.. session.SafetySummary()];
         }
 

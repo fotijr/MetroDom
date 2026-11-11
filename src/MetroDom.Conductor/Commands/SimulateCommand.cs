@@ -24,7 +24,7 @@ internal sealed class SimulateCommand : Command<SimulateCommand.Settings>
         public string? Path { get; init; }
 
         [CommandOption("-i|--instrument <SPEC>")]
-        [Description("A virtual instrument, NAME[=CHANNELS]@LATENCY_MS[/NOTES], repeatable (e.g. [bold]-i xylo=1@10 -i drums=10@35[/]). Default: xylo on every channel but 10 at 10 ms, drums on 10 at 35 ms.")]
+        [Description("A virtual instrument, NAME[[=CHANNELS]]@LATENCY_MS[[/NOTES]], repeatable (e.g. [bold]-i xylo=1@10 -i drums=10@35[/]). Default: xylo on every channel but 10 at 10 ms, drums on 10 at 35 ms.")]
         public string[]? Instruments { get; init; }
 
         [CommandOption("--no-compensation")]

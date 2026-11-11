@@ -7,7 +7,7 @@ namespace MetroDom.Core;
 /// <summary>
 /// Reads and writes the <a href="../../docs/references/instrument-profile.md">instrument profile</a>
 /// JSON (<c>metrodom.instrument-profile/0</c>). Only the fields the Conductor uses today become
-/// <see cref="InstrumentProfile"/> properties; the rest (identity, polyphony, safety) are accepted
+/// <see cref="InstrumentProfile"/> properties (of <c>midi</c>, only the channel); the rest (identity, polyphony, safety) are accepted
 /// and ignored until something needs them.
 /// </summary>
 public static class InstrumentProfileJson
@@ -112,8 +112,22 @@ public static class InstrumentProfileJson
             return false;
         }
 
+        int? channel = null;
+        if (obj["midi"]?["channel"] is { } channelNode)
+        {
+            channel = channelNode.GetValue<int>();
+            if (channel is not (>= 1 and <= 16))
+            {
+                error = "\"midi.channel\" must be 1-16.";
+                return false;
+            }
+
+            channel--;
+        }
+
         profile = new InstrumentProfile(name, defaultLatency)
         {
+            Channel = channel,
             Notes = notes,
             NoteLatency = latencies,
             MinInterval = minInterval,
@@ -136,6 +150,11 @@ public static class InstrumentProfileJson
             ["name"] = profile.Name,
             ["latencyMs"] = profile.Latency.TotalMilliseconds,
         };
+        if (profile.Channel is { } channel)
+        {
+            obj["midi"] = new JsonObject { ["channel"] = channel + 1 };
+        }
+
         if (profile.MinInterval > TimeSpan.Zero)
         {
             obj["minIntervalMs"] = profile.MinInterval.TotalMilliseconds;
