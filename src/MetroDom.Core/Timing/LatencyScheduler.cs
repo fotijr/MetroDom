@@ -110,6 +110,11 @@ public sealed class LatencyScheduler
     /// <summary>How far the band runs behind the song clock. Zero without compensation.</summary>
     public TimeSpan Lookahead { get; private set; }
 
+    /// <summary>The <see cref="Lookahead"/> the next <see cref="Start"/> will use, from the current routing.</summary>
+    public TimeSpan PlannedLookahead => _compensate
+        ? _orchestra.Outputs.Select(o => _profiles.TryGetValue(o, out var p) ? p.MaxLatency : TimeSpan.Zero).DefaultIfEmpty().Max()
+        : TimeSpan.Zero;
+
     /// <summary>Song time of the last event: the song's length at the file's tempo.</summary>
     public TimeSpan Duration { get; private set; }
 
@@ -208,9 +213,7 @@ public sealed class LatencyScheduler
             _jump = null;
             _segments.Clear();
             _segments.Add((TimeSpan.Zero, TimeSpan.Zero));
-            Lookahead = _compensate
-                ? _orchestra.Outputs.Select(o => _profiles.TryGetValue(o, out var p) ? p.MaxLatency : TimeSpan.Zero).DefaultIfEmpty().Max()
-                : TimeSpan.Zero;
+            Lookahead = PlannedLookahead;
 
             _sequence = 0;
             _plan = song

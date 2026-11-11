@@ -23,6 +23,9 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
     /// <summary>Lets the loop thread start before the first note, so beat one isn't late.</summary>
     private static readonly TimeSpan Preroll = TimeSpan.FromMilliseconds(250);
 
+    /// <summary>How often the band re-aims at a followed player between hits.</summary>
+    private static readonly TimeSpan FollowTick = TimeSpan.FromMilliseconds(50);
+
     public sealed class Settings : OutputSettings
     {
         [CommandArgument(0, "<SONGS>")]
@@ -59,6 +62,16 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
         public string? ClockIn { get; init; }
 
         public TapTrigger Trigger => TapTrigger.TryParse(TapOn, out var trigger, out _) ? trigger : new TapTrigger();
+
+        [CommandOption("--follow <PORT>")]
+        [Description("Follow a human player's beat from this input (drum triggers, a pad, an e-kit): the band locks onto their tempo [bold]and[/] phase, predicts their next beats, holds tempo through a stop, and starts each song when they count in (4 steady hits). See [bold]--follow-on[/].")]
+        public string? Follow { get; init; }
+
+        [CommandOption("--follow-on <TRIGGER>")]
+        [Description("Which messages from [bold]--follow[/] are hits, as [bold]--tap-on[/] (default [bold]any[/]). E.g. [bold]note:38[/] to follow the snare only, [bold]note@10[/] for any drum.")]
+        public string? FollowOn { get; init; }
+
+        public TapTrigger FollowTrigger => TapTrigger.TryParse(FollowOn, out var trigger, out _) ? trigger : new TapTrigger();
 
         [CommandOption("-s|--seat <ROLE>")]
         [Description(SeatList.Help)]
@@ -106,9 +119,24 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
                 }
             }
 
-            if (Control is not null && (Control == Tap || Control == ClockIn))
+            if (Control is not null && (Control == Tap || Control == ClockIn || Control == Follow))
             {
-                return ValidationResult.Error("--control and --tap/--clock-in can't share a port: map tap in the policy instead.");
+                return ValidationResult.Error("--control and --tap/--clock-in/--follow can't share a port: map tap in the policy instead.");
+            }
+
+            if (Follow is not null && (Tap is not null || ClockIn is not null))
+            {
+                return ValidationResult.Error("--follow sets the tempo from the player; drop --tap/--clock-in.");
+            }
+
+            if (!TapTrigger.TryParse(FollowOn, out _, out var followError))
+            {
+                return ValidationResult.Error($"--follow-on: {followError}");
+            }
+
+            if (FollowOn is not null && Follow is null)
+            {
+                return ValidationResult.Error("--follow-on needs --follow <PORT>.");
             }
 
             if (!SeatList.TryParse(Seat, out _, out var seatError))
@@ -181,18 +209,25 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
             using var live = new LiveControl(session, new SystemClock());
             using var tapInput = settings.Tap is null ? null : TapInput(settings, live.Tap);
             using var clockInput = settings.ClockIn is null ? null : ClockInput(settings, live.Clock, live.FollowClock);
+            using var followInput = settings.Follow is null ? null : FollowInput(settings, live.Beat);
             using var controlInput = settings.Control is null ? null : ControlInput(settings.Control, policy, live.Control);
             var startPedal = controlInput is not null && policy.Controls.ContainsKey(ControlAction.StartStop);
-            var canRestart = startPedal || Ui.IsInteractive;
-            var wait = startPedal;
-            var inputs = TempoFrom(tapInput, clockInput) + (controlInput is null ? "" : $" · controls from {controlInput.Name}");
+            var following = followInput is not null;
+            var canRestart = startPedal || following || Ui.IsInteractive;
+            var wait = startPedal || following;
+            var inputs = TempoFrom(tapInput, clockInput, followInput) + (controlInput is null ? "" : $" · controls from {controlInput.Name}");
 
             for (var i = 0; i < songs.Length && !session.IsStopping;)
             {
                 if (wait)
                 {
                     live.Begin(null);
-                    var signal = WaitForStart(session, live, songs, i, policy, controlInput);
+                    if (following)
+                    {
+                        live.ListenForBeat(settings.Tempo ?? FileBpm(MidiFile.Read(songs[i]).GetTempoMap(), TimeSpan.Zero));
+                    }
+
+                    var signal = WaitForStart(session, live, songs, i, policy, controlInput, followInput);
                     if (signal is null)
                     {
                         break; // Ctrl+C
@@ -228,7 +263,7 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
                         i++;
                         break;
                     default:
-                        wait = startPedal;
+                        wait = startPedal || following;
                         i++;
                         break;
                 }
@@ -247,12 +282,16 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
     }
 
     /// <summary>Holds until start (pedal or Enter), next (skip) or Ctrl+C (null).</summary>
-    private static LiveSignal? WaitForStart(Session session, LiveControl live, string[] songs, int index, PolicyProfile policy, IMidiInputPort? controls)
+    private static LiveSignal? WaitForStart(Session session, LiveControl live, string[] songs, int index, PolicyProfile policy, IMidiInputPort? controls, IMidiInputPort? follow)
     {
         var song = SongTitle(songs, index);
         var how = controls is not null && policy.Controls.TryGetValue(ControlAction.StartStop, out var trigger)
             ? $"start pedal ({trigger} on {controls.Name})"
             : "Enter";
+        if (follow is not null)
+        {
+            how += $" or a count-in on {follow.Name}";
+        }
         if (!Ui.IsInteractive)
         {
             Console.WriteLine($"Ready: {song}. Waiting for {how}.");
@@ -308,12 +347,14 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
         var (clickChannel, clickNote) = settings.ClickNote;
         (timeline, var countIn) = CountIn.Prepend(timeline, settings.CountInBars, beat, beatsPerBar, clickChannel, clickNote);
         var sections = new SectionNavigator(scheduler, SongSections.Shift(SongSections.From(midiFile), countIn));
+        var beats = settings.Follow is null ? [] : SongBeats.WithCountIn(SongBeats.From(midiFile), settings.CountInBars * beatsPerBar, beat);
         scheduler.Jumped += (_, to) => session.Messages.Add(
             sections.Sections.FirstOrDefault(s => s.Start == to) is { } target ? $"→ {target.Name}" : "→ jump");
 
         // Start from silence. Also warms up every output's send path, so the first note isn't late.
         session.Orchestra.Panic();
-        scheduler.Start(timeline, startSpeed, Preroll);
+        var onTheBeat = live.StartSong(scheduler, timeline, beats, startSpeed, Preroll);
+        using var follower = settings.Follow is null ? null : new Timer(_ => live.Tick(), null, FollowTick, FollowTick);
         TimeSpan SongPosition() => scheduler.Position > countIn ? scheduler.Position - countIn : TimeSpan.Zero;
 
         using var loop = new SchedulerLoop(scheduler, clock);
@@ -344,7 +385,7 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
         {
             Console.WriteLine(string.Create(
                 CultureInfo.InvariantCulture,
-                $"Playing {song} to {session.OutputName} at {fileBpm * startSpeed:0.#} BPM, lookahead {scheduler.Lookahead.TotalMilliseconds:0.#} ms{Muted(settings)}{CountInNote(settings)}{inputs}. Ctrl+C to stop."));
+                $"Playing {song} to {session.OutputName} at {fileBpm * scheduler.Speed:0.#} BPM{(onTheBeat ? " on the player's beat" : "")}, lookahead {scheduler.Lookahead.TotalMilliseconds:0.#} ms{Muted(settings)}{CountInNote(settings)}{inputs}. Ctrl+C to stop."));
         }
 
         loop.Start();
@@ -355,8 +396,8 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
                 session,
                 LiveStatus.Progress(scheduler.Position, scheduler.Duration),
                 sections.Describe() is { } where
-                    ? new Rows(TempoLine(scheduler, FileBpm(tempoMap, SongPosition()), live.TempoSource), new Markup($"[grey]Section[/] {Markup.Escape(where)}"))
-                    : TempoLine(scheduler, FileBpm(tempoMap, SongPosition()), live.TempoSource),
+                    ? new Rows(TempoLine(scheduler, FileBpm(tempoMap, SongPosition()), TempoSource(live)), new Markup($"[grey]Section[/] {Markup.Escape(where)}"))
+                    : TempoLine(scheduler, FileBpm(tempoMap, SongPosition()), TempoSource(live)),
                 "Space tap · +/- tempo · 0 file tempo" + (sections.Sections.Count > 0 ? " · V vamp · O outro" : "")
                     + (songs.Length > 1 ? " · N next" : "") + " · Enter stop · Esc panic" + inputs),
             key =>
@@ -519,8 +560,28 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
             CultureInfo.InvariantCulture,
             $", {settings.CountInBars}-bar count-in on ch {settings.ClickNote.Channel + 1} note {settings.ClickNote.Note}");
 
-    private static string TempoFrom(IMidiInputPort? tap, IMidiInputPort? clock) =>
-        tap is not null ? $" · tap from {tap.Name}" : clock is not null ? $" · tempo from {clock.Name} (MIDI Clock)" : "";
+    private static string TempoFrom(IMidiInputPort? tap, IMidiInputPort? clock, IMidiInputPort? follow) =>
+        tap is not null ? $" · tap from {tap.Name}"
+        : clock is not null ? $" · tempo from {clock.Name} (MIDI Clock)"
+        : follow is not null ? $" · following {follow.Name}"
+        : "";
+
+    /// <summary>What sets the tempo, for the status line: "following, locked at 98.2" or the last tap/nudge.</summary>
+    private static string? TempoSource(LiveControl live) => live.Following switch
+    {
+        { State: BeatState.Listening } => "following, listening",
+        { State: var state, Bpm: { } bpm } => string.Create(CultureInfo.InvariantCulture, $"following, {state.ToString().ToLowerInvariant()} at {bpm:0.#}"),
+        _ => live.TempoSource,
+    };
+
+    /// <summary>Opens <c>--follow</c>: every message matching <c>--follow-on</c> is a hit.</summary>
+    internal static IMidiInputPort FollowInput(Settings settings, Action hit)
+    {
+        var input = PortPicker.Input(settings.Follow, "--follow");
+        Listen(input, settings.FollowTrigger, hit);
+        input.Start();
+        return input;
+    }
 
     private static string Muted(OutputSettings settings) =>
         settings.MutedChannels.Count > 0 ? $" (muted: {ChannelList.Format(settings.MutedChannels)})" : "";

@@ -123,6 +123,17 @@ Measured on macOS (`play --count-in 1` → `virtual`, demo song): four woodblock
 apart, the first accented, then the song on the next beat. Vamp and outro are tested on the
 virtual clock; they need keys in a terminal (foot controller mapping is next, Phase 2b).
 
+## Following a player without a drum kit
+
+The band can follow hits from any MIDI input ([beat following](beat-following.md)): a pad, an
+e-kit, or a script that sends notes to a virtual port.
+
+```bash
+metrodom beats "pads" --on note:38 --record groove.csv   # see what the tracker hears, save the hits
+metrodom simulate song.mid --follow groove.csv --notes    # replay them on the virtual clock
+metrodom play song.mid -o "MetroDom xylo" --follow "pads" # count the band in with 4 hits
+```
+
 ## Not yet (see [tech debt](../exec-plans/tech-debt-tracker.md))
 
 - Clock in follows tempo, not phase: the band can drift against the clock source by up to the

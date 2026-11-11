@@ -54,7 +54,7 @@ That is the first milestone of the [live band spec](../../product-specs/live-ban
 - [x] Seats: a human takes a role, arranger mutes it (generalize `--mute`): `--seat ROLE[=PLAYER]` on `play`/`simulate`/`arrange`
 - [x] Count-in on a chosen instrument. SMF marker sections. Vamp / jump to outro (`--count-in`, `--click`, V / O keys)
 - [x] Foot controller mapping in the live-band policy (start/stop, next, tap, vamp, panic): `play --control`, `policies/live-band.json`, setlists
-- [ ] Tempo tracker with beat prediction, tested with recorded human timings + fake clock
+- [x] Tempo tracker with beat prediction, tested with recorded human timings + fake clock: `BeatTracker`, `BeatFollower`, `play --follow`, `beats --record`, `simulate --follow` ([beat following](../../references/beat-following.md)). Real drum recordings wait for the triggers
 - [ ] Human-leads input from drum triggers (`trigger-piezo`)
 
 ### Phase 3: Control API v0
@@ -178,6 +178,21 @@ That is the first milestone of the [live band spec](../../product-specs/live-ban
   waits to restart the same song, since quitting mid-gig is worse than holding. Keys mirror every
   control. Measured with scripted pedals: start, next, panic, start all landed as expected.
   Limits: TD-25.
+
+- 2026-11-11: Beat tracker and follower (human leads). Two layers so each can be tested alone:
+  the tracker turns hits into predicted beats (an alpha-beta style filter: 50% phase, 20% tempo
+  per beat, tempo capped at 4% per beat), and the follower turns predicted beats into scheduler
+  speed (player tempo plus a phase correction capped at ±8%), measured on the first beat still
+  movable outside the lookahead. Speed, not jumps, so nothing sent is taken back and the band
+  never lurches. Locking picks beat / half / double time nearest the song's tempo, since a drummer
+  on eighths is the common case. Holding keeps extrapolating the grid, so a drummer returning on
+  the beat is counted at once; one returning off it relocks after 4 hits. With `--follow`, songs
+  wait for a count-in: the drummer starts the band, as in a real band. "Recorded human timings"
+  are a seeded model (Gaussian jitter, ramps, fills, breaks) plus a hit-file format and recorder
+  (`beats --record`), because real recordings need the M5 triggers; the same file replays in
+  `simulate --follow`. Measured: 0 ms on a steady player, median ≤ 15 ms at 12 ms σ jitter, and
+  live on CoreMIDI ports median 16.9 ms. A steady ramp lags ~18 ms (first-order tempo loop),
+  accepted for now. Limits: TD-26.
 
 ## Open questions
 - Target box model (ADR 0002).

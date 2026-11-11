@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Globalization;
 using Melanchall.DryWetMidi.Core;
+using Melanchall.DryWetMidi.Interaction;
 using MetroDom.Conductor.Cli;
 using MetroDom.Core.Arranging;
 using MetroDom.Core.Simulation;
@@ -50,6 +51,10 @@ internal sealed class SimulateCommand : Command<SimulateCommand.Settings>
         [Description("Let the arranger give each instrument the part it plays best (transposed, folded, thinned to fit), instead of routing by channel.")]
         public bool Arrange { get; init; }
 
+        [CommandOption("--follow <HITS>")]
+        [Description("Instead of the band report: let the band follow a player's recorded hits (a file from [bold]metrodom beats --record[/], one time in seconds per line) and report how close its beats land to theirs.")]
+        public string? Follow { get; init; }
+
         [CommandOption("--notes")]
         [Description("Also list every note as heard, with its offset.")]
         public bool ShowNotes { get; init; }
@@ -69,6 +74,19 @@ internal sealed class SimulateCommand : Command<SimulateCommand.Settings>
                 return ValidationResult.Error($"file not found: {Path}");
             }
 
+            if (Follow is not null)
+            {
+                if (!File.Exists(Follow))
+                {
+                    return ValidationResult.Error($"--follow: file not found: {Follow}");
+                }
+
+                if (!HitLog.TryParse(File.ReadAllText(Follow), out _, out var hitError))
+                {
+                    return ValidationResult.Error($"--follow: {hitError}");
+                }
+            }
+
             if (JitterMs is < 0 or > 1000)
             {
                 return ValidationResult.Error("--jitter must be between 0 and 1000 ms.");
@@ -86,6 +104,16 @@ internal sealed class SimulateCommand : Command<SimulateCommand.Settings>
         var midiFile = SeatList.Apply(settings.Path is null ? DemoSong.Create() : MidiFile.Read(settings.Path), settings.Seats, roles);
         var songName = settings.Path is null ? "built-in demo" : System.IO.Path.GetFileName(settings.Path);
         var band = settings.Band;
+        if (settings.Follow is { } follow)
+        {
+            var hits = HitLog.TryParse(File.ReadAllText(follow), out var parsed, out _) ? parsed : [];
+            var latency = band.Max(b => b.Latency);
+            var bpm = midiFile.GetTempoMap().GetTempoAtTime(new MidiTimeSpan(0)).BeatsPerMinute;
+            var followed = FollowSimulation.Run(hits, SongBeats.From(midiFile), bpm, new FollowOptions { Latency = latency });
+            ReportFollow(songName, System.IO.Path.GetFileName(follow), bpm, latency, hits.Count, followed, settings.ShowNotes);
+            return 0;
+        }
+
         var options = new SimulationOptions
         {
             Compensate = !settings.NoCompensation,
@@ -179,6 +207,58 @@ internal sealed class SimulateCommand : Command<SimulateCommand.Settings>
             inv,
             $"Worst spread between instruments meant to sound together: [{color} bold]{spread:0.#} ms[/] " +
             $"[grey]over {result.SharedMoments} shared moments (budget ≤ {budgetMs:0} ms, ADR 0004)[/]"));
+    }
+
+    private static void ReportFollow(string songName, string hitsName, double fileBpm, TimeSpan latency, int hitCount, FollowResult result, bool showBeats)
+    {
+        const int settle = 4;
+        var inv = CultureInfo.InvariantCulture;
+        var summary = new Grid().AddColumn(new GridColumn().PadRight(2)).AddColumn();
+        summary.AddRow("[grey]Song[/]", string.Create(inv, $"[bold]{Markup.Escape(songName)}[/] [grey](file {fileBpm:0.#} BPM)[/]"));
+        summary.AddRow("[grey]Player[/]", string.Create(inv, $"{Markup.Escape(hitsName)} [grey]({hitCount} hits)[/]"));
+        summary.AddRow("[grey]Band latency[/]", Ms(latency));
+        AnsiConsole.Write(summary);
+        AnsiConsole.WriteLine();
+
+        if (result.LockedAt is not { } locked)
+        {
+            AnsiConsole.MarkupLine("[yellow]Never locked on:[/] [grey]the tracker needs 4 hits at a steady interval to count the band in.[/]");
+            return;
+        }
+
+        AnsiConsole.MarkupLine(string.Create(inv, $"Counted in at {locked.TotalSeconds:0.00} s; the band played {result.Beats.Count} beats and ended {result.Final.State.ToString().ToLowerInvariant()} at {result.Final.Bpm:0.#} BPM."));
+        if (showBeats)
+        {
+            var table = new Table().Border(TableBorder.Simple)
+                .AddColumn(new TableColumn("Beat").RightAligned())
+                .AddColumn(new TableColumn("Band").RightAligned())
+                .AddColumn(new TableColumn("Player").RightAligned())
+                .AddColumn(new TableColumn("Band − player").RightAligned());
+            foreach (var beat in result.Beats)
+            {
+                table.AddRow(
+                    (beat.Index + 1).ToString(inv),
+                    string.Create(inv, $"{beat.Heard.TotalSeconds:0.000}"),
+                    beat.Hit is { } hit ? string.Create(inv, $"{hit.TotalSeconds:0.000}") : "[grey]-[/]",
+                    beat.Error is { } error ? Signed(error) : "[grey]no hit[/]");
+            }
+
+            AnsiConsole.Write(table);
+        }
+
+        var errors = result.Errors(settle).Select(e => e.Duration().TotalMilliseconds).Order().ToArray();
+        if (errors.Length == 0)
+        {
+            AnsiConsole.MarkupLine("[grey]No player hits near the band's beats after it settled, so nothing to compare.[/]");
+            return;
+        }
+
+        const double budgetMs = 20; // Audible flamming between a drummer and the band starts around here.
+        var p95 = errors[Math.Min(errors.Length - 1, (int)(errors.Length * 0.95))];
+        var color = p95 <= budgetMs ? "green" : "yellow";
+        AnsiConsole.MarkupLine(string.Create(
+            inv,
+            $"Band vs player after {settle} beats: median [bold]{errors[errors.Length / 2]:0.#} ms[/], 95% within [{color} bold]{p95:0.#} ms[/], worst {errors[^1]:0.#} ms [grey]over {errors.Length} beats with a hit[/]"));
     }
 
     private static string Ms(TimeSpan t) => string.Create(CultureInfo.InvariantCulture, $"{t.TotalMilliseconds:0.#} ms");

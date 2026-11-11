@@ -32,7 +32,8 @@ internal static class MetroDomApp
                 .WithDescription("Play a song to one or more outputs, each sent early by its latency. Tap or nudge the tempo live. Ctrl+C stops and sends panic.")
                 .WithExample("play", "song.mid", "--output", "0")
                 .WithExample("play", "song.mid", "-o", "fluid", "--mute", "10")
-                .WithExample("play", "song.mid", "-o", "\"MetroDom xylo=1-9,11-16@10\"", "-o", "\"MetroDom drums=10@35\"", "--tempo", "92");
+                .WithExample("play", "song.mid", "-o", "\"MetroDom xylo=1-9,11-16@10\"", "-o", "\"MetroDom drums=10@35\"", "--tempo", "92")
+                .WithExample("play", "song.mid", "-o", "0", "--follow", "\"e-kit\"", "--follow-on", "note:38");
             config.AddCommand<RouteCommand>("route")
                 .WithDescription("Route a live controller to an output. Ctrl+C stops and sends panic.")
                 .WithExample("route", "--input", "keystation", "--output", "1");
@@ -43,11 +44,15 @@ internal static class MetroDomApp
                 .WithDescription("Show each part's role (drums, bass, melody…) and where it came from. --set saves corrections next to the song.")
                 .WithExample("roles", "song.mid")
                 .WithExample("roles", "song.mid", "--set", "\"Lead Synth=melody\"", "--set", "#3=guitar");
+            config.AddCommand<BeatsCommand>("beats")
+                .WithDescription("Listen to a player (drum triggers, a pad) and show the tempo and beats MetroDom hears. --record saves the hits for simulate --follow.")
+                .WithExample("beats", "\"e-kit\"", "--on", "note:38", "--record", "groove.csv");
             config.AddCommand<SimulateCommand>("simulate")
                 .WithDescription("Play a song to virtual instruments on a virtual clock and report how well they line up. No devices needed.")
                 .WithExample("simulate")
                 .WithExample("simulate", "song.mid", "-i", "xylo=1@10", "-i", "drums=10@35", "--jitter", "2")
                 .WithExample("simulate", "--no-compensation")
+                .WithExample("simulate", "song.mid", "--follow", "groove.csv")
                 .WithExample("simulate", "song.mid", "--arrange", "-i", "xylo=1@10/60,64,67", "-i", "drums=10@35/36,38");
             config.AddCommand<VirtualCommand>("virtual")
                 .WithDescription("Create virtual instruments as OS MIDI ports (Linux, macOS) that play, a DAW or a keyboard can send to.")

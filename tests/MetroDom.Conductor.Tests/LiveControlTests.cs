@@ -148,6 +148,72 @@ public sealed class LiveControlTests : IDisposable
         }
     }
 
+    [Fact]
+    public void Following_CountInWhileWaiting_StartsTheSong()
+    {
+        _live.Begin(null);
+        _live.ListenForBeat(120);
+        for (var i = 0; i < 3; i++)
+        {
+            _live.Beat();
+            Assert.False(_live.Done.IsSet);
+            _clock.Advance(TimeSpan.FromMilliseconds(500));
+        }
+
+        _live.Beat();
+        Assert.Equal(LiveSignal.Start, _live.Signal);
+        Assert.Equal((BeatState.Locked, 120.0), (_live.Following!.Value.State, Math.Round(_live.Following!.Value.Bpm!.Value, 6)));
+    }
+
+    [Fact]
+    public void Following_StartsTheSongOnThePlayersBeat_AndFollowsThem()
+    {
+        _live.Begin(null);
+        _live.ListenForBeat(120);
+        for (var i = 0; i < 4; i++)
+        {
+            _clock.Advance(TimeSpan.FromMilliseconds(600)); // 100 BPM, song at 120.
+            _live.Beat();
+        }
+
+        var lastHit = _clock.Now;
+        var scheduler = new LatencyScheduler(_session.Orchestra, _clock, _session.Profiles);
+        var notes = Enumerable.Range(0, 16).Select(i => new TimedMidiEvent(TimeSpan.FromMilliseconds(500 * i), new NoteOnEvent((SevenBitNumber)60, (SevenBitNumber)100))).ToArray();
+        var beats = notes.Select(n => n.At).ToArray();
+        _clock.Advance(TimeSpan.FromMilliseconds(100));
+        Assert.True(_live.StartSong(scheduler, notes, beats, 1, TimeSpan.FromMilliseconds(250)));
+        Assert.Equal(500.0 / 600, scheduler.Speed, 6);
+        Assert.Equal(lastHit + TimeSpan.FromMilliseconds(600), scheduler.SoundTime(TimeSpan.Zero));
+
+        _live.Begin(new ActiveSong(scheduler, new SectionNavigator(scheduler, []), (_, _) => { }, () => { }));
+        _clock.Advance(TimeSpan.FromMilliseconds(480)); // The player's next beat, 20 ms early: the band is late.
+        _live.Beat();
+        Assert.True(scheduler.Speed > 500.0 / 600);
+
+        _live.Begin(null);
+        var speed = scheduler.Speed;
+        _clock.Advance(TimeSpan.FromMilliseconds(600));
+        _live.Tick(); // The song ended: no more following.
+        Assert.Equal(speed, scheduler.Speed);
+    }
+
+    [Fact]
+    public void NotFollowing_StartSongStartsAsAsked_AndBeatsAreIgnored()
+    {
+        var scheduler = new LatencyScheduler(_session.Orchestra, _clock, _session.Profiles);
+        Assert.False(_live.StartSong(scheduler, [new(TimeSpan.Zero, new NoteOnEvent())], [], 1.5, TimeSpan.Zero));
+        Assert.Equal(1.5, scheduler.Speed);
+        _live.Begin(null);
+        for (var i = 0; i < 6; i++)
+        {
+            _live.Beat();
+            _clock.Advance(TimeSpan.FromMilliseconds(500));
+        }
+
+        Assert.False(_live.Done.IsSet);
+        Assert.Null(_live.Following);
+    }
+
     private sealed class Port : IMidiOutputPort
     {
         public string Name => "band";

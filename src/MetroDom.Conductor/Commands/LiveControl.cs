@@ -44,6 +44,8 @@ internal sealed class LiveControl(Session session, IClock clock) : IDisposable
     private ActiveSong? _active;
     private LiveSignal? _signal;
     private double? _pendingBpm;
+    private BeatTracker? _tracker;
+    private BeatFollower? _follower;
 
     public IClock Clock => clock;
 
@@ -71,6 +73,11 @@ internal sealed class LiveControl(Session session, IClock clock) : IDisposable
         lock (_gate)
         {
             _active = song;
+            if (song is null)
+            {
+                _follower = null;
+            }
+
             _signal = null;
             _done.Reset();
         }
@@ -177,6 +184,100 @@ internal sealed class LiveControl(Session session, IClock clock) : IDisposable
                 End(LiveSignal.Panic);
                 break;
         }
+    }
+
+    /// <summary>
+    /// Starts listening for a player's beat (<c>--follow</c>) from scratch, expecting about
+    /// <paramref name="expectedBpm"/>. While waiting, the band starts when the player has counted in.
+    /// </summary>
+    public void ListenForBeat(double? expectedBpm)
+    {
+        lock (_gate)
+        {
+            _tracker = new BeatTracker(expectedBpm);
+        }
+    }
+
+    /// <summary>What the beat tracker knows, for the status line, or null when not following.</summary>
+    public (BeatState State, double? Bpm)? Following
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _tracker is null ? null : (_tracker.State, _tracker.Bpm);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Starts <paramref name="song"/> on <paramref name="scheduler"/>: on the player's beat and at
+    /// their tempo when following and locked, otherwise at <paramref name="speed"/>. When following,
+    /// the band then follows the player (<see cref="Beat"/>, <see cref="Tick"/>). Returns whether it started on the beat.
+    /// </summary>
+    public bool StartSong(LatencyScheduler scheduler, IReadOnlyList<TimedMidiEvent> song, IReadOnlyList<TimeSpan> beats, double speed, TimeSpan preroll)
+    {
+        lock (_gate)
+        {
+            _follower = _tracker is not null && beats.Count >= 2 ? new BeatFollower(scheduler, beats, _tracker) : null;
+            if (_follower?.StartAligned(song, clock.Now) == true)
+            {
+                return true;
+            }
+
+            scheduler.Start(song, speed, preroll);
+            return false;
+        }
+    }
+
+    /// <summary>One hit from the followed player (a drum trigger, a pad).</summary>
+    public void Beat()
+    {
+        bool countedIn;
+        bool moved;
+        ActiveSong? active;
+        double? bpm;
+        lock (_gate)
+        {
+            if (_tracker is null)
+            {
+                return;
+            }
+
+            var listening = _tracker.State == BeatState.Listening;
+            var counted = _tracker.Hit(clock.Now);
+            countedIn = listening && _tracker.State == BeatState.Locked;
+            bpm = _tracker.Bpm;
+            active = _active;
+            moved = counted && _follower?.Update(clock.Now) is not null;
+        }
+
+        if (active is null && countedIn)
+        {
+            session.Messages.Add(FormattableString.Invariant($"Counted in at {bpm:0.#} BPM."));
+            End(LiveSignal.Start);
+        }
+        else if (moved)
+        {
+            active?.Wake();
+        }
+    }
+
+    /// <summary>Re-aims the band between hits, and notices when the player stopped. Call every ~50 ms while following.</summary>
+    public void Tick()
+    {
+        ActiveSong? active;
+        lock (_gate)
+        {
+            if (_follower?.Update(clock.Now) is null)
+            {
+                return;
+            }
+
+            active = _active;
+        }
+
+        active?.Wake();
     }
 
     public void Dispose() => _done.Dispose();

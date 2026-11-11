@@ -27,6 +27,8 @@ All of this runs on Linux, macOS or Windows, with no hardware needed.
   repeat faster than the instrument can.
 - **Let a human set the tempo.** Start at any tempo, tap it on the keyboard or a MIDI foot pedal,
   nudge it up or down, or follow MIDI Clock from a drum machine.
+- **Follow a drummer.** Play hits into any MIDI input (pads, an e-kit) and the band locks onto
+  your tempo and beat, starts when you count it in, and holds steady through fills and breaks.
 - **Play along.** Take a seat (`--seat guitar=Dom`) and the band leaves that part out. Parts are
   tagged drums, bass, melody and so on from track names and General MIDI, and you can correct and
   save them per song.
@@ -54,8 +56,8 @@ From the [roadmap](docs/ROADMAP.md), roughly in order. Each step is small, cheap
 - **Lights.** LED strips and accents that flash with the notes, driven from the same timeline.
 - **A home band.** A full xylophone and drum pieces, setlists, a phone panic button, and regular
   play-along sessions.
-- **Follow the drummer.** Triggers on an acoustic kit, so the robots follow a human drummer's
-  tempo instead of the other way round.
+- **Follow the drummer on a real kit.** Piezo triggers on an acoustic kit feeding the beat
+  follower, tuned on the owner's own recorded drumming.
 - **New instruments, one at a time.** Electric guitar, a piano octave, acoustic guitar, and
   research into trumpet, kick drum and stage lighting.
 - **A party jukebox.** A matrix display and a QR code so guests can queue songs.

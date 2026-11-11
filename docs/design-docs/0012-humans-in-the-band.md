@@ -79,6 +79,6 @@ start/stop · next song · tap tempo · **vamp** (repeat the current section unt
 
 ## Open questions
 - Role vocabulary: a fixed list or free-form tags? Draft: fixed list for detection, any one word in a saved mapping ([song roles](../references/song-roles.md)).
-- How fast should the band follow a tempo change (beats to converge) without sounding nervous?
+- How fast should the band follow a tempo change (beats to converge) without sounding nervous? Draft: phase error halves every beat, tempo moves ≤ 4% per beat, band correction ≤ 8% ([beat following](../references/beat-following.md)); retune with the owner's real drumming
 - Can a robot share the drum kit with the human (e.g. robot on a cymbal while the human plays
   the rest), or are kits strictly one or the other?
