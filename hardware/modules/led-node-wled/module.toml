@@ -1,0 +1,7 @@
+id = "led-node-wled"
+name = "Wired WLED LED node (ESP32)"
+revision = "A"
+status = "planned"   # planned | prototype | proven | deprecated
+job = "light"
+interfaces = ["ethernet", "led-3p", "rail-5v-led", "mains-iec"]
+fabrication = ["solder", "3d-print-fdm"]

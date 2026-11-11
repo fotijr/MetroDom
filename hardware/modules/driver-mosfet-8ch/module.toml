@@ -4,3 +4,4 @@ revision = "A"
 status = "planned"   # planned | prototype | proven | deprecated
 job = "drive"
 interfaces = ["rail-12v", "act-2p"]
+fabrication = ["solder"]

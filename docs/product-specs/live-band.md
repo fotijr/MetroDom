@@ -16,6 +16,7 @@ click.
 - Instrument health at a glance (connected, latency calibrated, overheating).
 
 ## Nice to have
+- Light show synced to the band: reactive by default, pads trigger scenes live ([ADR 0011](../design-docs/0011-visuals-are-part-of-the-band.md)).
 - Follow a live human drummer or bassist via audio onset detection.
 - Humanize: velocity and timing variation per instrument.
 

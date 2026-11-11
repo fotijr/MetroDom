@@ -15,7 +15,7 @@ or upvote the next song. The venue owner sets rules and can override anything.
 
 ## Nice to have
 - Paid priority requests (needs payments + cloud; out of scope until rental works).
-- Big-screen "now playing / up next" view.
+- Big-screen "now playing / up next" view, plus an LED matrix with the join QR code ([ADR 0011](../design-docs/0011-visuals-are-part-of-the-band.md)).
 
 ## Risks
 - Untrusted input at scale. See [SECURITY.md](../SECURITY.md).

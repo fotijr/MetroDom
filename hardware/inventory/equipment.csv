@@ -1,0 +1,2 @@
+id,name,category,role,specs,location,state,notes
+air-compressor-5gal,5 gallon air compressor,pneumatic,shop,"tank 5 gal; fill in: max PSI, CFM @ 90 PSI, noise dB, oil-free?",,working,"Candidate air source for pneumatic actuators or wind instruments. Becomes role show if an instrument depends on it at gigs"

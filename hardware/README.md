@@ -12,6 +12,8 @@ hardware/
   inventory/stock.csv    what's physically on the shelf, how many, which bin
   modules/<id>/          reusable assemblies: module.toml, bom.csv, README.md, cad/
   builds/<serial>.md     one record per physical unit built (labelled MD-…-NNN)
+  inventory/equipment.csv  tools and machines we own: not consumed by builds
+  fabrication/           who can make what (library printer, online…) + batched job queue
 Instruments/<name>/instrument.toml   which modules an instrument is made of
 ```
 
@@ -21,6 +23,9 @@ Instruments/<name>/instrument.toml   which modules an instrument is made of
 | --- | --- |
 | Package registry | `parts/catalog.csv` |
 | Local cache / `node_modules` | `inventory/stock.csv` |
+| Dev machines and infrastructure | `inventory/equipment.csv` |
+| Build farm / CI runners | [fabrication/capabilities.csv](fabrication/README.md) |
+| Job queue | `fabrication/queue.csv` |
 | Library with a public API | Module (`modules/<id>/`) |
 | Interface / type signature | Connector standard in [interfaces.md](interfaces.md) |
 | `package.json` dependencies | `bom.csv` |
@@ -43,9 +48,24 @@ flowchart LR
   driver -- act-2p --> s2[striker-solenoid]
   driver -- act-2p --> d1[damper-solenoid]
   s1 & s2 & d1 -- mount-2020 --> frame[frame-2020]
+  frame -- case-600 --> case[case-road]
+  head[rig-head<br/>rack: Conductor, kill switch] -. usb-midi + power .- case
+  brain -- led-3p --> accent[led-accent]
+  head -- ethernet / sACN --> lights[led-node-wled · dmx-node · matrix-hub75]
 ```
 
-Only `frame-2020` tips, layout and the profile change between percussion instruments.
+Only the frame, tips, layout and profile change between percussion instruments.
+
+## Parts, equipment or fabrication?
+| If it… | It goes in |
+| --- | --- |
+| gets built into something (consumed by a BOM) | `parts/catalog.csv` + `inventory/stock.csv` |
+| is used to build, test or run things but isn't consumed (compressor, bench supply, multimeter) | `inventory/equipment.csv` |
+| is a *service or place* that makes parts (library printer, online print shop, extrusion cutting) | `fabrication/capabilities.csv` |
+
+A power supply can be either: the 12 V brick bolted inside a case is a **part**, the bench supply
+on your desk is **equipment**. Equipment `role` is `shop` (stays home), `show` (travels to gigs)
+or `both`. An instrument that needs equipment at a gig lists it in `requires_equipment`.
 
 ## Everyday workflows
 
@@ -55,6 +75,10 @@ Only `frame-2020` tips, layout and the profile change between percussion instrum
 - **New module:** copy `modules/_template/`, give it an id, list interfaces from
   [interfaces.md](interfaces.md), fill the BOM with catalog ids.
 - **Can I build it?** `python3 scripts/check_hardware.py --buildable` joins every BOM with stock.
+- **Going to the library / placing an order?** `python3 scripts/check_hardware.py --fab-queue`
+  lists queued jobs by process. See [fabrication/](fabrication/README.md).
+- **Designing anything physical?** It must fit a road case and survive the drive:
+  [ADR 0010](../docs/design-docs/0010-road-ready-instruments.md).
 
 Always run `python3 scripts/check_hardware.py` before committing hardware changes.
 
@@ -71,7 +95,7 @@ What a beginner needs before Phase H1. Buy decent versions of the first four. Th
 | Wire strippers, flush cutters, JST crimp tool + kits (XH, SH) | Making the standard connectors in [interfaces.md](interfaces.md) |
 | Breadboard + jumper wires | Phase H1 experiments |
 | Assorted flyback diodes, logic-level MOSFETs, resistors, fuses | They are cheap and you will burn some |
-| 3D printer access | Brackets, mallet tips, adapter plates |
+| 3D printer access (library, friend, online: see [fabrication/](fabrication/README.md)) | Brackets, mallet tips, adapter plates |
 | Optional: cheap USB logic analyzer | See I²C and pulse timing when something is "almost working" |
 
 ## Beginner safety rules

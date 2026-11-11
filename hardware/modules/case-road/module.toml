@@ -1,0 +1,7 @@
+id = "case-road"
+name = "Road case with connector panel"
+revision = "A"
+status = "planned"   # planned | prototype | proven | deprecated
+job = "transport"
+interfaces = ["case-600", "mains-iec", "usb-midi"]
+fabrication = ["drill"]

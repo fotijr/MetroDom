@@ -4,3 +4,4 @@ revision = "A"
 status = "planned"   # planned | prototype | proven | deprecated
 job = "frame"
 interfaces = ["mount-2020"]
+fabrication = ["extrusion-cut", "drill", "3d-print-fdm"]

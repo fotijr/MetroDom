@@ -9,8 +9,13 @@ Checks the records under hardware/ and Instruments/*/instrument.toml:
      and interfaces defined in hardware/interfaces.md. Non-planned modules need README + BOM.
   4. Instruments reference existing modules.
   5. Build records (builds/MD-*.md) name an existing module or instrument.
+  6. inventory/equipment.csv ids are unique slugs with a known role. Instruments'
+     `requires_equipment` reference them.
+  7. Module `fabrication` processes and fabrication/queue.csv rows use processes from
+     fabrication/capabilities.csv. Queue rows reference existing modules and a known status.
 
   --buildable   also print how many of each module current stock can build.
+  --fab-queue   also print open fabrication jobs grouped by process, with providers.
 
 Stdlib only. Exit code 1 on any failure.
 """
@@ -26,6 +31,8 @@ ROOT = Path(__file__).resolve().parent.parent
 HW = ROOT / "hardware"
 SLUG = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 STATUSES = {"planned", "prototype", "proven", "deprecated"}
+EQUIPMENT_ROLES = {"shop", "show", "both"}
+QUEUE_STATUSES = {"queued", "batched", "done", "cancelled"}
 MODULE_KEYS = ("id", "name", "revision", "status", "job", "interfaces")
 
 
@@ -82,6 +89,20 @@ def main() -> int:
         except ValueError:
             errors.append(f"hardware/inventory/stock.csv:{i}: qty '{row['qty']}' is not an integer")
 
+    equipment: set[str] = set()
+    eq_path = HW / "inventory" / "equipment.csv"
+    for i, row in enumerate(read_csv(eq_path, ("id", "name", "role"), errors), start=2):
+        if not SLUG.match(row["id"]) or row["id"] in equipment:
+            errors.append(f"{rel(eq_path)}:{i}: id '{row['id']}' must be a unique lowercase slug")
+        if row["role"] not in EQUIPMENT_ROLES:
+            errors.append(f"{rel(eq_path)}:{i}: role must be one of {sorted(EQUIPMENT_ROLES)}")
+        equipment.add(row["id"])
+
+    fab_dir = HW / "fabrication"
+    providers: dict[str, list[str]] = {}
+    for row in read_csv(fab_dir / "capabilities.csv", ("id", "process", "provider"), errors):
+        providers.setdefault(row["process"], []).append(row["id"])
+
     known_ifaces = interface_ids()
     modules: dict[str, dict] = {}
     boms: dict[str, list[dict[str, str]]] = {}
@@ -103,6 +124,9 @@ def main() -> int:
         for iface in m.get("interfaces", []):
             if iface not in known_ifaces:
                 errors.append(f"{rel(manifest)}: interface '{iface}' not in hardware/interfaces.md")
+        for proc in m.get("fabrication", []):
+            if proc not in providers:
+                errors.append(f"{rel(manifest)}: fabrication process '{proc}' not in capabilities.csv")
         modules[mdir.name] = m
 
         bom_path = mdir / "bom.csv"
@@ -129,6 +153,19 @@ def main() -> int:
         for entry in inst.get("modules", []):
             if entry.get("id") not in modules:
                 errors.append(f"{rel(manifest)}: unknown module '{entry.get('id')}'")
+        for eq in inst.get("requires_equipment", []):
+            if eq not in equipment:
+                errors.append(f"{rel(manifest)}: unknown equipment '{eq}'")
+
+    queue_path = fab_dir / "queue.csv"
+    queue = read_csv(queue_path, ("id", "item", "module", "process", "qty", "status"), errors)
+    for i, row in enumerate(queue, start=2):
+        if row["process"] not in providers:
+            errors.append(f"{rel(queue_path)}:{i}: unknown process '{row['process']}'")
+        if row["module"] and row["module"] not in modules:
+            errors.append(f"{rel(queue_path)}:{i}: unknown module '{row['module']}'")
+        if row["status"] not in QUEUE_STATUSES:
+            errors.append(f"{rel(queue_path)}:{i}: status must be one of {sorted(QUEUE_STATUSES)}")
 
     targets = {i.upper() for i in modules} | {i.upper() for i in instruments}
     for build in sorted((HW / "builds").glob("MD-*.md")):
@@ -153,13 +190,25 @@ def main() -> int:
                      for pid, qty in need if stock.get(pid, 0) < qty]
             print(f"  {mid}: {n}" + (f"   short: {', '.join(short)}" if n == 0 else ""))
 
+    if "--fab-queue" in sys.argv:
+        open_jobs = [r for r in queue if r["status"] in ("queued", "batched")]
+        print(f"Open fabrication jobs: {len(open_jobs)}")
+        for proc in sorted({r["process"] for r in open_jobs}):
+            print(f"  {proc}  (providers: {', '.join(providers.get(proc, [])) or 'none'})")
+            for r in open_jobs:
+                if r["process"] == proc:
+                    batch = f" [{r['batch']}]" if r.get("batch") else ""
+                    print(f"    {r['qty']} x {r['item']} ({r['module']}, {r.get('material') or '?'}) "
+                          f"{r['status']}{batch}")
+
     if errors:
         print(f"check_hardware: {len(errors)} problem(s)")
         for e in errors:
             print(f"  - {e}")
         return 1
     print(f"check_hardware: OK ({len(parts)} parts, {len(modules)} modules, "
-          f"{len(instruments)} instrument manifest(s))")
+          f"{len(instruments)} instrument manifest(s), {len(equipment)} equipment, "
+          f"{len(queue)} fab job(s))")
     return 0
 
 

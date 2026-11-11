@@ -58,6 +58,7 @@ Components:
 | Transport & tempo  | Play/pause/seek. Tempo comes from a human: tap, MIDI clock in, live player   |
 | Scheduler          | Send each note early by that instrument's latency so the sound lands on time |
 | Safety governor    | Panic/all-notes-off, rate and duty limits, volume/curfew caps                |
+| Lights (planned)   | Light profiles, reactive mode, sACN/Art-Net output ([ADR 0011](docs/design-docs/0011-visuals-are-part-of-the-band.md)) |
 | Queue / setlist    | Ordered upcoming songs. Requests and votes feed in, subject to policy        |
 | Session & policy   | Roles (owner, operator, guest), deployment-mode profile, rate limits         |
 | Control API        | The single front door for every non-MIDI client                              |

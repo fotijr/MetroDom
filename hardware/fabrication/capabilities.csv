@@ -1,0 +1,8 @@
+id,process,provider,access,cost_model,turnaround,constraints,notes
+fdm-library,3d-print-fdm,Public library,"book a slot, in person",fill in,same visit or next visit,"fill in: build volume, materials (PLA only?), max print hours, file format","Batch parts to fill each visit"
+fdm-friend,3d-print-fdm,Friend's printer,ask,filament cost,days,"fill in: build volume, materials","Best for PETG/ASA if library is PLA only"
+print-online,3d-print-fdm,Online print service,order,per part + shipping,1-2 weeks,"Any material incl. PETG/ASA/nylon","Batch to clear free-shipping or minimum order"
+print-online-sla,3d-print-sla,Online print service,order,per part + shipping,1-2 weeks,"Resin: fine detail, brittle","Small precise parts only"
+extrusion-cut-online,extrusion-cut,Extrusion vendor,order,per cut + shipping,1 week,"2020 cut to length, optional tapped ends","Avoids buying a saw. Batch all frame cuts per instrument"
+home-bench,solder,Home bench,always,consumables,immediate,"needs starter tool kit",
+home-bench-drill,drill,Home bench,always,consumables,immediate,"hand drill; no drill press yet",

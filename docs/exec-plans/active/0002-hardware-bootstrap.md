@@ -14,6 +14,8 @@ instrument needs only a new frame, profile and `instrument.toml`.
 - Safety rules every step must respect: [RELIABILITY.md](../../RELIABILITY.md)
 - Firmware side of the same work: [exec plan 0001](0001-foundation-reboot.md), Phase 1
 - Where things are stored: [hardware/README.md](../../../hardware/README.md)
+- Transport and setup constraints: [ADR 0010](../../design-docs/0010-road-ready-instruments.md)
+- Making parts without owning a printer: [fabrication](../../../hardware/fabrication/README.md)
 
 Principle: **learn on one channel, then copy it.** Each phase produces a module that later
 phases reuse, and each phase leaves a build record and updated inventory behind.
@@ -24,7 +26,9 @@ phases reuse, and each phase leaves a build record and updated inventory behind.
 - [x] `hardware/` layout, catalog, inventory, interfaces, module template, checker in CI
 - [ ] Buy the starter tool kit (see [hardware/README.md](../../../hardware/README.md#starter-tool-kit))
 - [ ] Inventory what's already in the drawer (old xylophone parts) into `stock.csv`
-- [ ] Owner decides 12 V vs 24 V rail and accepts/edits ADR 0008 and 0009
+- [x] Equipment list (`equipment.csv`) and fabrication capabilities/queue
+- [ ] Fill in the library printer's specs (build volume, materials, time limit) and compressor specs
+- [ ] Owner decides 12 V vs 24 V rail and accepts/edits ADR 0008, 0009 and 0010
 
 ### Phase H1: One solenoid, on a breadboard (learn the physics)
 Teaches: logic vs power rails, common ground, MOSFET low-side switching, flyback diodes,
@@ -43,6 +47,8 @@ current limits, why a stuck-on solenoid gets hot.
 ### Phase H3: `striker-solenoid` rev A (mechanics)
 - [ ] OpenSCAD bracket that bolts to `mount-2020` and holds the solenoid at adjustable height
 - [ ] Mallet tip options (rubber, felt, plastic) as swappable printed parts
+- [ ] One test print at the library, then batch the rest (PETG/ASA for the final parts)
+- [ ] Transport lock that pins the plunger for travel
 - [ ] Bench test: consistent strike at 8 strikes/s for 60 s without overheating
 - [ ] Build three: `MD-STRIKER-SOLENOID-001..003`
 
@@ -55,11 +61,17 @@ current limits, why a stuck-on solenoid gets hot.
 - [ ] Xylophone frame on 2020 extrusion, 3 → 8 notes using striker rev A
 - [ ] `Instruments/xylophone_solenoid/instrument.toml` lists its modules
 - [ ] Plays a song from `metrodom play` (ties into exec plan 0001)
+- [ ] Mounted in a `case-road` (600 × 600) with a power + USB panel
+
+### Phase H5b: Road test
+- [ ] Load into a vehicle, drive 30+ minutes, unload, set up alone. Time truck → first note
+- [ ] Record what came loose or went out of adjustment. Fix it in the modules, bump revisions
 
 ### Phase H6: Second instrument from the same modules
 Candidates (all reuse `striker-solenoid`): glockenspiel, tuned bells, a small drum kit
 (snare, cowbell, woodblock). Pick the cheapest one that sounds good.
-- [ ] Only new hardware: frame and tips. Anything else new is a finding: write it down
+- [ ] Only new hardware: frame, tips and case. Anything else new is a finding: write it down
+- [ ] `rig-head` rack case once there are two instruments to cable together
 - [ ] Retrospective: what had to change in the modules? Bump revisions accordingly
 
 ### Phase H7 (later): PCB and harnesses
@@ -71,8 +83,14 @@ Candidates (all reuse `striker-solenoid`): glockenspiel, tuned bells, a small dr
   composed of shared modules with fixed connector standards (ADR 0009). Learning path starts
   with one solenoid on a breadboard.
 
+- 2026-11-10: Inventory split into parts (consumed by builds), equipment (not consumed) and
+  fabrication capabilities (who can make what). No printer owned, so print jobs are queued and
+  batched per library trip or online order. Instruments are road-ready by design: case is the
+  stand, 600 mm footprint grid, two connections per case, head rack (ADR 0010).
+
 ## Open questions
 - 12 V vs 24 V default actuator rail (ADR 0009).
 - Perfboard vs straight-to-PCB for `body-backplane`.
 - Which second instrument (H6).
 - Budget ceiling for the starter tool kit.
+- Buy road cases or build plywood crates? Which vehicle sets the case grid? (ADR 0010)

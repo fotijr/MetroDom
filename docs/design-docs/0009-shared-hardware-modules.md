@@ -26,6 +26,8 @@ connectors, voltages and mounting pattern. Fix those early and modules become sw
 | Actuate | `presser-solenoid` | Same solenoid, pusher tip instead of mallet | Keyboard keys, buttons |
 | Actuate | `damper-solenoid` | Same solenoid, felt pad that mutes a bar or string | Vibraphone, strings |
 | Frame | `frame-2020` | 2020 aluminium extrusion + printed adapter plates on a 20 mm grid | Every instrument |
+| Transport | `case-road` | Road case, connector panel, transport locks ([ADR 0010](0010-road-ready-instruments.md)) | Every instrument |
+| Transport | `rig-head` | 19" rack: Conductor, power strip, hub, master kill | Every rig |
 | Measure | `latency-jig` | Piezo/mic on a Pico that times command → sound onset | Filling every profile's `latencyMs` |
 
 Rule of thumb: **one actuator family, many tips.** A solenoid striker, presser and damper share

@@ -2,5 +2,6 @@ id = "my-module"          # lowercase slug, same as the folder name, never renam
 name = "Human readable name"
 revision = "A"            # bump when interfaces or BOM change (breaking change)
 status = "planned"        # planned | prototype | proven | deprecated
-job = "strike"            # brain | body logic | power | drive | strike | press | pluck | damp | frame | measure
+job = "strike"            # brain | body logic | power | drive | strike | press | pluck | damp | frame | measure | transport | light | display
 interfaces = ["act-2p", "mount-2020"]   # ids from hardware/interfaces.md only
+fabrication = ["3d-print-fdm"]          # processes from hardware/fabrication/capabilities.csv (optional)
