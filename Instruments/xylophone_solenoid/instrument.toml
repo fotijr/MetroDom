@@ -3,6 +3,7 @@
 id = "xylophone-solenoid"
 name = "Xylophone (solenoid)"
 status = "planned"
+plays = "xylophone"        # id in hardware/inventory/musical-instruments.csv
 requires_equipment = []   # ids from hardware/inventory/equipment.csv that must travel with it (e.g. a compressor)
 
 [[modules]]

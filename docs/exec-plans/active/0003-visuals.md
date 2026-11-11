@@ -11,6 +11,7 @@ any time. Measured by: one person sets up lights inside the 20-minute setup budg
 the alignment budget in [RELIABILITY.md](../../RELIABILITY.md).
 
 ## Context
+- Sequenced by the [roadmap](../../ROADMAP.md): build in milestone order, not phase order
 - Decision: [ADR 0011](../../design-docs/0011-visuals-are-part-of-the-band.md)
 - Standards primer (start here if lighting is new): [lighting essentials](../../references/lighting-essentials.md)
 - Hardware records and modules: [hardware/README.md](../../../hardware/README.md)

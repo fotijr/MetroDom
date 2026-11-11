@@ -13,6 +13,7 @@ Checks the records under hardware/ and Instruments/*/instrument.toml:
      `requires_equipment` reference them.
   7. Module `fabrication` processes and fabrication/queue.csv rows use processes from
      fabrication/capabilities.csv. Queue rows reference existing modules and a known status.
+  8. inventory/musical-instruments.csv ids are unique slugs; instruments' `plays` references one.
 
   --buildable   also print how many of each module current stock can build.
   --fab-queue   also print open fabrication jobs grouped by process, with providers.
@@ -98,6 +99,13 @@ def main() -> int:
             errors.append(f"{rel(eq_path)}:{i}: role must be one of {sorted(EQUIPMENT_ROLES)}")
         equipment.add(row["id"])
 
+    acoustic: set[str] = set()
+    mi_path = HW / "inventory" / "musical-instruments.csv"
+    for i, row in enumerate(read_csv(mi_path, ("id", "name", "jobs", "metrodom_fit"), errors), start=2):
+        if not SLUG.match(row["id"]) or row["id"] in acoustic:
+            errors.append(f"{rel(mi_path)}:{i}: id '{row['id']}' must be a unique lowercase slug")
+        acoustic.add(row["id"])
+
     fab_dir = HW / "fabrication"
     providers: dict[str, list[str]] = {}
     for row in read_csv(fab_dir / "capabilities.csv", ("id", "process", "provider"), errors):
@@ -153,6 +161,8 @@ def main() -> int:
         for entry in inst.get("modules", []):
             if entry.get("id") not in modules:
                 errors.append(f"{rel(manifest)}: unknown module '{entry.get('id')}'")
+        if "plays" in inst and inst["plays"] not in acoustic:
+            errors.append(f"{rel(manifest)}: plays '{inst['plays']}' not in musical-instruments.csv")
         for eq in inst.get("requires_equipment", []):
             if eq not in equipment:
                 errors.append(f"{rel(manifest)}: unknown equipment '{eq}'")

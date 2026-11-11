@@ -10,6 +10,7 @@ for a **second, different instrument** with no new electronics design. Measured 
 instrument needs only a new frame, profile and `instrument.toml`.
 
 ## Context
+- Sequenced by the [roadmap](../../ROADMAP.md): build in milestone order, not phase order
 - Brain/body split: [ADR 0006](../../design-docs/0006-swappable-instrument-brains.md)
 - Safety rules every step must respect: [RELIABILITY.md](../../RELIABILITY.md)
 - Firmware side of the same work: [exec plan 0001](0001-foundation-reboot.md), Phase 1
@@ -68,8 +69,8 @@ current limits, why a stuck-on solenoid gets hot.
 - [ ] Record what came loose or went out of adjustment. Fix it in the modules, bump revisions
 
 ### Phase H6: Second instrument from the same modules
-Candidates (all reuse `striker-solenoid`): glockenspiel, tuned bells, a small drum kit
-(snare, cowbell, woodblock). Pick the cheapest one that sounds good.
+Use the owner's drum set (snare first, plus a cowbell or woodblock): see
+[musical-instruments.csv](../../../hardware/inventory/musical-instruments.csv). Roadmap M2.
 - [ ] Only new hardware: frame, tips and case. Anything else new is a finding: write it down
 - [ ] `rig-head` rack case once there are two instruments to cable together
 - [ ] Retrospective: what had to change in the modules? Bump revisions accordingly
@@ -88,9 +89,11 @@ Candidates (all reuse `striker-solenoid`): glockenspiel, tuned bells, a small dr
   batched per library trip or online order. Instruments are road-ready by design: case is the
   stand, 600 mm footprint grid, two connections per case, head rack (ADR 0010).
 
+- 2026-11-10: Owner's instruments recorded in `musical-instruments.csv`. Second instrument is
+  the owner's snare (+ cowbell/woodblock). Order across plans set in ROADMAP.md.
+
 ## Open questions
 - 12 V vs 24 V default actuator rail (ADR 0009).
 - Perfboard vs straight-to-PCB for `body-backplane`.
-- Which second instrument (H6).
 - Budget ceiling for the starter tool kit.
 - Buy road cases or build plywood crates? Which vehicle sets the case grid? (ADR 0010)

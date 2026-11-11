@@ -16,6 +16,7 @@ This file is a **map, not a manual**. Read the doc that matches your task, then 
 | Know the non-negotiable rules                   | [docs/design-docs/core-beliefs.md](docs/design-docs/core-beliefs.md) |
 | Find a design decision (ADRs)                   | [docs/design-docs/index.md](docs/design-docs/index.md)      |
 | Work on a user-facing scenario                  | [docs/product-specs/index.md](docs/product-specs/index.md)  |
+| See what gets built next, and why               | [docs/ROADMAP.md](docs/ROADMAP.md)                          |
 | Pick up or plan multi-step work                 | [docs/PLANS.md](docs/PLANS.md)                              |
 | Know what's broken or shaky today               | [docs/exec-plans/tech-debt-tracker.md](docs/exec-plans/tech-debt-tracker.md) |
 | Judge the maturity of each component            | [docs/QUALITY_SCORE.md](docs/QUALITY_SCORE.md)              |

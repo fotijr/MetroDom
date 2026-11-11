@@ -1,0 +1,7 @@
+id,name,family,jobs,range,size_weight,portable,condition,location,metrodom_fit,notes
+xylophone,Xylophone,mallet percussion,strike,"fill in: lowest and highest note",fill in,yes,fill in,,first,"Played by the 2016 prototypes. striker-solenoid fits directly"
+drum-kit,Drum set,percussion,strike;press,"fill in pieces: kick, snare, hi-hat, toms, cymbals",fill in,yes (several cases),fill in,,next,"Snare, toms and cowbell reuse striker-solenoid. Kick needs a stronger actuator on the pedal. Hi-hat needs a press actuator. Cymbals suit striker-servo"
+electric-guitar,Electric guitar,plucked strings,pluck;fret,"6 strings, fill in fret count",~3-4 kg,yes,fill in,,later,"Pickups and amp hide actuator clatter, so do it before acoustic. Start with open tuning + 6 pickers, then a slide or fretting"
+acoustic-guitar,Acoustic guitar,plucked strings,pluck;fret,6 strings,~2 kg,yes,fill in,,later,"Same mechanisms as electric guitar, but actuator noise is audible in the body"
+piano,Piano,keyboard,press,"fill in: upright / grand / digital, number of keys",fill in (uprights are typically 150+ kg),no,fill in,,later,"Not road-portable: home or installed (jukebox) mode. Start with one octave of presser-solenoid. Velocity matters"
+trumpet,Trumpet,brass,valve;blow,"typical written range F#3-C6",~1 kg,yes,fill in,,research,"Valves are easy (3 pressers). Air + buzzing lips is research-level. Would use air-compressor-5gal"

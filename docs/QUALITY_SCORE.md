@@ -11,7 +11,7 @@ Last reviewed: 2026-11-10
 | Instrument: xylophone (solenoid) | D | Bench only | Partial | 3 notes, custom ASCII protocol, debug prints on serial |
 | Instrument: xylophone (servo) | D | Tester sketch | Partial | Different protocol from solenoid version. `?` reply lacks `Name:` |
 | Instrument firmware standard (USB-MIDI, watchdog) | — | — | Spec only | [ADR 0001](design-docs/0001-midi-is-the-contract.md), [0006](design-docs/0006-swappable-instrument-brains.md) |
-| Hardware records (catalog, inventory, modules, builds) | D | `scripts/check_hardware.py` (CI) | [ADR 0008](design-docs/0008-hardware-as-code.md) | Scaffolded. Stock empty, one equipment row, fabrication capabilities need library printer specs, all modules planned, no builds |
+| Hardware records (catalog, inventory, modules, builds) | D | `scripts/check_hardware.py` (CI) | [ADR 0008](design-docs/0008-hardware-as-code.md) | Scaffolded. Stock empty, one equipment row, six musical instruments (details to fill in), fabrication capabilities need library printer specs, all modules planned, no builds |
 | Road-ready cases & setup | — | — | [ADR 0010](design-docs/0010-road-ready-instruments.md) | Setup time not yet measured |
 | Visuals: accent LEDs, stage lights, matrix | — | — | [ADR 0011](design-docs/0011-visuals-are-part-of-the-band.md) | [Exec plan 0003](exec-plans/active/0003-visuals.md) |
 | Shared hardware modules (striker, driver, power, frame) | — | — | [ADR 0009](design-docs/0009-shared-hardware-modules.md) | [Exec plan 0002](exec-plans/active/0002-hardware-bootstrap.md) |

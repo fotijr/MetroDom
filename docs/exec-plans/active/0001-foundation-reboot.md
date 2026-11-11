@@ -9,6 +9,7 @@ from a Standard MIDI File, with human-controlled tempo and working panic, on a h
 That is the first milestone of the [live band spec](../../product-specs/live-band.md).
 
 ## Context
+- Sequenced by the [roadmap](../../ROADMAP.md): build in milestone order, not phase order
 - Decisions: [ADR 0001–0005](../../design-docs/index.md) (all Proposed. Owner to accept)
 - Current state: [QUALITY_SCORE.md](../../QUALITY_SCORE.md), [tech debt](../tech-debt-tracker.md)
 

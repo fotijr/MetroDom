@@ -13,8 +13,9 @@ hardware/
   modules/<id>/          reusable assemblies: module.toml, bom.csv, README.md, cad/
   builds/<serial>.md     one record per physical unit built (labelled MD-…-NNN)
   inventory/equipment.csv  tools and machines we own: not consumed by builds
+  inventory/musical-instruments.csv  the real instruments robots play, with fit and difficulty
   fabrication/           who can make what (library printer, online…) + batched job queue
-Instruments/<name>/instrument.toml   which modules an instrument is made of
+Instruments/<name>/instrument.toml   which modules a MetroDom instrument is made of + what it `plays`
 ```
 
 ## If you know software, read this table
@@ -61,6 +62,7 @@ Only the frame, tips, layout and profile change between percussion instruments.
 | --- | --- |
 | gets built into something (consumed by a BOM) | `parts/catalog.csv` + `inventory/stock.csv` |
 | is used to build, test or run things but isn't consumed (compressor, bench supply, multimeter) | `inventory/equipment.csv` |
+| is a real musical instrument a MetroDom rig attaches to and plays (piano, guitar, drums) | `inventory/musical-instruments.csv` |
 | is a *service or place* that makes parts (library printer, online print shop, extrusion cutting) | `fabrication/capabilities.csv` |
 
 A power supply can be either: the 12 V brick bolted inside a case is a **part**, the bench supply
