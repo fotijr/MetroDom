@@ -1,0 +1,7 @@
+id = "presser-solenoid"
+name = "Solenoid presser"
+revision = "A"
+status = "planned"   # planned | prototype | proven | deprecated
+job = "press"
+interfaces = ["act-2p", "mount-2020"]
+fabrication = ["3d-print-fdm"]

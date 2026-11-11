@@ -1,0 +1,38 @@
+name: build
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  dotnet:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+      # Best effort: hosted runners' Azure kernels don't always ship the ALSA sequencer modules
+      # (no linux-modules-extra package for kernel 7.0 on 24.04 or 26.04). When they can't be
+      # loaded, the loopback test skips and the run shows a warning instead of failing (TD-18).
+      - name: Load ALSA virtual MIDI (Midi Through) for the loopback test
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q libasound2t64
+          if ! sudo modprobe snd-seq-dummy; then
+            sudo apt-get install -y -q "linux-modules-extra-$(uname -r)" && sudo modprobe snd-seq-dummy || true
+          fi
+          if [ -e /dev/snd/seq ] && grep -q "Midi Through" /proc/asound/seq/clients 2>/dev/null; then
+            sudo chmod a+rw /dev/snd/seq
+            echo "METRODOM_REQUIRE_ALSA=1" >> "$GITHUB_ENV"
+          else
+            echo "::warning title=ALSA loopback skipped::Kernel $(uname -r) has no loadable snd-seq-dummy, so the ALSA round-trip test will skip (TD-18)."
+          fi
+      - run: dotnet build --configuration Release
+      - run: dotnet test --configuration Release --no-build

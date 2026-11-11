@@ -1,0 +1,6 @@
+id = "brain-pico"
+name = "Pico brain"
+revision = "A"
+status = "planned"   # planned | prototype | proven | deprecated
+job = "brain"
+interfaces = ["usb-midi", "qwiic"]

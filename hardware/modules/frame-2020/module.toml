@@ -1,0 +1,7 @@
+id = "frame-2020"
+name = "2020 extrusion frame"
+revision = "A"
+status = "planned"   # planned | prototype | proven | deprecated
+job = "frame"
+interfaces = ["mount-2020"]
+fabrication = ["extrusion-cut", "drill", "3d-print-fdm"]

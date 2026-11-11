@@ -1,0 +1,7 @@
+id = "matrix-hub75"
+name = "LED matrix display"
+revision = "A"
+status = "planned"   # planned | prototype | proven | deprecated
+job = "display"
+interfaces = ["hub75", "rail-5v-led", "ethernet", "mains-iec"]
+fabrication = ["solder", "3d-print-fdm"]

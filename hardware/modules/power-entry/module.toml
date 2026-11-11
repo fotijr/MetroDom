@@ -1,0 +1,7 @@
+id = "power-entry"
+name = "Power entry"
+revision = "A"
+status = "planned"   # planned | prototype | proven | deprecated
+job = "power"
+interfaces = ["rail-12v", "rail-5v"]
+fabrication = ["solder", "drill"]

@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Pure logic: no OS MIDI devices, UI, or network. See docs/design-docs/0002-headless-conductor.md -->
+  <ItemGroup>
+    <PackageReference Include="Melanchall.DryWetMidi" />
+  </ItemGroup>
+</Project>

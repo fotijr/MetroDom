@@ -1,0 +1,7 @@
+id = "driver-mosfet-8ch"
+name = "8-channel MOSFET driver"
+revision = "A"
+status = "planned"   # planned | prototype | proven | deprecated
+job = "drive"
+interfaces = ["rail-12v", "act-2p"]
+fabrication = ["solder"]

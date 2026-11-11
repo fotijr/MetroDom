@@ -1,0 +1,7 @@
+id = "led-accent"
+name = "Accent LEDs on an instrument"
+revision = "A"
+status = "planned"   # planned | prototype | proven | deprecated
+job = "light"
+interfaces = ["led-3p", "rail-5v-led"]
+fabrication = ["solder", "3d-print-fdm"]

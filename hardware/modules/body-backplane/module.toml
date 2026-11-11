@@ -1,0 +1,7 @@
+id = "body-backplane"
+name = "Body backplane"
+revision = "A"
+status = "planned"   # planned | prototype | proven | deprecated
+job = "body logic"
+interfaces = ["qwiic", "usb-midi"]
+fabrication = ["solder"]

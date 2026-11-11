@@ -1,0 +1,7 @@
+id = "damper-solenoid"
+name = "Solenoid damper"
+revision = "A"
+status = "planned"   # planned | prototype | proven | deprecated
+job = "damp"
+interfaces = ["act-2p", "mount-2020"]
+fabrication = ["3d-print-fdm"]

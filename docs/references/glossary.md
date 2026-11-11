@@ -1,0 +1,27 @@
+# Glossary
+
+- **Actuator**: the thing that moves: solenoid, servo, stepper, motor.
+- **Band leads / human leads**: play-along tempo modes. Either the Conductor keeps time and the human follows, or the Conductor follows the human ([ADR 0012](../design-docs/0012-humans-in-the-band.md)).
+- **Body**: the instrument-specific hardware a brain plugs into ([ADR 0006](../design-docs/0006-swappable-instrument-brains.md)).
+- **BOM**: bill of materials. A module's `bom.csv` lists catalog part ids and quantities.
+- **Brain**: the swappable Pico board running the generic firmware.
+- **Build record**: the history of one physical unit, keyed by the serial on its label (`MD-…-NNN`).
+- **Arranger**: Conductor component mapping song tracks/channels onto available instruments.
+- **Click track**: a fixed metronome performers lock to. MetroDom avoids requiring one.
+- **Conductor**: the headless service that runs the band (today: the `metrodom` CLI).
+- **Control API**: the single HTTP/WebSocket/OSC interface all apps use.
+- **Control surface**: anything that sends intents to the Conductor: app, keyboard, pad.
+- **Instrument**: one physical instrument + microcontroller + firmware, presented as a MIDI device.
+- **DMX512**: the standard serial protocol for stage lighting fixtures. See [lighting essentials](lighting-essentials.md).
+- **Instrument profile**: self-description of an instrument's notes, latency and limits.
+- **Light profile**: a light rig's map from MIDI notes/CCs to scenes and controls ([ADR 0011](../design-docs/0011-visuals-are-part-of-the-band.md)).
+- **Lookahead**: sending a note early by the instrument's latency so it sounds on time.
+- **Head case**: the 19" rack case holding the Conductor, power and master kill switch ([ADR 0010](../design-docs/0010-road-ready-instruments.md)).
+- **Module**: a reusable hardware assembly with standard interfaces (`hardware/modules/`).
+- **Panic**: immediate all-off of every actuator.
+- **Policy profile**: config defining a deployment mode's roles, queue rules and limits.
+- **sACN / Art-Net**: DMX universes carried over Ethernet.
+- **Seat**: a part a human player takes in a song. The robots leave it out.
+- **SMF**: Standard MIDI File (`.mid`).
+- **Vamp**: repeat the current song section until the player releases it.
+- **Watchdog**: firmware timer that switches actuators off if the host goes silent.

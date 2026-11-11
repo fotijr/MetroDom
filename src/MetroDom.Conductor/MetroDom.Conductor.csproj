@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>metrodom</AssemblyName>
+    <RootNamespace>MetroDom.Conductor</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="MetroDom.Conductor.Tests" />
+    <ProjectReference Include="..\MetroDom.Core\MetroDom.Core.csproj" />
+    <PackageReference Include="Melanchall.DryWetMidi" />
+    <PackageReference Include="Spectre.Console" />
+    <PackageReference Include="Spectre.Console.Cli" />
+  </ItemGroup>
+</Project>

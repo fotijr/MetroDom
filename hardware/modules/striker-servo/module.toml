@@ -1,0 +1,7 @@
+id = "striker-servo"
+name = "Servo striker"
+revision = "A"
+status = "planned"   # planned | prototype | proven | deprecated
+job = "strike"
+interfaces = ["servo-3p", "mount-2020"]
+fabrication = ["3d-print-fdm"]

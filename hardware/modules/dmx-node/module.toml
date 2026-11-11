@@ -1,0 +1,6 @@
+id = "dmx-node"
+name = "sACN/Art-Net to DMX node"
+revision = "A"
+status = "planned"   # planned | prototype | proven | deprecated
+job = "light"
+interfaces = ["ethernet", "dmx-xlr"]
