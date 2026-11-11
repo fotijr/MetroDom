@@ -24,6 +24,15 @@ public sealed record BandMember(InstrumentProfile Profile, int Channel)
 public sealed record SongPart(int Track, int Channel, string Name, int NoteCount, int LowestNote, int HighestNote)
 {
     public bool IsPercussion => Channel == GeneralMidi.PercussionChannel;
+
+    /// <summary>General MIDI program the part starts with, if the file sets one.</summary>
+    public int? Program { get; init; }
+
+    /// <summary>What the part is in the band (ADR 0012), see <see cref="RoleDetector"/>.</summary>
+    public string Role { get; init; } = Roles.Other;
+
+    /// <summary>Why it has that role.</summary>
+    public RoleSource RoleSource { get; init; } = RoleSource.None;
 }
 
 /// <summary>A part given to an instrument, and what had to change for it to fit.</summary>
@@ -52,6 +61,9 @@ public sealed record ArrangerOptions
 {
     /// <summary>Move notes that don't fit by octaves to a playable note of the same name. Pitched parts only.</summary>
     public bool FoldOctaves { get; init; } = true;
+
+    /// <summary>The song's saved role choices, which override detected roles.</summary>
+    public RoleMapping? Roles { get; init; }
 }
 
 /// <summary>General MIDI facts the arranger relies on.</summary>
@@ -73,11 +85,11 @@ public static class Arranger
 {
     private const int MaxOctaveShift = 4;
 
-    /// <summary>Splits a song into parts: one per track and channel that has notes.</summary>
-    public static IReadOnlyList<SongPart> Parts(MidiFile midiFile)
+    /// <summary>Splits a song into parts: one per track and channel that has notes, each tagged with its role.</summary>
+    public static IReadOnlyList<SongPart> Parts(MidiFile midiFile, RoleMapping? roles = null)
     {
         ArgumentNullException.ThrowIfNull(midiFile);
-        return ReadParts(midiFile).Select(p => p.Part).ToArray();
+        return ReadParts(midiFile, roles).Select(p => p.Part).ToArray();
     }
 
     public static Arrangement Arrange(MidiFile midiFile, IReadOnlyList<BandMember> band, ArrangerOptions? options = null)
@@ -90,7 +102,7 @@ public static class Arranger
             throw new ArgumentException("Instrument names must be unique.", nameof(band));
         }
 
-        var parts = ReadParts(midiFile);
+        var parts = ReadParts(midiFile, options.Roles);
         var choices = new List<(int Member, int Part, int Score, int Transpose)>();
         for (var m = 0; m < band.Count; m++)
         {
@@ -219,10 +231,16 @@ public static class Arranger
             .Cast<int?>()
             .FirstOrDefault();
 
-    private static List<ParsedPart> ReadParts(MidiFile midiFile)
+    private static List<ParsedPart> ReadParts(MidiFile midiFile, RoleMapping? roles)
     {
         var tempoMap = midiFile.GetTempoMap();
-        return midiFile.GetTrackChunks()
+        var chunks = midiFile.GetTrackChunks().ToArray();
+
+        // A part's program: the first Program Change on its channel in its own track, else in any track.
+        int? FirstProgram(IEnumerable<TrackChunk> where, int channel) =>
+            where.SelectMany(c => c.Events).OfType<ProgramChangeEvent>().FirstOrDefault(e => e.Channel == channel)?.ProgramNumber;
+
+        return chunks
             .SelectMany((chunk, track) =>
             {
                 var name = chunk.Events.OfType<SequenceTrackNameEvent>().FirstOrDefault()?.Text;
@@ -239,9 +257,12 @@ public static class Arranger
                                 n.Velocity))
                             .ToArray();
                         var partName = string.IsNullOrWhiteSpace(name) ? $"Track {track + 1}" : name.Trim();
-                        return new ParsedPart(
-                            new SongPart(track, g.Key, partName, notes.Length, notes.Min(n => n.Number), notes.Max(n => n.Number)),
-                            notes);
+                        var part = new SongPart(track, g.Key, partName, notes.Length, notes.Min(n => n.Number), notes.Max(n => n.Number))
+                        {
+                            Program = FirstProgram([chunk], g.Key) ?? FirstProgram(chunks, g.Key),
+                        };
+                        var (role, source) = RoleDetector.Detect(part, part.Program, roles);
+                        return new ParsedPart(part with { Role = role, RoleSource = source }, notes);
                     });
             })
             .ToList();

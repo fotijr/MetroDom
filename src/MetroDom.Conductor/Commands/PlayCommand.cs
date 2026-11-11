@@ -98,7 +98,7 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
             if (settings.Arrange)
             {
                 var band = session.Outputs.Select(o => new BandMember(o.Profile, o.Channels[0])).ToArray();
-                var arrangement = Arranger.Arrange(midiFile, band);
+                var arrangement = Arranger.Arrange(midiFile, band, new ArrangerOptions { Roles = SongRoles.Load(settings.Path) });
                 ArrangementView.Write(arrangement, band);
                 timeline = arrangement.Timeline;
             }

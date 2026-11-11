@@ -45,7 +45,7 @@ internal sealed class ArrangeCommand : Command<ArrangeCommand.Settings>
     {
         var midiFile = settings.Path is null ? DemoSong.Create() : MidiFile.Read(settings.Path);
         var band = settings.Band.Select(s => s.ToBandMember()).ToArray();
-        var arrangement = Arranger.Arrange(midiFile, band, new ArrangerOptions { FoldOctaves = !settings.NoFold });
+        var arrangement = Arranger.Arrange(midiFile, band, new ArrangerOptions { FoldOctaves = !settings.NoFold, Roles = SongRoles.Load(settings.Path) });
 
         AnsiConsole.MarkupLine($"[grey]Song[/]  [bold]{Markup.Escape(settings.Path is null ? "built-in demo" : System.IO.Path.GetFileName(settings.Path))}[/]");
         ArrangementView.Write(arrangement, band);

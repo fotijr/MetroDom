@@ -50,7 +50,7 @@ That is the first milestone of the [live band spec](../../product-specs/live-ban
 - [x] Tap from a MIDI input (foot pedal) / MIDI Clock in (`play --tap PORT [--tap-on TRIGGER]`, `--clock-in PORT`)
 
 ### Phase 2b: Play-along ([ADR 0012](../../design-docs/0012-humans-in-the-band.md))
-- [ ] Track roles (track names, GM drums channel, saved per-song mapping)
+- [x] Track roles (track names, GM drums channel, saved per-song mapping): `metrodom roles`, [song roles](../../references/song-roles.md)
 - [ ] Seats: a human takes a role, arranger mutes it (generalize `--mute`)
 - [ ] Count-in on a chosen instrument. SMF marker sections. Vamp / jump to outro
 - [ ] Foot controller mapping in the live-band policy (start/stop, next, tap, vamp, panic)
@@ -144,6 +144,14 @@ That is the first milestone of the [live band spec](../../product-specs/live-ban
   lock belongs with the M5 tempo tracker. Stop or silence holds tempo (ADR 0012: losing the beat
   holds, never lurches). Measured: 0.600 / 0.400 / 0.800 s strike spacing at file tempo, clock
   150 and pedal 75 BPM (file 100 BPM).
+
+- 2026-11-11: Track roles. Order: saved mapping, channel 10, track name, GM program, else
+  `other`. Names beat programs because people type names and many files leave every track on
+  program 1. Detection produces a fixed list of ten roles; a saved mapping may use any one word
+  (draft answer to ADR 0012's vocabulary question). The mapping is `song.roles.json` beside the
+  song, keyed by name, `#TRACK` or `#TRACK:CHANNEL`, so it survives the file being re-exported
+  with the same track layout and stays readable in a diff. Roles live on `SongPart` so seats can
+  mute by role without another pass over the file.
 
 ## Open questions
 - Target box model (ADR 0002).

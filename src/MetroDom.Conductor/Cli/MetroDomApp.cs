@@ -39,6 +39,10 @@ internal static class MetroDomApp
             config.AddCommand<ArrangeCommand>("arrange")
                 .WithDescription("Show which part of a song each instrument would play, and what had to change to fit.")
                 .WithExample("arrange", "song.mid", "-i", "xylo=1@10/C4-C6", "-i", "drums=10@35/36,38,76");
+            config.AddCommand<RolesCommand>("roles")
+                .WithDescription("Show each part's role (drums, bass, melody…) and where it came from. --set saves corrections next to the song.")
+                .WithExample("roles", "song.mid")
+                .WithExample("roles", "song.mid", "--set", "\"Lead Synth=melody\"", "--set", "#3=guitar");
             config.AddCommand<SimulateCommand>("simulate")
                 .WithDescription("Play a song to virtual instruments on a virtual clock and report how well they line up. No devices needed.")
                 .WithExample("simulate")

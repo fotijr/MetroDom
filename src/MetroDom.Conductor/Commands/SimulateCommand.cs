@@ -86,7 +86,7 @@ internal sealed class SimulateCommand : Command<SimulateCommand.Settings>
         if (settings.Arrange)
         {
             var members = band.Select(b => b.ToBandMember()).ToArray();
-            var arrangement = Arranger.Arrange(midiFile, members);
+            var arrangement = Arranger.Arrange(midiFile, members, new ArrangerOptions { Roles = SongRoles.Load(settings.Path) });
             ArrangementView.Write(arrangement, members);
             AnsiConsole.WriteLine();
             timeline = arrangement.Timeline;
