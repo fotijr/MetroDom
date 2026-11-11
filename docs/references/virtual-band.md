@@ -81,12 +81,32 @@ Tempo comes from a human: `--tempo BPM` to start, then in the terminal **Space/T
 from the current position on every change ([ADR 0004](../design-docs/0004-latency-compensation.md)).
 Latency is mechanical, so it is never scaled.
 
+From MIDI (one at a time):
+- `--tap PORT` taps from an input: a foot pedal, pad or drum trigger, alongside the Space key
+  (same `TapTempo`). `--tap-on` picks what counts: `any` (default: Note On, or a controller going
+  from below 64 to 64+), `note[:N]`, `cc[:N]`, `pc[:N]`, optionally `@CHANNEL`. A pedal's press
+  is one tap, its release none. Channel mode messages (CC 120+) never tap.
+- `--clock-in PORT` follows MIDI Clock (`ClockTempo`): average of the last 24 ticks (one beat),
+  first tempo after half a beat, changes under 0.5 BPM ignored so USB jitter doesn't keep
+  re-timing. Stop (`FC`) or a 250 ms gap holds the current tempo. Start/Continue are ignored.
+
+```bash
+metrodom play song.mid -o "MetroDom xylo" --tap "FS-5U" --tap-on cc:64
+metrodom play song.mid -o "MetroDom xylo" --clock-in "Drum Machine"
+```
+
+Measured on macOS (`play` → `virtual`, demo song at 100 BPM, generator on a virtual port):
+strike spacing 0.600 s at file tempo, 0.400 s following a 150 BPM clock, 0.800 s from a pedal
+at 75 BPM.
+
 Measured on macOS (`play` → `virtual`, demo song, 10 ms + 35 ms): drums sent ~24 ms before the
 xylophone, heard within 1 ms of each other (the log's resolution) on every beat, at 100 and 150 BPM.
 
 ## Not yet (see [tech debt](../exec-plans/tech-debt-tracker.md))
 
-- Tap tempo from a MIDI pedal or MIDI Clock in. The keys are covered only by unit tests of `TapTempo` and `SetSpeed`, not by driving a terminal (TD-20).
+- Clock in follows tempo, not phase: the band can drift against the clock source by up to the
+  0.5 BPM threshold, and doesn't start/stop with it (TD-20). The keys are covered only by unit
+  tests of `TapTempo` and `SetSpeed`, not by driving a terminal.
 - `route` (live input) ignores latency: ADR 0004's "delay to the slowest" isn't built.
 - Latency comes from the command line, not profile files or SysEx discovery. Virtual instruments
   do answer MIDI Identity Requests as MetroDom model 0 ([midi-identity](midi-identity.md)), so

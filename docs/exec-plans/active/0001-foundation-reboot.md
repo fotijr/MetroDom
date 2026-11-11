@@ -47,7 +47,7 @@ That is the first milestone of the [live band spec](../../product-specs/live-ban
 - [ ] Discovery step 4b: identify on hot-plug, remember assignments, auto-add instruments (TD-23)
 - [x] Safety governor + panic, tested (`SafetyGovernor` in front of every output; `--max-velocity`, `--max-rate`, `--quiet`). Limits: TD-22
 - [x] Tap tempo (terminal keys) and `--tempo`
-- [ ] Tap from a MIDI input (foot pedal) / MIDI Clock in
+- [x] Tap from a MIDI input (foot pedal) / MIDI Clock in (`play --tap PORT [--tap-on TRIGGER]`, `--clock-in PORT`)
 
 ### Phase 2b: Play-along ([ADR 0012](../../design-docs/0012-humans-in-the-band.md))
 - [ ] Track roles (track names, GM drums channel, saved per-song mapping)
@@ -134,6 +134,16 @@ That is the first milestone of the [live band spec](../../product-specs/live-ban
   This is also the first way to give the governor a minimum interval. Cost: up to 2 × 250 ms at
   start when a named port has an input that doesn't answer; `--no-identify` or a fully described
   `-o` avoids it.
+
+- 2026-11-11: MIDI tap and clock in. Picked over discovery step 4b, whose remembered
+  assignments need roles from the registry/Control API. Taps share the keyboard's `TapTempo`, so
+  pedal and Space mix. `--tap-on any` (default) takes Note On or a controller's press (crossing
+  64), never its release or channel mode messages, so a sustain pedal works out of the box.
+  Clock in averages one beat of ticks and ignores changes under 0.5 BPM: ±1 ms USB jitter swings
+  a one-beat average by ~0.3 BPM, which shouldn't re-time the band. It follows tempo only; phase
+  lock belongs with the M5 tempo tracker. Stop or silence holds tempo (ADR 0012: losing the beat
+  holds, never lurches). Measured: 0.600 / 0.400 / 0.800 s strike spacing at file tempo, clock
+  150 and pedal 75 BPM (file 100 BPM).
 
 ## Open questions
 - Target box model (ADR 0002).
