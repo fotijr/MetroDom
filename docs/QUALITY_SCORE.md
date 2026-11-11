@@ -20,7 +20,7 @@ Last reviewed: 2026-11-10
 | Core: routing, mute, panic (`Orchestra`) | C | Unit | ARCHITECTURE | No scheduler/latency yet. Single output per run in the CLI |
 | Core: song analysis (`SongAnalyzer`) | C | Unit | ARCHITECTURE | Read-only analysis. No arranger yet |
 | CLI: `inspect` | C | Unit (exit codes) | `--help` | Any OS. Spectre.Console tables |
-| CLI: `devices` / `play` / `route` / `panic` | D | ALSA loopback (CI), unit (validation, status panel) | `--help` | Linux (ALSA), macOS, Windows. Live status panel and port prompt in a terminal, plain lines when piped. Survives unplug/replug (unit tested with a fake backend). Not yet tested against a real instrument (TD-15) |
+| CLI: `devices` / `play` / `route` / `panic` | D | ALSA loopback (local only, skipped on hosted CI: TD-18), unit (validation, status panel) | `--help` | Linux (ALSA), macOS, Windows. Live status panel and port prompt in a terminal, plain lines when piped. Survives unplug/replug (unit tested with a fake backend). Not yet tested against a real instrument (TD-15) |
 | Scheduler / latency compensation | — | — | ADR | [ADR 0004](design-docs/0004-latency-compensation.md) |
 | Control API | — | — | ADR | [ADR 0003](design-docs/0003-control-api.md) |
 | Policy / roles | — | — | ADR | [ADR 0005](design-docs/0005-deployment-modes-are-policy.md) |

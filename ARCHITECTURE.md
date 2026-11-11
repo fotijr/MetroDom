@@ -100,7 +100,7 @@ CLI (recover it from git history at commit `266b6b5` if needed).
 | `src/MetroDom.Conductor/` | `metrodom` CLI: `inspect`, `devices`, `play`, `route`, `panic`. Commands on Spectre.Console.Cli (typed settings, validation, `--help` per command). `Cli/` holds app setup, exit codes (2 usage, 3 platform, 4 device), the port picker (prompts in a terminal, errors when piped) and the live play/route status panel |
 | `src/MetroDom.Conductor/Midi/` | OS MIDI device adapters behind `IMidiBackend`: `Alsa/` (Linux sequencer via P/Invoke) and DryWetMIDI (Windows/macOS). `ResilientPorts.cs` keeps ports alive across unplug/replug |
 | `tests/MetroDom.Core.Tests/` | xUnit v3 tests for Core (Microsoft.Testing.Platform runner) |
-| `tests/MetroDom.Conductor.Tests/` | CLI exit codes and status panel rendering, port matching, and a real ALSA round trip (runs where `/dev/snd/seq` exists; required in CI) |
+| `tests/MetroDom.Conductor.Tests/` | CLI exit codes and status panel rendering, port matching, and a real ALSA round trip (runs where `/dev/snd/seq` exists; required in CI when the runner can load `snd-seq-dummy`, TD-18) |
 | `Instruments/xylophone_solenoid/` | 3 solenoids on pins 9–11, ASCII `'0' '4' '7'` triggers, 45 ms strike |
 | `Instruments/xylophone_servo/` | Spin + strike servo. `<digits>m` moves, `p` strikes, `?` identifies |
 

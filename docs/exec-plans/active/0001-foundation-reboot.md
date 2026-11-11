@@ -34,7 +34,7 @@ That is the first milestone of the [live band spec](../../product-specs/live-ban
 ### Phase 2: Headless Conductor core
 - [x] SDK-style `net10.0` Core + CLI + tests, `dotnet test` on Linux/macOS/Windows CI
 - [x] Core: SMF analysis (DryWetMIDI), channel routing with safe mute, panic
-- [x] Linux MIDI device adapter (ALSA sequencer), round trip tested in CI
+- [x] Linux MIDI device adapter (ALSA sequencer), round trip tested (locally; hosted CI can't load the module, TD-18)
 - [ ] Core: arranger (track → instrument), scheduler with fake-clock tests
 - [x] Adapters: unplug goes silent, replug reconnects with a panic first. One failing output can't block others
 - [ ] Measure ALSA latency on a Pi
