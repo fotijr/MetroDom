@@ -7,6 +7,7 @@ using Melanchall.DryWetMidi.MusicTheory;
 using MetroDom.Conductor.Cli;
 using MetroDom.Conductor.Midi;
 using MetroDom.Core;
+using MetroDom.Core.Discovery;
 using MetroDom.Core.Simulation;
 using MetroDom.Core.Timing;
 using Spectre.Console;
@@ -43,7 +44,7 @@ internal sealed class VirtualCommand : Command<VirtualCommand.Settings>
     {
         var clock = new SystemClock();
         var console = new Lock();
-        var ports = new List<IMidiInputPort>();
+        var ports = new List<IVirtualPort>();
         using var stop = new ManualResetEventSlim();
         void OnCancel(object? sender, ConsoleCancelEventArgs e)
         {
@@ -92,7 +93,7 @@ internal sealed class VirtualCommand : Command<VirtualCommand.Settings>
         return 0;
     }
 
-    private static void Wire(IMidiInputPort port, InstrumentSpec spec, VirtualInstrument instrument, SystemClock clock, Lock console)
+    private static void Wire(IVirtualPort port, InstrumentSpec spec, VirtualInstrument instrument, SystemClock clock, Lock console)
     {
         var channels = spec.Channels.ToHashSet();
         TimeSpan? lastPanic = null;
@@ -103,6 +104,13 @@ internal sealed class VirtualCommand : Command<VirtualCommand.Settings>
 
         port.EventReceived += e =>
         {
+            if (Identity.ReplyTo(e) is { } reply)
+            {
+                port.Send(reply); // ADR 0007: answer "who are you?" like a MetroDom instrument.
+                Print(console, clock.Now, spec.Name, "[grey]identity request: answered as a MetroDom virtual instrument[/]");
+                return;
+            }
+
             if (e is not ChannelEvent channelEvent || !channels.Contains(channelEvent.Channel))
             {
                 return;
@@ -117,6 +125,11 @@ internal sealed class VirtualCommand : Command<VirtualCommand.Settings>
             }
         };
     }
+
+    /// <summary>What every virtual instrument says it is: MetroDom, model 0 (software), the Conductor's version.</summary>
+    internal static readonly DeviceIdentity Identity = DeviceIdentity.MetroDom(
+        DeviceIdentity.VirtualModel,
+        typeof(VirtualCommand).Assembly.GetName().Version ?? new Version(0, 0));
 
     private static void Print(Lock console, TimeSpan at, string instrument, string markup)
     {

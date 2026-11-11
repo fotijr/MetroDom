@@ -19,6 +19,15 @@ internal interface IMidiInputPort : IDisposable
 }
 
 /// <summary>
+/// A port this program created (<see cref="IMidiBackend.CreateVirtualInput"/>). Other programs
+/// send to it; <see cref="Send"/> sends back to whoever listens to it (e.g. an Identity Reply).
+/// </summary>
+internal interface IVirtualPort : IMidiInputPort
+{
+    void Send(MidiEvent midiEvent);
+}
+
+/// <summary>
 /// A port as the OS lists it. <see cref="Name"/> survives unplug/replug (used to find the device
 /// again). <see cref="DisplayName"/> may add volatile detail such as the ALSA address.
 /// </summary>
@@ -37,9 +46,10 @@ internal interface IMidiBackend
 
     /// <summary>
     /// Creates a new port that other programs (a DAW, <c>metrodom play</c>) see as an output and
-    /// can send to. Events they send arrive on the returned input. Lives until disposed.
+    /// can send to. Events they send arrive on the returned port, which can also answer them.
+    /// Lives until disposed.
     /// </summary>
-    IMidiInputPort CreateVirtualInput(string name);
+    IVirtualPort CreateVirtualInput(string name);
 }
 
 /// <summary>The OS MIDI system is missing or refused a request (no sequencer, port vanished…).</summary>

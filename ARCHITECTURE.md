@@ -95,6 +95,7 @@ CLI (recover it from git history at commit `266b6b5` if needed).
 | Path | What it is today |
 | --- | --- |
 | `src/MetroDom.Core/IMidiOutput.cs` | The instrument contract: a named thing you can send MIDI events to |
+| `src/MetroDom.Core/Discovery/` | `DeviceIdentity`: MIDI Identity Request/Reply bytes, MetroDom's identity (`7D` + family "MD"). See [midi-identity](docs/references/midi-identity.md) |
 | `src/MetroDom.Core/Safety/` | `SafetyGovernor`: wraps one output; holds back notes the instrument can't play, repeats under its min interval, notes over the rate limit or in silent quiet hours; caps velocity. Note Offs and panic always pass |
 | `src/MetroDom.Core/Orchestra.cs` | Channel → output routing, mute (Note Offs always pass), panic (CC 120/123). A throwing output is reported and skipped |
 | `src/MetroDom.Core/Timing/` | `IClock` (system + virtual), `SongTimeline` (SMF → timed events), `LatencyScheduler` (sends early per instrument latency, re-times on tempo change, ADR 0004), `TapTempo` |
@@ -103,7 +104,7 @@ CLI (recover it from git history at commit `266b6b5` if needed).
 | `src/MetroDom.Core/InstrumentProfile.cs` | The part of the [instrument profile](docs/references/instrument-profile.md) scheduling uses: latency (per note), notes, min interval |
 | `src/MetroDom.Core/SongAnalyzer.cs` | SMF → tracks, channels, note ranges, tempo, duration (arranger input) |
 | `src/MetroDom.Conductor/` | `metrodom` CLI: `inspect`, `devices`, `play`, `route`, `panic`, plus `arrange`, `simulate`, `virtual`, `demo-song` for the [virtual band](docs/references/virtual-band.md). Commands on Spectre.Console.Cli (typed settings, validation, `--help` per command). `Cli/` holds app setup, exit codes (2 usage, 3 platform, 4 device), the port picker (prompts in a terminal, errors when piped) and the live play/route status panel |
-| `src/MetroDom.Conductor/Midi/` | OS MIDI device adapters behind `IMidiBackend`: `Alsa/` (Linux sequencer via P/Invoke) and DryWetMIDI (Windows/macOS). `ResilientPorts.cs` keeps ports alive across unplug/replug. Backends also create virtual ports (ALSA, CoreMIDI). `SchedulerLoop.cs` drives the scheduler in real time for `play` |
+| `src/MetroDom.Conductor/Midi/` | OS MIDI device adapters behind `IMidiBackend`: `Alsa/` (Linux sequencer via P/Invoke) and DryWetMIDI (Windows/macOS). `ResilientPorts.cs` keeps ports alive across unplug/replug. Backends also create virtual ports (ALSA, CoreMIDI). `SchedulerLoop.cs` drives the scheduler in real time for `play`. `Identifier.cs` asks every output who it is (`devices --identify`) |
 | `tests/MetroDom.Core.Tests/` | xUnit v3 tests for Core (Microsoft.Testing.Platform runner) |
 | `tests/MetroDom.Conductor.Tests/` | CLI exit codes and status panel rendering, port matching, and a real ALSA round trip (runs where `/dev/snd/seq` exists; required in CI when the runner can load `snd-seq-dummy`, TD-18) |
 | `Instruments/xylophone_solenoid/` | 3 solenoids on pins 9–11, ASCII `'0' '4' '7'` triggers, 45 ms strike |

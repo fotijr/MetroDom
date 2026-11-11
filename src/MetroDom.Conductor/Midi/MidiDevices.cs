@@ -7,7 +7,8 @@ namespace MetroDom.Conductor.Midi;
 /// </summary>
 internal static class MidiDevices
 {
-    private static readonly Lazy<IMidiBackend> Backend = new(Create);
+    /// <summary>The platform's adapter, created on first use.</summary>
+    internal static readonly Lazy<IMidiBackend> Backend = new(Create);
 
     public static IReadOnlyList<string> OutputNames() => Backend.Value.Outputs().Select(p => p.DisplayName).ToArray();
 
@@ -30,7 +31,7 @@ internal static class MidiDevices
     }
 
     /// <summary>Creates a virtual port other programs can send to (see <see cref="IMidiBackend.CreateVirtualInput"/>).</summary>
-    public static IMidiInputPort CreateVirtualInput(string name) => Backend.Value.CreateVirtualInput(name);
+    public static IVirtualPort CreateVirtualInput(string name) => Backend.Value.CreateVirtualInput(name);
 
     internal static int Resolve(string query, IReadOnlyList<string> names, string kind)
     {

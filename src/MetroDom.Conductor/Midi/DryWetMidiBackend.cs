@@ -14,7 +14,7 @@ internal sealed class DryWetMidiBackend : IMidiBackend
 
     public IMidiInputPort OpenInput(MidiPortInfo port) => new Input(InputDevice.GetByName(port.Name));
 
-    public IMidiInputPort CreateVirtualInput(string name)
+    public IVirtualPort CreateVirtualInput(string name)
     {
         if (!OperatingSystem.IsMacOS())
         {
@@ -45,9 +45,10 @@ internal sealed class DryWetMidiBackend : IMidiBackend
 
     /// <summary>
     /// A CoreMIDI virtual device. DryWetMIDI makes it a loopback cable, so it also shows up as an
-    /// input named the same; whatever is sent to it is echoed there.
+    /// input named the same; whatever is sent to it is echoed there, and <see cref="Send"/> adds
+    /// to that stream (listeners see the echo too, so a requester must ignore its own request).
     /// </summary>
-    private sealed class VirtualInput : IMidiInputPort
+    private sealed class VirtualInput : IVirtualPort
     {
         private readonly VirtualDevice _device;
         private readonly Input _input;
@@ -66,6 +67,8 @@ internal sealed class DryWetMidiBackend : IMidiBackend
         public void Start() => _input.Start();
 
         public void Stop() => _input.Stop();
+
+        public void Send(MidiEvent midiEvent) => _device.OutputDevice.SendEvent(midiEvent);
 
         public void Dispose()
         {

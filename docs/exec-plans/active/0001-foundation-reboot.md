@@ -41,7 +41,8 @@ That is the first milestone of the [live band spec](../../product-specs/live-ban
 - [x] `play` drives real ports through the scheduler, several outputs with per-output channels and latency, re-timing on tempo change
 - [x] Adapters: unplug goes silent, replug reconnects with a panic first. One failing output can't block others
 - [ ] Measure ALSA latency on a Pi
-- [ ] Discovery per [ADR 0007](../../design-docs/0007-instrument-discovery.md): MetroDom + general MIDI devices
+- [x] Discovery steps 1-2 per [ADR 0007](../../design-docs/0007-instrument-discovery.md): list ports, Identity Request, MetroDom vs general MIDI (`devices --identify`, [midi-identity](../../references/midi-identity.md))
+- [ ] Discovery steps 3-4: profile fetch, identify on hot-plug, remember assignments (TD-23)
 - [x] Safety governor + panic, tested (`SafetyGovernor` in front of every output; `--max-velocity`, `--max-rate`, `--quiet`). Limits: TD-22
 - [x] Tap tempo (terminal keys) and `--tempo`
 - [ ] Tap from a MIDI input (foot pedal) / MIDI Clock in
@@ -107,6 +108,13 @@ That is the first milestone of the [live band spec](../../product-specs/live-ban
   instruments. Policy limits are flags until policy profiles (ADR 0005) exist. Measured: demo song
   with `--max-rate 3 --max-velocity 50` into `virtual` never exceeded 3 strikes in any second
   and nothing louder than 50; silent quiet hours sent no notes but both panics.
+- 2026-11-11: Discovery step 2. MetroDom identifies as manufacturer `7D` (non-commercial) with
+  family bytes ASCII "MD"; model 0 = software instrument. Draft, needs owner review. Every
+  output is asked at once and paired with the same-named input, so a scan costs one 250 ms wait,
+  not one per port. Only replies count, because loopback ports echo the request. It runs only
+  on `devices --identify` (ADR 0007: ask once per port, not repeatedly). Virtual ports became
+  duplex so `virtual` can answer. Measured on macOS: two virtual instruments identified, the
+  whole command 0.4 s.
 
 ## Open questions
 - Target box model (ADR 0002).

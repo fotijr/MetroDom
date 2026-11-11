@@ -26,7 +26,8 @@ internal static class MetroDomApp
                 .WithExample("inspect", "song.mid");
             config.AddCommand<DevicesCommand>("devices")
                 .WithDescription("List MIDI outputs (instruments) and inputs (controllers).")
-                .WithExample("devices");
+                .WithExample("devices")
+                .WithExample("devices", "--identify");
             config.AddCommand<PlayCommand>("play")
                 .WithDescription("Play a song to one or more outputs, each sent early by its latency. Tap or nudge the tempo live. Ctrl+C stops and sends panic.")
                 .WithExample("play", "song.mid", "--output", "0")

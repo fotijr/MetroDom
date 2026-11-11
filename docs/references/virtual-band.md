@@ -86,4 +86,6 @@ xylophone, heard within 1 ms of each other (the log's resolution) on every beat,
 
 - Tap tempo from a MIDI pedal or MIDI Clock in. The keys are covered only by unit tests of `TapTempo` and `SetSpeed`, not by driving a terminal (TD-20).
 - `route` (live input) ignores latency: ADR 0004's "delay to the slowest" isn't built.
-- Latency comes from the command line, not profile files or SysEx discovery.
+- Latency comes from the command line, not profile files or SysEx discovery. Virtual instruments
+  do answer MIDI Identity Requests as MetroDom model 0 ([midi-identity](midi-identity.md)), so
+  `metrodom devices --identify` finds them.
