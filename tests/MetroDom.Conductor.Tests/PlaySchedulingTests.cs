@@ -14,18 +14,61 @@ public class PlaySchedulingTests
     private static TimeSpan Ms(double ms) => TimeSpan.FromMilliseconds(ms);
 
     [Theory]
-    [InlineData("0", "0", null, 0)]
-    [InlineData("MetroDom drums=10@35", "MetroDom drums", new[] { 9 }, 35)]
+    [InlineData("0", "0", null, null)]
+    [InlineData("MetroDom drums=10@35", "MetroDom drums", new[] { 9 }, 35.0)]
     [InlineData("xylo@12.5ms", "xylo", null, 12.5)]
-    [InlineData("fluid=1-9,11-16", "fluid", new[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15 }, 0)]
-    [InlineData("Midi Through:Midi Through Port-0 (14:0)", "Midi Through:Midi Through Port-0 (14:0)", null, 0)]
-    public void OutputSpec_Parses(string raw, string port, int[]? channels, double latencyMs)
+    [InlineData("xylo@0", "xylo", null, 0.0)]
+    [InlineData("fluid=1-9,11-16", "fluid", new[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15 }, null)]
+    [InlineData("Midi Through:Midi Through Port-0 (14:0)", "Midi Through:Midi Through Port-0 (14:0)", null, null)]
+    public void OutputSpec_Parses(string raw, string port, int[]? channels, double? latencyMs)
     {
         Assert.True(OutputSpec.TryParse(raw, out var spec, out var error), error);
 
         Assert.Equal(port, spec.Port);
         Assert.Equal(channels ?? InstrumentSpec.AllChannels, spec.Channels);
-        Assert.Equal(Ms(latencyMs), spec.Latency);
+        Assert.Equal(latencyMs is { } ms ? Ms(ms) : null, spec.Latency);
+    }
+
+    [Theory]
+    [InlineData("xylo", true)]
+    [InlineData("xylo@10", true)]
+    [InlineData("xylo/60,64", true)]
+    [InlineData("xylo@10/60,64", false)] // fully described: don't ask
+    public void OutputSpec_WantsProfile_OnlyWhenSomethingIsMissing(string raw, bool wants)
+    {
+        Assert.True(OutputSpec.TryParse(raw, out var spec, out _));
+        Assert.Equal(wants, spec.WantsProfile);
+    }
+
+    [Fact]
+    public void Merge_FillsWhatTheCommandLineLeftOut_FromTheSentProfile()
+    {
+        var sent = new InstrumentProfile("Xylophone", Ms(9))
+        {
+            Notes = new HashSet<int> { 60, 64, 67 },
+            NoteLatency = new Dictionary<int, TimeSpan> { [64] = Ms(12) },
+            MinInterval = Ms(60),
+        };
+        static OutputSpec Spec(string raw) => OutputSpec.TryParse(raw, out var s, out _) ? s : throw new InvalidOperationException(raw);
+
+        var plain = SessionOutput.Merge("port", Spec("xylo"), sent);
+        Assert.Equal("port", plain.Name);
+        Assert.Equal(Ms(12), plain.LatencyFor(64));
+        Assert.Equal([60, 64, 67], plain.Notes!.Order());
+        Assert.Equal(Ms(60), plain.MinInterval);
+
+        var latency = SessionOutput.Merge("port", Spec("xylo@20"), sent);
+        Assert.Equal(Ms(20), latency.LatencyFor(64)); // @ replaces per-note latencies too
+        Assert.Equal([60, 64, 67], latency.Notes!.Order());
+        Assert.Equal(Ms(60), latency.MinInterval);
+
+        var notes = SessionOutput.Merge("port", Spec("xylo/60"), sent);
+        Assert.Equal([60], notes.Notes!.Order());
+        Assert.Equal(Ms(12), notes.MaxLatency);
+
+        var none = SessionOutput.Merge("port", Spec("xylo"), null);
+        Assert.Equal(TimeSpan.Zero, none.MaxLatency);
+        Assert.Null(none.Notes);
     }
 
     [Theory]

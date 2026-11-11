@@ -37,11 +37,24 @@ then shows a second line per MetroDom instrument:
 | `no profile: sent a profile that doesn't parse: …` | Firmware bug: the reason says which field |
 
 `metrodom virtual` instruments answer with the profile built from their `-i` spec.
+
+## What `play` and `route` do
+
+Before opening outputs, every `-o` missing `@LATENCY_MS` or `/NOTES` is identified (only those
+ports, one scan). A MetroDom instrument's profile fills in what the command line left out:
+`@LATENCY` replaces all its latencies, `/NOTES` replaces its notes, and the minimum interval always
+comes from the profile (the command line has no way to set one). Each use is reported, e.g.
+`MetroDom drums: using the profile it sent (notes 36,38 (2) · 35 ms).` A MetroDom instrument
+that sends no usable profile gets a warning and the command line alone. `--no-identify` skips the
+scan; a fully described `-o` never triggers it. Measured: `play --arrange -o "MetroDom xylo=1"
+-o "MetroDom drums=10"` against `virtual` arranged onto the instruments' own notes with a 35 ms
+lookahead, and they skipped no notes.
 Measured on macOS: two virtual instruments identified and described, whole command 0.19 s.
 
 ## Not yet
 
-- The fetched profile isn't used: `play`/`arrange` still take instruments from `-o`/`-i` flags
-  (step 4: auto-add with the profile, remember assignments, TD-23).
+- Profiles are fetched by `devices --identify` and by `play`/`route` at start, not on hot-plug.
+  `arrange` and `simulate` take virtual `-i` specs, not ports, so they don't ask.
+- No remembered assignments or auto-adding instruments that weren't named with `-o` (step 4, TD-23).
 - Firmware side (Phase 1: read the profile from the body EEPROM and serve it).
 - MIDI-CI Property Exchange.

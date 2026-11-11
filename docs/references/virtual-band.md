@@ -22,13 +22,15 @@ metrodom simulate --no-compensation                 # see the 25 ms smear compen
 metrodom simulate song.mid -i xylo=1@10 -i drums=10@35 --jitter 2 --notes
 metrodom demo-song demo.mid                         # the demo as a file for play/DAWs
 metrodom virtual                                    # terminal 1: ports "MetroDom xylo", "MetroDom drums"
-metrodom play demo.mid -o "MetroDom xylo=1-9,11-16@10" -o "MetroDom drums=10@35"   # terminal 2
+metrodom play demo.mid -o "MetroDom xylo=1-9,11-16" -o "MetroDom drums=10"   # terminal 2
 ```
 
 Instrument spec: `NAME[=CHANNELS]@LATENCY_MS[/NOTES]`. Channels are 1-16 with ranges (`1-9,11-16`),
 omitted means all. Notes are numbers or names (middle C = 60 = C4) with ranges: `/60,64,67`,
 `/C4-C6`, `/36,38,76`; omitted means any note. `play -o` takes the same `=CHANNELS@LATENCY/NOTES`
-after the port name. Default band (roadmap S1): `xylo` on every channel except 10 at 10 ms,
+after the port name. Leave out `@LATENCY` or `/NOTES` and `play` asks the instrument for its
+profile ([profile exchange](midi-profile-exchange.md)) and uses what it sends; what you do write
+wins. `--no-identify` skips the question. Default band (roadmap S1): `xylo` on every channel except 10 at 10 ms,
 `drums` on 10 at 35 ms.
 
 ## Arranging a song onto the band
@@ -39,7 +41,7 @@ covers best, on its first channel. Channel 10 instruments only take drum parts.
 
 ```bash
 metrodom arrange song.mid -i xylo=1@10/60,64,67 -i drums=10@35/36,38,76
-metrodom play song.mid --arrange -o "MetroDom xylo=1@10/60,64,67" -o "MetroDom drums=10@35/36,38"
+metrodom play song.mid --arrange -o "MetroDom xylo=1" -o "MetroDom drums=10"   # notes from the instruments
 ```
 
 Rules (`Arranger`): a part is one track on one channel. Greedy pairing, most playable notes

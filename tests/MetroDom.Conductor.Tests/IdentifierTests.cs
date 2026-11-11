@@ -100,6 +100,19 @@ public class IdentifierTests
     }
 
     [Fact]
+    public void Identify_OnlyTheGivenPorts_AsksNoOthers()
+    {
+        var backend = new DeviceBackend();
+        backend.Add("xylo", answer: Xylo, profile: XyloProfile);
+        backend.Add("piano", answer: Piano);
+
+        var ports = Identifier.Identify(backend, TimeSpan.FromMilliseconds(100), [new MidiPortInfo("xylo", "xylo")]);
+
+        Assert.Equal("xylo", Assert.Single(ports).Profile?.Name);
+        Assert.Equal(0, backend.RequestsTo("piano"));
+    }
+
+    [Fact]
     public void Identify_NoPorts_IsEmpty() =>
         Assert.Empty(Identifier.Identify(new DeviceBackend(), TimeSpan.FromMilliseconds(10)));
 

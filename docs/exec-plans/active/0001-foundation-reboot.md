@@ -43,7 +43,8 @@ That is the first milestone of the [live band spec](../../product-specs/live-ban
 - [ ] Measure ALSA latency on a Pi
 - [x] Discovery steps 1-2 per [ADR 0007](../../design-docs/0007-instrument-discovery.md): list ports, Identity Request, MetroDom vs general MIDI (`devices --identify`, [midi-identity](../../references/midi-identity.md))
 - [x] Discovery step 3: profile fetch over MetroDom SysEx, shown by `devices --identify` ([profile exchange](../../references/midi-profile-exchange.md))
-- [ ] Discovery step 4: use fetched profiles in `play`/`arrange`, identify on hot-plug, remember assignments (TD-23)
+- [x] Discovery step 4a: `play`/`route` use the profile an instrument sends for whatever `-o` leaves out (`--no-identify` to skip)
+- [ ] Discovery step 4b: identify on hot-plug, remember assignments, auto-add instruments (TD-23)
 - [x] Safety governor + panic, tested (`SafetyGovernor` in front of every output; `--max-velocity`, `--max-rate`, `--quiet`). Limits: TD-22
 - [x] Tap tempo (terminal keys) and `--tempo`
 - [ ] Tap from a MIDI input (foot pedal) / MIDI Clock in
@@ -125,6 +126,14 @@ That is the first milestone of the [live band spec](../../product-specs/live-ban
   after the identity round, all ports at once, so a scan stays ≤ 2 × 250 ms. One `MinInterval`
   per instrument for now: the largest per-note value. Measured on macOS: two virtual instruments
   identified and described in 0.19 s.
+
+- 2026-11-11: Discovery step 4a. `-o` latency became optional so "not given" differs from `@0`.
+  Outputs missing `@LATENCY` or `/NOTES` are identified once at start (only those ports); the
+  sent profile fills the gaps and the command line wins field by field. `@LATENCY` replaces the
+  per-note latencies too, since a person who types one number means it for the whole instrument.
+  This is also the first way to give the governor a minimum interval. Cost: up to 2 × 250 ms at
+  start when a named port has an input that doesn't answer; `--no-identify` or a fully described
+  `-o` avoids it.
 
 ## Open questions
 - Target box model (ADR 0002).

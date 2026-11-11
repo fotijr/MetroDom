@@ -22,5 +22,7 @@ internal static class Ui
 
     public static void Warn(string message) => Error.MarkupLine($"[yellow]warning:[/] {Markup.Escape(message)}");
 
+    public static void Note(string message) => Error.MarkupLine($"[grey]{Markup.Escape(message)}[/]");
+
     public static void Success(string message) => AnsiConsole.MarkupLine($"[green]✓[/] {Markup.Escape(message)}");
 }

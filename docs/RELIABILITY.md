@@ -29,7 +29,7 @@ but is polled (1 ms full-speed frames).
      back), `--max-velocity N` (louder notes turned down, never dropped), `--quiet 23:00-07:00[@VEL]`
      (local time, may cross midnight; no new notes, or capped at VEL).
    - Rejects notes outside an instrument's declared range or minimum inter-note interval. Built:
-     notes from `-o PORT.../NOTES`; min interval waits for profile files.
+     notes and min interval from the profile the instrument sends (or `-o PORT.../NOTES`).
    - Only new notes are ever held back or changed. Note Off, panic and every other message pass,
      so the governor can never leave an actuator on. Held-back counts show in the status panel
      and are printed when the run ends.

@@ -22,7 +22,7 @@ internal sealed class RouteCommand : Command<RouteCommand.Settings>
         using (var session = new Session(settings))
         {
             output = session.OutputName;
-            if (session.Outputs.Any(o => o.Latency > TimeSpan.Zero))
+            if (session.Outputs.Any(o => o.Profile.MaxLatency > TimeSpan.Zero))
             {
                 Ui.Warn("Latency is ignored for live input: it can't be sent early (ADR 0004 delays to the slowest instrument instead, not built yet).");
             }

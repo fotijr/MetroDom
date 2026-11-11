@@ -52,10 +52,13 @@ internal static class Identifier
 {
     public static readonly TimeSpan DefaultTimeout = TimeSpan.FromMilliseconds(250);
 
-    public static IReadOnlyList<IdentifiedPort> Identify(IMidiBackend backend, TimeSpan timeout)
+    /// <param name="backend">Where the ports are.</param>
+    /// <param name="timeout">Longest wait per round (identity, then profiles).</param>
+    /// <param name="only">Ask just these outputs instead of every one.</param>
+    public static IReadOnlyList<IdentifiedPort> Identify(IMidiBackend backend, TimeSpan timeout, IReadOnlyList<MidiPortInfo>? only = null)
     {
         ArgumentNullException.ThrowIfNull(backend);
-        var outputs = backend.Outputs();
+        var outputs = only ?? backend.Outputs();
         var inputs = backend.Inputs().GroupBy(i => i.Name, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
         var results = new IdentifiedPort?[outputs.Count];
         var replies = new ConcurrentDictionary<int, DeviceIdentity>();

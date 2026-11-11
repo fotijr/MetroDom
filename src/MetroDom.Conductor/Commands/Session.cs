@@ -6,10 +6,37 @@ using MetroDom.Core.Timing;
 
 namespace MetroDom.Conductor.Commands;
 
-/// <summary>An open output and what it plays: its channels and declared latency.</summary>
-internal sealed record SessionOutput(IMidiOutputPort Port, IReadOnlyList<int> Channels, TimeSpan Latency, IReadOnlySet<int>? Notes = null)
+/// <summary>An open output and what it plays: its channels and profile (latency, notes, min interval).</summary>
+internal sealed record SessionOutput(IMidiOutputPort Port, IReadOnlyList<int> Channels, InstrumentProfile Profile)
 {
-    public InstrumentProfile Profile => new(Port.Name, Latency) { Notes = Notes };
+    /// <summary>An output described only by the command line.</summary>
+    public SessionOutput(IMidiOutputPort port, IReadOnlyList<int> channels, TimeSpan latency, IReadOnlySet<int>? notes = null)
+        : this(port, channels, new InstrumentProfile(port.Name, latency) { Notes = notes })
+    {
+    }
+
+    /// <summary>
+    /// The profile for <paramref name="name"/>: what the command line says, with anything it left
+    /// out taken from the profile the instrument sent. <c>@LATENCY</c> replaces the instrument's
+    /// latencies (per note too); <c>/NOTES</c> replaces its notes. The minimum interval always
+    /// comes from the instrument, since the command line can't set one.
+    /// </summary>
+    public static InstrumentProfile Merge(string name, OutputSpec spec, InstrumentProfile? sent)
+    {
+        ArgumentNullException.ThrowIfNull(spec);
+        if (sent is null)
+        {
+            return new InstrumentProfile(name, spec.Latency ?? TimeSpan.Zero) { Notes = spec.Notes };
+        }
+
+        return sent with
+        {
+            Name = name,
+            Latency = spec.Latency ?? sent.Latency,
+            NoteLatency = spec.Latency is null ? sent.NoteLatency : new Dictionary<int, TimeSpan>(),
+            Notes = spec.Notes ?? sent.Notes,
+        };
+    }
 
     public bool IsConnected => Port is not ResilientOutput resilient || resilient.IsConnected;
 }
@@ -24,7 +51,7 @@ internal sealed class Session : IDisposable
     private Action<string> _log = Ui.Warn;
 
     public Session(OutputSettings settings)
-        : this(Open(settings.OutputSpecs), settings.MutedChannels, settings.Limits)
+        : this(Open(settings.OutputSpecs, !settings.NoIdentify), settings.MutedChannels, settings.Limits)
     {
     }
 
@@ -106,20 +133,27 @@ internal sealed class Session : IDisposable
         _stop.Dispose();
     }
 
-    /// <summary>Opens every requested output (or prompts for one). Closes what it opened if one fails.</summary>
-    private static List<SessionOutput> Open(IReadOnlyList<OutputSpec> specs)
+    /// <summary>
+    /// Opens every requested output (or prompts for one). Outputs the command line didn't fully
+    /// describe are asked for their profile first (<paramref name="identify"/>). Closes what it
+    /// opened if one fails.
+    /// </summary>
+    private static List<SessionOutput> Open(IReadOnlyList<OutputSpec> specs, bool identify)
     {
         if (specs.Count == 0)
         {
-            return [new SessionOutput(PortPicker.Output(null), InstrumentSpec.AllChannels, TimeSpan.Zero)];
+            specs = [new OutputSpec(Port: null!, InstrumentSpec.AllChannels)];
         }
 
+        var ports = specs.Select(s => PortPicker.FindOutput(s.Port)).ToArray();
+        var sent = identify ? FetchProfiles(ports.Where((_, i) => specs[i].WantsProfile).Distinct().ToArray()) : [];
         var opened = new List<SessionOutput>();
         try
         {
-            foreach (var spec in specs)
+            for (var i = 0; i < specs.Count; i++)
             {
-                opened.Add(new SessionOutput(PortPicker.Output(spec.Port), spec.Channels, spec.Latency, spec.Notes));
+                var port = MidiDevices.OpenOutput(ports[i]);
+                opened.Add(new SessionOutput(port, specs[i].Channels, SessionOutput.Merge(port.Name, specs[i], sent.GetValueOrDefault(ports[i].Name))));
             }
 
             return opened;
@@ -133,6 +167,31 @@ internal sealed class Session : IDisposable
 
             throw;
         }
+    }
+
+    /// <summary>Asks <paramref name="ports"/> who they are and reports what each MetroDom instrument sent.</summary>
+    private static Dictionary<string, InstrumentProfile> FetchProfiles(MidiPortInfo[] ports)
+    {
+        if (ports.Length == 0)
+        {
+            return [];
+        }
+
+        var found = new Dictionary<string, InstrumentProfile>(StringComparer.Ordinal);
+        foreach (var port in Identifier.Identify(MidiDevices.Backend.Value, Identifier.DefaultTimeout, ports))
+        {
+            if (port.Profile is { } profile)
+            {
+                found[port.Output.Name] = profile;
+                Ui.Note($"{port.Output.Name}: using the profile it sent ({DevicesCommand.Summary(profile)}).");
+            }
+            else if (port.Kind == PortKind.MetroDom)
+            {
+                Ui.Warn($"{port.Output.Name}: MetroDom instrument, but {port.ProfileError}. Using the command line only.");
+            }
+        }
+
+        return found;
     }
 
     private void OnCancel(object? sender, ConsoleCancelEventArgs e)

@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Globalization;
 using MetroDom.Conductor.Cli;
 using MetroDom.Conductor.Midi;
+using MetroDom.Core;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
@@ -69,6 +70,12 @@ internal sealed class DevicesCommand : Command<DevicesCommand.Settings>
             return $"[yellow]no profile: {Markup.Escape(port.ProfileError ?? "")}[/]";
         }
 
+        return $"[grey]profile: {Markup.Escape(profile.Name)} · {Markup.Escape(Summary(profile))}[/]";
+    }
+
+    /// <summary>"notes 60,64,67 (3) · 9-12 ms · repeat ≥ 60 ms".</summary>
+    internal static string Summary(InstrumentProfile profile)
+    {
         var notes = profile.Notes is null ? "any note" : $"notes {NoteList.Format(profile.Notes)} ({profile.Notes.Count})";
         var fastest = profile.NoteLatency.Values.Append(profile.Latency).Min();
         var latency = fastest == profile.MaxLatency
@@ -77,7 +84,7 @@ internal sealed class DevicesCommand : Command<DevicesCommand.Settings>
         var interval = profile.MinInterval > TimeSpan.Zero
             ? string.Create(CultureInfo.InvariantCulture, $" · repeat ≥ {profile.MinInterval.TotalMilliseconds:0.#} ms")
             : "";
-        return $"[grey]profile: {Markup.Escape(profile.Name)} · {Markup.Escape(notes)} · {latency}{interval}[/]";
+        return $"{notes} · {latency}{interval}";
     }
 
     private static Table Ports(IReadOnlyList<string> names)

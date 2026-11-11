@@ -128,9 +128,9 @@ internal static class LiveStatus
             var output = session.Outputs[i];
             var held = session.Governors[i].TotalBlocked;
             var blocked = held == 0 ? "" : string.Create(CultureInfo.InvariantCulture, $"  [yellow]{held} held back[/]");
-            var routing = session.Outputs.Count == 1 && output.Latency == TimeSpan.Zero
+            var routing = session.Outputs.Count == 1 && output.Profile.MaxLatency == TimeSpan.Zero
                 ? ""
-                : string.Create(CultureInfo.InvariantCulture, $"[grey]ch {ChannelList.Format(output.Channels)} · {output.Latency.TotalMilliseconds:0.#} ms[/]  ");
+                : string.Create(CultureInfo.InvariantCulture, $"[grey]ch {ChannelList.Format(output.Channels)} · {output.Profile.MaxLatency.TotalMilliseconds:0.#} ms[/]  ");
             rows.Add(new Markup($"[grey]Output[/]  {Markup.Escape(output.Port.Name)}  {routing}{Connection(output.IsConnected)}{blocked}"));
         }
 
