@@ -52,6 +52,17 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
 
         public IReadOnlyList<Core.Arranging.Seat> Seats => SeatList.TryParse(Seat, out var seats, out _) ? seats : [];
 
+        [CommandOption("--count-in <BARS>")]
+        [Description("Count in this many bars (1-8) on a real instrument before the song, first beat of each bar accented. See [bold]--click[/].")]
+        [DefaultValue(0)]
+        public int CountInBars { get; init; }
+
+        [CommandOption("--click <CHANNEL/NOTE>")]
+        [Description("What plays the count-in: a channel (1-16) and note, e.g. [bold]10/76[/] (default: woodblock on the drums channel) or [bold]1/C6[/]. The output on that channel strikes it, through the safety governor.")]
+        public string? Click { get; init; }
+
+        public (int Channel, int Note) ClickNote => TryParseClick(Click, out var click, out _) ? click : (9, 76);
+
         [CommandOption("-t|--tempo <BPM>")]
         [Description("Start at this tempo instead of the file's. Tempo changes in the file scale with it.")]
         public double? Tempo { get; init; }
@@ -73,6 +84,16 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
                 return ValidationResult.Error($"--tempo must be {TapTempo.MinBpm:0}-{TapTempo.MaxBpm:0} BPM.");
             }
 
+            if (CountInBars is < 0 or > 8)
+            {
+                return ValidationResult.Error("--count-in must be 0-8 bars.");
+            }
+
+            if (!TryParseClick(Click, out _, out var clickError))
+            {
+                return ValidationResult.Error($"--click: {clickError}");
+            }
+
             if (!TapTrigger.TryParse(TapOn, out _, out var error))
             {
                 return ValidationResult.Error($"--tap-on: {error}");
@@ -87,6 +108,28 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
                 ? ValidationResult.Error("--tap and --clock-in both set the tempo; pick one.")
                 : base.Validate();
         }
+    }
+
+    /// <summary>Parses <c>CHANNEL/NOTE</c> (channel 1-16, note number or name). Null means the default.</summary>
+    internal static bool TryParseClick(string? raw, out (int Channel, int Note) click, out string? error)
+    {
+        click = (9, 76);
+        error = null;
+        if (raw is null)
+        {
+            return true;
+        }
+
+        var parts = raw.Split('/', 2, StringSplitOptions.TrimEntries);
+        if (parts.Length != 2 || !int.TryParse(parts[0], NumberStyles.None, CultureInfo.InvariantCulture, out var channel) || channel is < 1 or > 16
+            || !NoteList.TryParse(parts[1], out var notes, out _) || notes.Count != 1)
+        {
+            error = $"'{raw}' is not CHANNEL/NOTE (e.g. 10/76 or 1/C6).";
+            return false;
+        }
+
+        click = (channel - 1, notes.First());
+        return true;
     }
 
     public override int Execute(CommandContext context, Settings settings, CancellationToken cancellationToken)
@@ -115,9 +158,17 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
                 timeline = arrangement.Timeline;
             }
 
+            var (beat, beatsPerBar) = CountIn.Meter(midiFile);
+            var (clickChannel, clickNote) = settings.ClickNote;
+            (timeline, var countIn) = CountIn.Prepend(timeline, settings.CountInBars, beat, beatsPerBar, clickChannel, clickNote);
+            var sections = new SectionNavigator(scheduler, SongSections.Shift(SongSections.From(midiFile), countIn));
+            scheduler.Jumped += (_, to) => session.Messages.Add(
+                sections.Sections.FirstOrDefault(s => s.Start == to) is { } target ? $"→ {target.Name}" : "→ jump");
+
             // Start from silence. Also warms up every output's send path, so the first note isn't late.
             session.Orchestra.Panic();
             scheduler.Start(timeline, startSpeed, Preroll);
+            TimeSpan SongPosition() => scheduler.Position > countIn ? scheduler.Position - countIn : TimeSpan.Zero;
 
             using var loop = new SchedulerLoop(scheduler, clock);
             loop.Finished += session.RequestStop;
@@ -132,7 +183,7 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
             string? tempoSource = null;
             void SetTempo(double bpm, string source)
             {
-                scheduler.SetSpeed(Clamp(bpm / FileBpm(tempoMap, scheduler.Position)));
+                scheduler.SetSpeed(Clamp(bpm / FileBpm(tempoMap, SongPosition())));
                 Volatile.Write(ref tempoSource, source);
                 loop.Wake();
             }
@@ -158,7 +209,7 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
             {
                 Console.WriteLine(string.Create(
                     CultureInfo.InvariantCulture,
-                    $"Playing {song} to {output} at {fileBpm * startSpeed:0.#} BPM, lookahead {scheduler.Lookahead.TotalMilliseconds:0.#} ms{Muted(settings)}{TempoFrom(tapInput, clockInput)}. Ctrl+C to stop."));
+                    $"Playing {song} to {output} at {fileBpm * startSpeed:0.#} BPM, lookahead {scheduler.Lookahead.TotalMilliseconds:0.#} ms{Muted(settings)}{CountInNote(settings)}{TempoFrom(tapInput, clockInput)}. Ctrl+C to stop."));
             }
 
             loop.Start();
@@ -168,8 +219,10 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
                     $"▶ {Markup.Escape(song)}",
                     session,
                     LiveStatus.Progress(scheduler.Position, scheduler.Duration),
-                    TempoLine(scheduler, FileBpm(tempoMap, scheduler.Position), Volatile.Read(ref tempoSource)),
-                    "Space tap · +/- tempo · 0 file tempo" + TempoFrom(tapInput, clockInput)),
+                    sections.Describe() is { } where
+                        ? new Rows(TempoLine(scheduler, FileBpm(tempoMap, SongPosition()), Volatile.Read(ref tempoSource)), new Markup($"[grey]Section[/] {Markup.Escape(where)}"))
+                        : TempoLine(scheduler, FileBpm(tempoMap, SongPosition()), Volatile.Read(ref tempoSource)),
+                    "Space tap · +/- tempo · 0 file tempo" + (sections.Sections.Count > 0 ? " · V vamp · O outro" : "") + TempoFrom(tapInput, clockInput)),
                 key =>
                 {
                     switch (key.KeyChar)
@@ -185,6 +238,14 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
                         case '-' or '_':
                             scheduler.SetSpeed(Clamp(scheduler.Speed / Nudge));
                             Volatile.Write(ref tempoSource, "nudged");
+                            loop.Wake();
+                            break;
+                        case 'v' or 'V':
+                            session.Messages.Add(sections.ToggleVamp());
+                            loop.Wake();
+                            break;
+                        case 'o' or 'O':
+                            session.Messages.Add(sections.JumpToOutro());
                             loop.Wake();
                             break;
                         case '0':
@@ -280,6 +341,11 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
             }
         };
     }
+
+    private static string CountInNote(Settings settings) =>
+        settings.CountInBars == 0 ? "" : string.Create(
+            CultureInfo.InvariantCulture,
+            $", {settings.CountInBars}-bar count-in on ch {settings.ClickNote.Channel + 1} note {settings.ClickNote.Note}");
 
     private static string TempoFrom(IMidiInputPort? tap, IMidiInputPort? clock) =>
         tap is not null ? $" · tap from {tap.Name}" : clock is not null ? $" · tempo from {clock.Name} (MIDI Clock)" : "";

@@ -102,6 +102,27 @@ at 75 BPM.
 Measured on macOS (`play` → `virtual`, demo song, 10 ms + 35 ms): drums sent ~24 ms before the
 xylophone, heard within 1 ms of each other (the log's resolution) on every beat, at 100 and 150 BPM.
 
+## Count-in and song sections
+
+- `--count-in BARS` (1-8) strikes a real instrument before the song: `--click CHANNEL/NOTE`,
+  default `10/76` (woodblock on the drums channel). Bar ones at velocity 110, other beats 80, at
+  the file's starting tempo and meter (6/8 counts eighths). The strikes go through the scheduler
+  and governor like any note: latency-compensated, follow tap tempo, dropped if that instrument
+  can't play the note.
+- Sections come from SMF **marker** events (`SongSections`); music before the first marker is
+  "Start". `inspect` lists them; the built-in demo has Verse, Chorus, Outro.
+- In `play`: **V** toggles **vamp** (repeat the current section until pressed again), **O** goes
+  to the **outro** (last section named outro/ending/end/coda/tag, else the last) when the current
+  section ends. Both act at section boundaries. The status view shows `Section Chorus (2/3) · vamping`.
+- How (`LatencyScheduler.ArmJump`): a jump is armed, then committed 50 ms (song time) before the
+  song clock reaches it, replacing everything not yet sent with the song from the target on.
+  Nothing already sent is taken back, notes held across the jump get a Note Off, and latency
+  compensation is unchanged. Disarming before the commit cancels it.
+
+Measured on macOS (`play --count-in 1` → `virtual`, demo song): four woodblock strikes 0.6 s
+apart, the first accented, then the song on the next beat. Vamp and outro are tested on the
+virtual clock; they need keys in a terminal (foot controller mapping is next, Phase 2b).
+
 ## Not yet (see [tech debt](../exec-plans/tech-debt-tracker.md))
 
 - Clock in follows tempo, not phase: the band can drift against the clock source by up to the

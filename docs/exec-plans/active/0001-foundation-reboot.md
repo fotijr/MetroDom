@@ -52,7 +52,7 @@ That is the first milestone of the [live band spec](../../product-specs/live-ban
 ### Phase 2b: Play-along ([ADR 0012](../../design-docs/0012-humans-in-the-band.md))
 - [x] Track roles (track names, GM drums channel, saved per-song mapping): `metrodom roles`, [song roles](../../references/song-roles.md)
 - [x] Seats: a human takes a role, arranger mutes it (generalize `--mute`): `--seat ROLE[=PLAYER]` on `play`/`simulate`/`arrange`
-- [ ] Count-in on a chosen instrument. SMF marker sections. Vamp / jump to outro
+- [x] Count-in on a chosen instrument. SMF marker sections. Vamp / jump to outro (`--count-in`, `--click`, V / O keys)
 - [ ] Foot controller mapping in the live-band policy (start/stop, next, tap, vamp, panic)
 - [ ] Tempo tracker with beat prediction, tested with recorded human timings + fake clock
 - [ ] Human-leads input from drum triggers (`trigger-piezo`)
@@ -159,6 +159,15 @@ That is the first milestone of the [live band spec](../../product-specs/live-ban
   keeps its other parts; `--mute` stays for whole channels. Only notes are removed (tempo,
   markers, controllers stay). The idle instrument stays in the band, so lookahead doesn't jump
   when someone sits in. Seats are flags until session/policy profiles exist (ADR 0005).
+
+- 2026-11-11: Count-in, sections, vamp. Count-in strikes are ordinary timeline events prepended
+  to the song, so they get compensation, tap tempo and the governor for free; default click is
+  the woodblock (GM 76 on channel 10), per M2. Sections are SMF markers. Jumps live in the
+  scheduler as a forward-only play-time axis with segments mapping back to song time; a jump is
+  armed and committed 50 ms before the song clock reaches it. That keeps two promises: nothing
+  sent is taken back (every send is due at or after its play time, so the tail after the jump
+  point is still unsent), and a vamp can be released right up to the boundary. Vamp and outro act
+  at section ends so the band never cuts off mid-phrase. Limits: TD-24.
 
 ## Open questions
 - Target box model (ADR 0002).

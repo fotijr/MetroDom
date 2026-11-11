@@ -3,6 +3,7 @@ using System.Globalization;
 using Melanchall.DryWetMidi.Common;
 using Melanchall.DryWetMidi.MusicTheory;
 using MetroDom.Core;
+using MetroDom.Core.Timing;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
@@ -32,6 +33,10 @@ internal sealed class InspectCommand : Command<InspectCommand.Settings>
         summary.AddRow("[grey]PPQN[/]", song.TicksPerQuarterNote?.ToString(inv) ?? "SMPTE");
         summary.AddRow("[grey]Tempo[/]", string.Create(inv, $"{song.InitialTempoBpm:0.##} BPM [grey](default; humans may override)[/]"));
         summary.AddRow("[grey]Duration[/]", string.Create(inv, $"{song.Duration:m\\:ss\\.f}"));
+        var sections = SongSections.From(Melanchall.DryWetMidi.Core.MidiFile.Read(settings.Path));
+        summary.AddRow("[grey]Sections[/]", sections.Count == 0
+            ? "[grey](no markers: vamp and jump need them)[/]"
+            : string.Join(" · ", sections.Select(s => string.Create(inv, $"{Markup.Escape(s.Name)} [grey]{s.Start:m\\:ss}[/]"))));
         AnsiConsole.Write(summary);
         AnsiConsole.WriteLine();
 
