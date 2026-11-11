@@ -85,13 +85,20 @@ public class PlaySchedulingTests
         using var session = new Session([new SessionOutput(fast, [0], Ms(0)), new SessionOutput(slow, [1], Ms(30))], []);
         var scheduler = new LatencyScheduler(session.Orchestra, clock, session.Profiles);
         TimedMidiEvent Hit(double ms, int channel) => new(Ms(ms), new NoteOnEvent((SevenBitNumber)60, (SevenBitNumber)100) { Channel = (FourBitNumber)channel });
-        scheduler.Start([Hit(0, 0), Hit(0, 1), Hit(200, 0), Hit(200, 1), Hit(400, 0), Hit(400, 1)], preroll: Ms(50));
+
+        // Same start-up as `play`: a panic warms every send path, and a 250 ms pre-roll leaves time
+        // for the loop thread to start. With 50 ms a cold CI runner started the loop after beat 1
+        // was due for both instruments, so they were sent together instead of 30 ms apart.
+        session.Orchestra.Panic();
+        var started = clock.Now;
+        scheduler.Start([Hit(0, 0), Hit(0, 1), Hit(200, 0), Hit(200, 1), Hit(400, 0), Hit(400, 1)], preroll: Ms(250));
 
         using var finished = new ManualResetEventSlim();
         using var loop = new SchedulerLoop(scheduler, clock);
         loop.Finished += finished.Set;
         loop.Start();
-        Thread.Sleep(Ms(200)); // Song clock ≈ 150 ms: beat 1 sent, beat 2 not yet.
+        var wait = started + Ms(400) - clock.Now;
+        Thread.Sleep(wait > TimeSpan.Zero ? wait : TimeSpan.Zero); // Song clock ≈ 150 ms: beat 1 sent, beat 2 not yet.
         scheduler.SetSpeed(2);
         loop.Wake();
 
