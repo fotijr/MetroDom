@@ -46,7 +46,7 @@ Reactive is the default and is overridden by live or authored cues.
 - MetroDom-built light hardware (accent LEDs) speaks **MIDI** like any instrument
   ([ADR 0001](0001-midi-is-the-contract.md)).
 - Off-the-shelf lighting speaks **sACN** (preferred) or **Art-Net** from the Conductor, through a
-  network switch in the [rig head](0010-road-ready-instruments.md). A node converts to **DMX512**
+  network switch next to the Conductor (in the [rig head](0010-road-ready-instruments.md) if the band ever travels). A node converts to **DMX512**
   for fixtures. WLED controllers take sACN directly.
 - The Conductor gains a light output adapter (MIDI timeline in → light profile → sACN out). No
   custom lighting protocol.
@@ -64,7 +64,7 @@ Reactive is the default and is overridden by live or authored cues.
 - Lights never block music: a dead light node is logged, songs keep playing.
 
 ## Consequences
-- The rig head needs an Ethernet switch, and visuals become the first network-dependent part.
+- The rig needs an Ethernet switch, and visuals become the first network-dependent part.
 - Accent LEDs add a 5 V LED supply and a strip to every body: cheap, but it's more current to budget.
 - Song files may gain a lights track. Files without one still get reactive lights.
 - A new reference doc and a new profile format (light profile) to maintain.

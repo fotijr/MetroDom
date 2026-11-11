@@ -24,6 +24,9 @@ and velocity. Sending notes "on time" makes a band of robots sound sloppy.
 - Instruments with multi-step motion (servo positioning) may declare **minimum inter-note
   intervals**. The arranger must respect or thin out notes that violate them.
 
+- Following a human player's tempo ([ADR 0012](0012-humans-in-the-band.md)) means lookahead
+  runs on **predicted** beats from a tempo tracker, not on a known timeline.
+
 ## Open questions
 - Calibration UX for a rental customer (automatic on boot?).
 - Target jitter budget. Proposed ≤ 5 ms between instruments for pre-composed material.

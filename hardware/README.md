@@ -49,10 +49,9 @@ flowchart LR
   driver -- act-2p --> s2[striker-solenoid]
   driver -- act-2p --> d1[damper-solenoid]
   s1 & s2 & d1 -- mount-2020 --> frame[frame-2020]
-  frame -- case-600 --> case[case-road]
-  head[rig-head<br/>rack: Conductor, kill switch] -. usb-midi + power .- case
+  frame -. long-term: case-600 .-> case[case-road]
   brain -- led-3p --> accent[led-accent]
-  head -- ethernet / sACN --> lights[led-node-wled · dmx-node · matrix-hub75]
+  conductor -- ethernet / sACN --> lights[led-node-wled · dmx-node · matrix-hub75]
 ```
 
 Only the frame, tips, layout and profile change between percussion instruments.
@@ -66,8 +65,8 @@ Only the frame, tips, layout and profile change between percussion instruments.
 | is a *service or place* that makes parts (library printer, online print shop, extrusion cutting) | `fabrication/capabilities.csv` |
 
 A power supply can be either: the 12 V brick bolted inside a case is a **part**, the bench supply
-on your desk is **equipment**. Equipment `role` is `shop` (stays home), `show` (travels to gigs)
-or `both`. An instrument that needs equipment at a gig lists it in `requires_equipment`.
+on your desk is **equipment**. Equipment `role` is `shop` (stays home), `show` (needed when the band plays, at home or away)
+or `both`. An instrument that needs equipment to play lists it in `requires_equipment`.
 
 ## Everyday workflows
 
@@ -79,8 +78,9 @@ or `both`. An instrument that needs equipment at a gig lists it in `requires_equ
 - **Can I build it?** `python3 scripts/check_hardware.py --buildable` joins every BOM with stock.
 - **Going to the library / placing an order?** `python3 scripts/check_hardware.py --fab-queue`
   lists queued jobs by process. See [fabrication/](fabrication/README.md).
-- **Designing anything physical?** It must fit a road case and survive the drive:
-  [ADR 0010](../docs/design-docs/0010-road-ready-instruments.md).
+- **Designing anything physical?** Home use comes first. Portability is long-term: just keep each
+  instrument a self-contained unit with pluggable connections
+  ([ADR 0010](../docs/design-docs/0010-road-ready-instruments.md), "Priority").
 
 Always run `python3 scripts/check_hardware.py` before committing hardware changes.
 

@@ -24,9 +24,9 @@ Modules declare which processes they need in `module.toml` (`fabrication = ["3d-
 ## Design rules (so any provider can make it)
 - **Fit the smallest printer we can reach.** Until the library's specs are filled in, keep
   every printed part inside **180 × 180 × 180 mm**. Split bigger parts and bolt them together.
-- **No PLA on anything that travels.** PLA softens around 55–60 °C, and a vehicle in summer gets
-  hotter. Road parts are PETG or ASA ([ADR 0010](../../docs/design-docs/0010-road-ready-instruments.md)).
-  PLA is fine for test fits and jigs.
+- **PLA is fine for home builds.** If instruments ever travel, parts that ride in a vehicle move
+  to PETG or ASA, since PLA softens around 55–60 °C
+  ([ADR 0010](../../docs/design-docs/0010-road-ready-instruments.md), long-term).
 - Use heat-set inserts or captive nuts, not screws into plastic, for anything taken apart often.
 - Name exports after the module and part (`striker-solenoid_bracket.stl`) so a batch of 20 files
   from a library USB stick can be sorted out again.

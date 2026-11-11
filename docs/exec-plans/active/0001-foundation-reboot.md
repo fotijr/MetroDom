@@ -42,6 +42,14 @@ That is the first milestone of the [live band spec](../../product-specs/live-ban
 - [ ] Safety governor + panic, tested
 - [ ] Tap tempo / MIDI Clock in
 
+### Phase 2b: Play-along ([ADR 0012](../../design-docs/0012-humans-in-the-band.md))
+- [ ] Track roles (track names, GM drums channel, saved per-song mapping)
+- [ ] Seats: a human takes a role, arranger mutes it (generalize `--mute`)
+- [ ] Count-in on a chosen instrument. SMF marker sections. Vamp / jump to outro
+- [ ] Foot controller mapping in the live-band policy (start/stop, next, tap, vamp, panic)
+- [ ] Tempo tracker with beat prediction, tested with recorded human timings + fake clock
+- [ ] Human-leads input from drum triggers (`trigger-piezo`)
+
 ### Phase 3: Control API v0
 - [ ] OpenAPI spec: transport, queue, instruments, panic
 - [ ] WebSocket state stream

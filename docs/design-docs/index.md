@@ -15,8 +15,9 @@ Architecture Decision Records (ADRs) plus the beliefs every decision must respec
 | 0007 | [Instrument discovery: MetroDom + general MIDI devices](0007-instrument-discovery.md) | Proposed |
 | 0008 | [Hardware as code: how hardware lives in the repo](0008-hardware-as-code.md) | Proposed |
 | 0009 | [Shared hardware modules and connector standards](0009-shared-hardware-modules.md) | Proposed |
-| 0010 | [Road-ready instruments: cases, transport and fast setup](0010-road-ready-instruments.md) | Proposed |
+| 0010 | [Road-ready instruments: cases, transport and fast setup (long-term)](0010-road-ready-instruments.md) | Proposed, deferred |
 | 0011 | [Visuals are part of the band: lights on the same MIDI timeline](0011-visuals-are-part-of-the-band.md) | Proposed |
+| 0012 | [Humans in the band: play-along](0012-humans-in-the-band.md) | Proposed |
 
 ## Writing a new ADR
 Copy the shape of an existing one: **Status, Context, Decision, Consequences, Open questions**.

@@ -28,7 +28,10 @@ but is polled (1 ms full-speed frames).
 3. **Lights**
    - Flashing capped at 3 per second unless the venue policy enables strobe (photosensitive epilepsy).
    - LEDs on their own fused 5 V supply with software brightness caps.
-4. **Control surfaces**
+4. **Humans near robots**
+   - Actuators within a player's reach are guarded. A robot never plays the drum or string a human is playing.
+   - Panic reachable by foot during play-along.
+5. **Control surfaces**
    - Panic always visible to owner/operator roles. Never available to guests.
 
 ## Failure modes to design for
@@ -38,8 +41,9 @@ but is polled (1 ms full-speed frames).
 | Conductor crash | Firmware watchdogs silence everything. Service supervisor restarts the Conductor. Resume is optional |
 | Wi-Fi / internet loss | Playback and queue continue. Apps reconnect and resync state over WebSocket |
 | Power brownout | Instruments boot to all-off. Conductor boots to "ready, not playing" |
-| Transport: vibration, heat, bumped connectors | Mechanisms locked for travel, strain-relieved leads, PETG/ASA prints. Self-check sweep after setup flags anything out of adjustment ([ADR 0010](design-docs/0010-road-ready-instruments.md)) |
+| (Long-term) Transport: vibration, heat, bumped connectors | Mechanisms locked for travel, strain-relieved leads, PETG/ASA prints. Self-check sweep after setup flags anything out of adjustment ([ADR 0010](design-docs/0010-road-ready-instruments.md)) |
 | Light node or fixture fails | Logged and shown in health. Music keeps playing. Panic sends lights to a steady safe look, not blackout ([ADR 0011](design-docs/0011-visuals-are-part-of-the-band.md)) |
+| Tempo tracker loses a human player (fill, pause, wrong hit) | Hold the last stable tempo, never lurch. Operator can switch to band-leads by foot ([ADR 0012](design-docs/0012-humans-in-the-band.md)) |
 | Untrusted song file (huge, malformed) | Parsed in isolation with limits. Rejected without affecting the current song |
 
 ## Testing expectations

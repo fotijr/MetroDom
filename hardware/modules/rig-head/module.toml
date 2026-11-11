@@ -1,3 +1,4 @@
+# Long-term (ADR 0010): only if gigging becomes real.
 id = "rig-head"
 name = "Rig head (19-inch rack case)"
 revision = "A"

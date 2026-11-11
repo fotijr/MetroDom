@@ -1,0 +1,7 @@
+id = "trigger-piezo"
+name = "Piezo drum triggers to MIDI"
+revision = "A"
+status = "planned"   # planned | prototype | proven | deprecated
+job = "control"
+interfaces = ["usb-midi"]
+fabrication = ["solder", "3d-print-fdm"]

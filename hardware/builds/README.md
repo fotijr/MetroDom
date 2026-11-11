@@ -1,7 +1,7 @@
 # Build records
 
 One file per physical unit: `MD-<MODULE-OR-INSTRUMENT-ID>-<NNN>.md`, uppercase, three-digit
-counter. Print the serial on a label and stick it on the unit. When something breaks at a gig,
+counter. Print the serial on a label and stick it on the unit. When something breaks mid-song,
 the label leads straight to how it was built and tested.
 
 Write the record in the same commit that decrements the used parts in

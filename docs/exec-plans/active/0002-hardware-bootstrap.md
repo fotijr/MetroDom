@@ -15,7 +15,7 @@ instrument needs only a new frame, profile and `instrument.toml`.
 - Safety rules every step must respect: [RELIABILITY.md](../../RELIABILITY.md)
 - Firmware side of the same work: [exec plan 0001](0001-foundation-reboot.md), Phase 1
 - Where things are stored: [hardware/README.md](../../../hardware/README.md)
-- Transport and setup constraints: [ADR 0010](../../design-docs/0010-road-ready-instruments.md)
+- Portability is long-term ([ADR 0010](../../design-docs/0010-road-ready-instruments.md)): follow only its short "keep it possible" list until Phase H8
 - Making parts without owning a printer: [fabrication](../../../hardware/fabrication/README.md)
 
 Principle: **learn on one channel, then copy it.** Each phase produces a module that later
@@ -48,8 +48,7 @@ current limits, why a stuck-on solenoid gets hot.
 ### Phase H3: `striker-solenoid` rev A (mechanics)
 - [ ] OpenSCAD bracket that bolts to `mount-2020` and holds the solenoid at adjustable height
 - [ ] Mallet tip options (rubber, felt, plastic) as swappable printed parts
-- [ ] One test print at the library, then batch the rest (PETG/ASA for the final parts)
-- [ ] Transport lock that pins the plunger for travel
+- [ ] One test print at the library, then batch the rest (PLA is fine at home)
 - [ ] Bench test: consistent strike at 8 strikes/s for 60 s without overheating
 - [ ] Build three: `MD-STRIKER-SOLENOID-001..003`
 
@@ -62,22 +61,23 @@ current limits, why a stuck-on solenoid gets hot.
 - [ ] Xylophone frame on 2020 extrusion, 3 → 8 notes using striker rev A
 - [ ] `Instruments/xylophone_solenoid/instrument.toml` lists its modules
 - [ ] Plays a song from `metrodom play` (ties into exec plan 0001)
-- [ ] Mounted in a `case-road` (600 × 600) with a power + USB panel
-
-### Phase H5b: Road test
-- [ ] Load into a vehicle, drive 30+ minutes, unload, set up alone. Time truck → first note
-- [ ] Record what came loose or went out of adjustment. Fix it in the modules, bump revisions
 
 ### Phase H6: Second instrument from the same modules
 Use the owner's drum set (snare first, plus a cowbell or woodblock): see
 [musical-instruments.csv](../../../hardware/inventory/musical-instruments.csv). Roadmap M2.
-- [ ] Only new hardware: frame, tips and case. Anything else new is a finding: write it down
-- [ ] `rig-head` rack case once there are two instruments to cable together
+- [ ] Only new hardware: frame and tips. Anything else new is a finding: write it down
 - [ ] Retrospective: what had to change in the modules? Bump revisions accordingly
 
 ### Phase H7 (later): PCB and harnesses
 - [ ] KiCad `body-backplane` rev B once perfboard rev A is proven
 - [ ] WireViz harness drawings for anything with more than one cable
+
+### Phase H8 (long-term, only if gigging becomes real): Road-ready
+Roadmap L1. See [ADR 0010](../../design-docs/0010-road-ready-instruments.md).
+- [ ] `case-road` per instrument (600 × 600) with a power + USB panel
+- [ ] Transport locks for plungers and mallets. Road parts reprinted in PETG/ASA
+- [ ] `rig-head` rack case for the Conductor, power and master kill switch
+- [ ] Road test: load, drive 30+ minutes, unload, set up alone, timed. Fix what came loose
 
 ## Decisions log
 - 2026-11-10: Hardware is stored as plain text under `hardware/` (ADR 0008). Instruments are
@@ -92,8 +92,11 @@ Use the owner's drum set (snare first, plus a cowbell or woodblock): see
 - 2026-11-10: Owner's instruments recorded in `musical-instruments.csv`. Second instrument is
   the owner's snare (+ cowbell/woodblock). Order across plans set in ROADMAP.md.
 
+- 2026-11-10: Portability demoted to a long-term goal. A working band at home comes first and
+  MetroDom may stay a home project. Case and road-test work moved to Phase H8.
+
 ## Open questions
 - 12 V vs 24 V default actuator rail (ADR 0009).
 - Perfboard vs straight-to-PCB for `body-backplane`.
 - Budget ceiling for the starter tool kit.
-- Buy road cases or build plywood crates? Which vehicle sets the case grid? (ADR 0010)
+- (Long-term) Buy road cases or build plywood crates? Which vehicle sets the case grid? (ADR 0010)

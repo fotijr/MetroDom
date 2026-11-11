@@ -4,7 +4,7 @@ id = "xylophone-solenoid"
 name = "Xylophone (solenoid)"
 status = "planned"
 plays = "xylophone"        # id in hardware/inventory/musical-instruments.csv
-requires_equipment = []   # ids from hardware/inventory/equipment.csv that must travel with it (e.g. a compressor)
+requires_equipment = []   # ids from hardware/inventory/equipment.csv that it needs to play (e.g. a compressor)
 
 [[modules]]
 id = "brain-pico"
@@ -30,6 +30,4 @@ qty = 8
 id = "frame-2020"
 qty = 1
 
-[[modules]]
-id = "case-road"
-qty = 1   # 8 notes fit 600 x 600; a full range likely needs 600 x 1200
+# Long-term (ADR 0010): a case-road module if the band ever travels.

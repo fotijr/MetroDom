@@ -1,0 +1,7 @@
+id = "footswitch-midi"
+name = "MIDI foot controller"
+revision = "A"
+status = "planned"   # planned | prototype | proven | deprecated
+job = "control"
+interfaces = ["usb-midi"]
+fabrication = ["solder", "drill"]

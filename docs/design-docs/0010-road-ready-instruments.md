@@ -1,6 +1,18 @@
-# 0010: Road-ready instruments: cases, transport and fast setup
+# 0010: Road-ready instruments: cases, transport and fast setup (long-term)
 
-Status: **Proposed** (2026-11-10)
+Status: **Proposed, deferred** (2026-11-10). A long-term goal, not current work.
+
+## Priority
+A working band **at home** comes first, and MetroDom may stay a home project. Until the
+[roadmap](../ROADMAP.md) reaches its long-term milestones, don't spend time on cases, transport or
+setup speed. Only these cheap habits apply now, so portability stays possible later:
+- Build each instrument's mechanics and electronics as **one self-contained unit** on its own
+  `frame-2020`, not fixed to the room, furniture or permanently to the acoustic instrument.
+- Keep the connections between an instrument and the rest of the rig **few and pluggable**
+  (power, USB), not hard-wired.
+- Note in the module README anything that would obviously break in a vehicle. Don't fix it yet.
+
+Everything under "Decision" below is the **target for when gigging becomes real**.
 
 ## Context
 Every mode moves hardware. The [live band](../product-specs/live-band.md) loads into a truck

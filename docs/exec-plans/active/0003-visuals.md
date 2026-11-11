@@ -3,12 +3,10 @@
 Status: Active · Last updated: 2026-11-10
 
 ## Goal
-A bar gig where every song gets a light show synced to the robots, with no extra work per
+A home session (and later, maybe, a gig) where every song gets a light show synced to the robots, with no extra work per
 song: accent LEDs show which instrument plays each note, stage lights follow the music, and a
 matrix display shows what's playing. An authored lights track or live pads can take over at
-any time. Measured by: one person sets up lights inside the 20-minute setup budget
-([ADR 0010](../../design-docs/0010-road-ready-instruments.md)), and light changes land within
-the alignment budget in [RELIABILITY.md](../../RELIABILITY.md).
+any time. Measured by: light changes land within the alignment budget in [RELIABILITY.md](../../RELIABILITY.md).
 
 ## Context
 - Sequenced by the [roadmap](../../ROADMAP.md): build in milestone order, not phase order
@@ -32,7 +30,7 @@ phase is fun on its own and doesn't wait for the next one.
 ### Phase V1: Accent LEDs on instruments (`led-accent`)
 - [ ] Brain firmware drives a short strip on the body: each note's LED flashes on Note On
 - [ ] Instrument profile declares its accent LEDs (count, note → LED index, colour)
-- [ ] Diffuser printed in PETG (rides in the truck). Brightness capped in firmware
+- [ ] Printed diffuser (PLA is fine at home). Brightness capped in firmware
 - [ ] Fits the xylophone body from exec plan 0002 without a second power supply design
 
 ### Phase V2: Conductor drives lights
@@ -46,15 +44,15 @@ phase is fun on its own and doesn't wait for the next one.
 
 ### Phase V3: Stage fixtures
 - [ ] Pick 2–4 budget DMX LED pars (RGB or RGBW, 3- or 5-pin XLR) and record them in equipment
-- [ ] `dmx-node` in the rig head: sACN → DMX512, with a terminator
+- [ ] `dmx-node` next to the Conductor: sACN → DMX512, with a terminator
 - [ ] Fixture channel tables written into the light profile
-- [ ] Fixtures, stands and DMX cables packed in a road case, in the setup time budget
+- [ ] (Long-term) Fixtures and DMX cables packed in a road case ([ADR 0010](../../design-docs/0010-road-ready-instruments.md))
 
 ### Phase V4: LED matrix display (`matrix-hub75`)
 - [ ] One 64×32 HUB75 panel on an ESP32 or Pi: shows song title and tempo from the Control API
 - [ ] Jukebox mode: QR code to join + "up next" ([crowd jukebox](../../product-specs/crowd-jukebox.md))
 - [ ] Beat-synced visualizer from the note stream
-- [ ] Chain panels for a bigger display. Case-mounted, road-ready
+- [ ] Chain panels for a bigger display, mounted on a frame
 
 ### Phase V5 (later)
 - [ ] Authored-show workflow: lights track in a DAW, preview without the robots

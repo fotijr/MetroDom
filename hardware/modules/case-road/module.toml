@@ -1,3 +1,4 @@
+# Long-term (ADR 0010): only if gigging becomes real.
 id = "case-road"
 name = "Road case with connector panel"
 revision = "A"
