@@ -6,6 +6,7 @@ Protocol and format facts agents need while coding. Keep each file factual and t
 | --- | --- |
 | [midi-essentials.md](midi-essentials.md) | Writing anything that sends/parses MIDI or SMF |
 | [instrument-profile.md](instrument-profile.md) | Building an instrument or the Conductor registry |
+| [virtual-band.md](virtual-band.md) | Prototyping without hardware: virtual instruments, `simulate`, `virtual` |
 | [legacy-serial-protocol.md](legacy-serial-protocol.md) | Touching or porting the 2017 firmware |
 | [lighting-essentials.md](lighting-essentials.md) | Planning lights: DMX, Art-Net/sACN, LED strips, matrices, MIDI-to-light |
 | [glossary.md](glossary.md) | A term in the docs is unclear |

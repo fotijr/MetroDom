@@ -14,6 +14,18 @@ internal sealed class DryWetMidiBackend : IMidiBackend
 
     public IMidiInputPort OpenInput(MidiPortInfo port) => new Input(InputDevice.GetByName(port.Name));
 
+    public IMidiInputPort CreateVirtualInput(string name)
+    {
+        if (!OperatingSystem.IsMacOS())
+        {
+            throw new PlatformNotSupportedException(
+                "Windows has no built-in virtual MIDI ports. Create one with loopMIDI " +
+                "(https://www.tobias-erichsen.de/software/loopmidi.html) and play to that instead.");
+        }
+
+        return new VirtualInput(VirtualDevice.Create(name));
+    }
+
     private static MidiPortInfo Info(MidiDevice device)
     {
         using (device)
@@ -29,6 +41,37 @@ internal sealed class DryWetMidiBackend : IMidiBackend
         public void Send(MidiEvent midiEvent) => device.SendEvent(midiEvent);
 
         public void Dispose() => device.Dispose();
+    }
+
+    /// <summary>
+    /// A CoreMIDI virtual device. DryWetMIDI makes it a loopback cable, so it also shows up as an
+    /// input named the same; whatever is sent to it is echoed there.
+    /// </summary>
+    private sealed class VirtualInput : IMidiInputPort
+    {
+        private readonly VirtualDevice _device;
+        private readonly Input _input;
+
+        public VirtualInput(VirtualDevice device)
+        {
+            _device = device;
+            _input = new Input(device.InputDevice);
+            _input.EventReceived += e => EventReceived?.Invoke(e);
+        }
+
+        public event Action<MidiEvent>? EventReceived;
+
+        public string Name => _device.Name;
+
+        public void Start() => _input.Start();
+
+        public void Stop() => _input.Stop();
+
+        public void Dispose()
+        {
+            _input.Stop();
+            _device.Dispose();
+        }
     }
 
     private sealed class Input : IMidiInputPort

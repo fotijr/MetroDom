@@ -34,6 +34,18 @@ internal static class MetroDomApp
             config.AddCommand<RouteCommand>("route")
                 .WithDescription("Route a live controller to an output. Ctrl+C stops and sends panic.")
                 .WithExample("route", "--input", "keystation", "--output", "1");
+            config.AddCommand<SimulateCommand>("simulate")
+                .WithDescription("Play a song to virtual instruments on a virtual clock and report how well they line up. No devices needed.")
+                .WithExample("simulate")
+                .WithExample("simulate", "song.mid", "-i", "xylo=1@10", "-i", "drums=10@35", "--jitter", "2")
+                .WithExample("simulate", "--no-compensation");
+            config.AddCommand<VirtualCommand>("virtual")
+                .WithDescription("Create virtual instruments as OS MIDI ports (Linux, macOS) that play, a DAW or a keyboard can send to.")
+                .WithExample("virtual")
+                .WithExample("virtual", "-i", "xylo=1@10", "-i", "drums=10@35");
+            config.AddCommand<DemoSongCommand>("demo-song")
+                .WithDescription("Write the built-in two-piece demo song (xylophone + drums) to a .mid file.")
+                .WithExample("demo-song", "demo.mid");
             config.AddCommand<PanicCommand>("panic")
                 .WithDescription("All sound and notes off on every channel of an output.")
                 .WithExample("panic", "--output", "0");

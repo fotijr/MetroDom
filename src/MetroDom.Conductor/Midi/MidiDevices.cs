@@ -29,6 +29,9 @@ internal static class MidiDevices
         return new ResilientInput(Backend.Value, port, Log);
     }
 
+    /// <summary>Creates a virtual port other programs can send to (see <see cref="IMidiBackend.CreateVirtualInput"/>).</summary>
+    public static IMidiInputPort CreateVirtualInput(string name) => Backend.Value.CreateVirtualInput(name);
+
     internal static int Resolve(string query, IReadOnlyList<string> names, string kind)
     {
         if (int.TryParse(query, out var index))

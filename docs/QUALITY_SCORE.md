@@ -17,11 +17,12 @@ Last reviewed: 2026-11-10
 | Play-along (seats, count-in, foot control, tempo following) | — | — | [ADR 0012](design-docs/0012-humans-in-the-band.md) | Seed: `metrodom play --mute` |
 | Shared hardware modules (striker, driver, power, frame) | — | — | [ADR 0009](design-docs/0009-shared-hardware-modules.md) | [Exec plan 0002](exec-plans/active/0002-hardware-bootstrap.md) |
 | Instrument discovery (Identity Request, general MIDI) | — | — | ADR | [ADR 0007](design-docs/0007-instrument-discovery.md) |
-| Core: routing, mute, panic (`Orchestra`) | C | Unit | ARCHITECTURE | No scheduler/latency yet. Single output per run in the CLI |
+| Core: routing, mute, panic (`Orchestra`) | C | Unit | ARCHITECTURE | Per-output routing for the scheduler. Single output per run in `play`/`route` |
 | Core: song analysis (`SongAnalyzer`) | C | Unit | ARCHITECTURE | Read-only analysis. No arranger yet |
 | CLI: `inspect` | C | Unit (exit codes) | `--help` | Any OS. Spectre.Console tables |
 | CLI: `devices` / `play` / `route` / `panic` | D | ALSA loopback (local only, skipped on hosted CI: TD-18), unit (validation, status panel) | `--help` | Linux (ALSA), macOS, Windows. Live status panel and port prompt in a terminal, plain lines when piped. Survives unplug/replug (unit tested with a fake backend). Not yet tested against a real instrument (TD-15) |
-| Scheduler / latency compensation | — | — | ADR | [ADR 0004](design-docs/0004-latency-compensation.md) |
+| Scheduler / latency compensation | D | Unit, fake clock | [ADR 0004](design-docs/0004-latency-compensation.md), [virtual band](references/virtual-band.md) | `LatencyScheduler` proven in simulation (0 ms spread, ≤ 4 ms with ±2 ms jitter). Not yet driving real ports: `play` still uses DryWetMIDI playback. Tempo fixed at load (TD-20) |
+| Virtual band (`VirtualInstrument`, `simulate`, `virtual`, `demo-song`) | C | Unit, CLI, CoreMIDI round trip (local), ALSA path untested (TD-19) | [virtual band](references/virtual-band.md) | `virtual` checked by hand on macOS with `play` driving it from another process. No Windows virtual ports (loopMIDI) |
 | Control API | — | — | ADR | [ADR 0003](design-docs/0003-control-api.md) |
 | Policy / roles | — | — | ADR | [ADR 0005](design-docs/0005-deployment-modes-are-policy.md) |
 | Control apps (owner, jukebox, rental) | — | — | Specs | [product-specs](product-specs/index.md) |

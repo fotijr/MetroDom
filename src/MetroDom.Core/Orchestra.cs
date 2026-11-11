@@ -116,6 +116,44 @@ public sealed class Orchestra
         return sent;
     }
 
+    /// <summary>The outputs assigned to <paramref name="channel"/> (0–15).</summary>
+    public IReadOnlyList<IMidiOutput> OutputsFor(int channel)
+    {
+        ValidateChannel(channel);
+        lock (_gate)
+        {
+            return [.. _routes[channel]];
+        }
+    }
+
+    /// <summary>
+    /// Routes one event to a single <paramref name="output"/>, with the same rules as
+    /// <see cref="Route(MidiEvent)"/>: only if that output is assigned to the event's channel,
+    /// mutes block new notes only, and a throwing output is reported, not rethrown. The scheduler
+    /// uses this to send the same song event to each instrument at a different time.
+    /// </summary>
+    /// <returns>Whether the output accepted the event.</returns>
+    public bool RouteTo(IMidiOutput output, MidiEvent midiEvent)
+    {
+        ArgumentNullException.ThrowIfNull(output);
+        ArgumentNullException.ThrowIfNull(midiEvent);
+        if (midiEvent is not ChannelEvent channelEvent)
+        {
+            return false;
+        }
+
+        lock (_gate)
+        {
+            int channel = channelEvent.Channel;
+            if ((_muted[channel] && IsNoteStart(channelEvent)) || !_routes[channel].Contains(output))
+            {
+                return false;
+            }
+        }
+
+        return TrySend(output, () => output.Send(midiEvent));
+    }
+
     /// <summary>
     /// Sends All Sound Off (CC 120) and All Notes Off (CC 123) on every channel to every output,
     /// ignoring mutes. See docs/RELIABILITY.md.

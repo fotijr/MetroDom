@@ -19,17 +19,26 @@ internal sealed unsafe class AlsaInputPort : IMidiInputPort
     private bool _disposed;
 
     public AlsaInputPort(AlsaPort source)
+        : this(source.DisplayName, "in", source)
     {
-        Name = source.DisplayName;
+    }
+
+    private AlsaInputPort(string name, string portName, AlsaPort? source)
+    {
+        Name = name;
         _seq = AlsaBackend.OpenSequencer(SND_SEQ_OPEN_INPUT);
         try
         {
             var port = Check(snd_seq_create_simple_port(
                 _seq,
-                "in",
+                portName,
                 SND_SEQ_PORT_CAP_WRITE | SND_SEQ_PORT_CAP_SUBS_WRITE,
                 SND_SEQ_PORT_TYPE_MIDI_GENERIC | SND_SEQ_PORT_TYPE_APPLICATION), "create_simple_port");
-            Check(snd_seq_connect_from(_seq, port, source.Client, source.Port), $"connect from {source.DisplayName}");
+            if (source is not null)
+            {
+                Check(snd_seq_connect_from(_seq, port, source.Client, source.Port), $"connect from {source.DisplayName}");
+            }
+
             Check(snd_seq_nonblock(_seq, 1), "nonblock");
             Check(snd_midi_event_new(4096, out _decoder), "midi_event_new");
             snd_midi_event_no_status(_decoder, 1); // Always emit status bytes (no running status).
@@ -42,6 +51,12 @@ internal sealed unsafe class AlsaInputPort : IMidiInputPort
     }
 
     public event Action<MidiEvent>? EventReceived;
+
+    /// <summary>
+    /// A port named "MetroDom:<paramref name="portName"/>" that any ALSA client can connect
+    /// to and send to (e.g. <c>metrodom play -o "MetroDom:xylo"</c> or <c>aconnect</c>).
+    /// </summary>
+    public static AlsaInputPort CreateVirtual(string portName) => new($"MetroDom:{portName}", portName, null);
 
     public string Name { get; }
 

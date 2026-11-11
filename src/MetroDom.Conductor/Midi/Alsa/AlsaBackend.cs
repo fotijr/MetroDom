@@ -21,6 +21,8 @@ internal sealed class AlsaBackend : IMidiBackend
 
     public IMidiInputPort OpenInput(MidiPortInfo port) => new AlsaInputPort((AlsaPort)port);
 
+    public IMidiInputPort CreateVirtualInput(string name) => AlsaInputPort.CreateVirtual(name);
+
     /// <summary>Opens a sequencer client named "MetroDom", translating "no ALSA" into a clear error.</summary>
     internal static nint OpenSequencer(int streams)
     {

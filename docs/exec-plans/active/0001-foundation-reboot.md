@@ -35,7 +35,10 @@ That is the first milestone of the [live band spec](../../product-specs/live-ban
 - [x] SDK-style `net10.0` Core + CLI + tests, `dotnet test` on Linux/macOS/Windows CI
 - [x] Core: SMF analysis (DryWetMIDI), channel routing with safe mute, panic
 - [x] Linux MIDI device adapter (ALSA sequencer), round trip tested (locally; hosted CI can't load the module, TD-18)
-- [ ] Core: arranger (track → instrument), scheduler with fake-clock tests
+- [ ] Core: arranger (track → instrument)
+- [x] Core: latency-compensating scheduler with fake-clock tests (`LatencyScheduler`, `VirtualClock`)
+- [x] Virtual band: `VirtualInstrument`, `metrodom simulate` (virtual clock), `metrodom virtual` (OS ports), `demo-song`. See [virtual band](../../references/virtual-band.md)
+- [ ] `play` drives real ports through the scheduler (compensation on hardware), musical-time re-timing for tap tempo (TD-20)
 - [x] Adapters: unplug goes silent, replug reconnects with a panic first. One failing output can't block others
 - [ ] Measure ALSA latency on a Pi
 - [ ] Discovery per [ADR 0007](../../design-docs/0007-instrument-discovery.md): MetroDom + general MIDI devices
@@ -75,6 +78,14 @@ That is the first milestone of the [live band spec](../../product-specs/live-ban
 - 2026-11-10: Linux MIDI talks to the ALSA sequencer directly (P/Invoke to libasound) rather
   than RtMidi: no native library to build per architecture, and the sequencer sees USB devices,
   interfaces, soft synths and virtual ports alike.
+
+- 2026-11-10: Virtual band for roadmap S1. Two layers: an in-process simulation on a virtual
+  clock (deterministic, CI-friendly, proves the scheduler math) and OS virtual MIDI ports (proves
+  the device path with stock tools). Virtual instruments mimic the generic firmware: strike on
+  Note On, Note Off ignored, drop unplayable notes, refuse too-fast repeats. Result: compensation
+  takes the default band's spread from 25 ms to 0 ms, and under 4 ms with ±2 ms jitter. The
+  scheduler polls (`Pump` at `NextDue`) instead of owning a thread, so the same code runs on a
+  fake clock in tests and on a real clock later.
 
 ## Open questions
 - Target box model (ADR 0002).

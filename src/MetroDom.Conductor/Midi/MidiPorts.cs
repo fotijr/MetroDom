@@ -34,6 +34,12 @@ internal interface IMidiBackend
     IMidiOutputPort OpenOutput(MidiPortInfo port);
 
     IMidiInputPort OpenInput(MidiPortInfo port);
+
+    /// <summary>
+    /// Creates a new port that other programs (a DAW, <c>metrodom play</c>) see as an output and
+    /// can send to. Events they send arrive on the returned input. Lives until disposed.
+    /// </summary>
+    IMidiInputPort CreateVirtualInput(string name);
 }
 
 /// <summary>The OS MIDI system is missing or refused a request (no sequencer, port vanished…).</summary>
