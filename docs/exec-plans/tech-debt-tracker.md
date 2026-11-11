@@ -7,6 +7,7 @@ Severity: **H** blocks the roadmap or is unsafe · **M** wrong/fragile · **L** 
 | --- | --- | --- | --- |
 | TD-02 | M | `Instruments/*` | Legacy ASCII protocols, no host code drives them anymore. The old host sent `md?`. Solenoid firmware ignores it. Servo firmware replies to `?` with `Xylophone \| Servo` (no `Name:` prefix, no newline). Superseded by [ADR 0007](../design-docs/0007-instrument-discovery.md). Port, don't fix |
 | TD-03 | H | `Instruments/*` | No watchdog / all-off on disconnect. Safety relies on host behaving |
+| TD-18 | L | `.github/workflows/build.yml` | Linux CI pinned to `ubuntu-24.04`: `ubuntu-latest` (26.04, Azure kernel 7.0) had no `linux-modules-extra-$(uname -r)` package, so the ALSA loopback test can't load `snd-seq-dummy`. Retry `ubuntu-latest` later |
 | TD-04 | M | `.github/workflows/build.yml` | Linux/macOS/Windows matrix not yet run on GitHub (verified locally on macOS and in a Linux container) |
 | TD-10 | M | `Instruments/xylophone_solenoid` | `delay(45)` inside `serialEvent` blocks all input. Debug `Serial.print`s on the data channel |
 | TD-12 | L | `docs/index.html` etc. | Legacy GitHub Pages site duplicates an old README. Decide: regenerate from docs or delete |

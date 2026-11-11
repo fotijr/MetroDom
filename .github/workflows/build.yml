@@ -10,7 +10,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        # Linux pinned to 24.04: ubuntu-latest (26.04) has no linux-modules-extra package for its
+        # Azure kernel, so snd-seq can't be loaded for the ALSA loopback test (TD-18).
+        os: [ubuntu-24.04, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -21,8 +23,12 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y -q libasound2t64 "linux-modules-extra-$(uname -r)"
-          sudo modprobe snd-seq-dummy
+          sudo apt-get install -y -q libasound2t64
+          # The sequencer modules live in linux-modules-extra on Azure kernels. Install only if needed.
+          if ! sudo modprobe snd-seq-dummy 2>/dev/null; then
+            sudo apt-get install -y -q "linux-modules-extra-$(uname -r)"
+            sudo modprobe snd-seq-dummy
+          fi
           sudo chmod a+rw /dev/snd/seq
           echo "METRODOM_REQUIRE_ALSA=1" >> "$GITHUB_ENV"
       - run: dotnet build --configuration Release
