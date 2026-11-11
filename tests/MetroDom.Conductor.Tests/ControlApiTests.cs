@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Http.Headers;
+using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
 using Melanchall.DryWetMidi.Common;
@@ -239,6 +240,173 @@ public sealed class ControlApiTests : IAsyncDisposable
         var a = ControlApi.NewToken();
         Assert.NotEqual(a, ControlApi.NewToken());
         Assert.Matches("^[A-Za-z0-9_-]{22}$", a);
+    }
+
+    private Uri StreamUri => new(_api.Address.ToString().Replace("http://", "ws://", StringComparison.Ordinal) + "stream");
+
+    private async Task<ClientWebSocket> Connect(Action<ClientWebSocketOptions>? configure = null)
+    {
+        var socket = new ClientWebSocket();
+        if (configure is null)
+        {
+            socket.Options.SetRequestHeader("Authorization", $"Bearer {Token}");
+        }
+        else
+        {
+            configure(socket.Options);
+        }
+
+        await socket.ConnectAsync(StreamUri, Ct);
+        return socket;
+    }
+
+    private static async Task<JsonElement> Next(ClientWebSocket socket, string? type = null)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(Ct);
+        timeout.CancelAfter(TimeSpan.FromSeconds(5));
+        var buffer = new byte[64 * 1024];
+        while (true)
+        {
+            var result = await socket.ReceiveAsync(buffer, timeout.Token);
+            Assert.Equal(WebSocketMessageType.Text, result.MessageType);
+            Assert.True(result.EndOfMessage);
+            var element = JsonDocument.Parse(buffer.AsMemory(0, result.Count)).RootElement.Clone();
+            if (type is null || element.GetProperty("type").GetString() == type)
+            {
+                return element;
+            }
+        }
+    }
+
+    [Fact]
+    public async Task Stream_says_hello_then_state_and_instruments()
+    {
+        using var socket = await Connect();
+        var hello = await Next(socket);
+        Assert.Equal(("hello", 1, "v0"), (hello.GetProperty("type").GetString(), hello.GetProperty("seq").GetInt32(), hello.GetProperty("api").GetString()));
+
+        var state = await Next(socket);
+        Assert.Equal(("state", 2), (state.GetProperty("type").GetString(), state.GetProperty("seq").GetInt32()));
+        Assert.Equal("waiting", state.GetProperty("state").GetProperty("state").GetString());
+
+        var instruments = await Next(socket);
+        Assert.Equal("instruments", instruments.GetProperty("type").GetString());
+        Assert.Equal("band", instruments.GetProperty("instruments")[0].GetProperty("name").GetString());
+    }
+
+    [Fact]
+    public async Task Stream_sends_changes_positions_and_messages()
+    {
+        using var socket = await Connect();
+        await Next(socket, "instruments");
+
+        Playing();
+        _clock.Advance(TimeSpan.FromSeconds(1));
+        var state = await Next(socket, "state");
+        Assert.Equal("playing", state.GetProperty("state").GetProperty("state").GetString());
+        Assert.Equal(JsonValueKind.Null, state.GetProperty("state").GetProperty("positionSeconds").ValueKind); // Position has its own events.
+
+        var position = await Next(socket, "position");
+        Assert.Equal(1 - 0.012, position.GetProperty("positionSeconds").GetDouble(), 3);
+        Assert.Equal(3.5, position.GetProperty("durationSeconds").GetDouble(), 3);
+
+        _session.Messages.Add("Vamp on: repeating Chorus until released.");
+        var message = await Next(socket, "message");
+        Assert.Equal("Vamp on: repeating Chorus until released.", message.GetProperty("text").GetString());
+
+        var seqs = new[] { state, position, message }.Select(e => e.GetProperty("seq").GetInt64()).ToArray();
+        Assert.True(seqs[0] < seqs[1] && seqs[1] < seqs[2]);
+    }
+
+    [Fact]
+    public async Task Stream_accepts_the_token_as_a_subprotocol_for_browsers()
+    {
+        using var socket = await Connect(o =>
+        {
+            o.AddSubProtocol(StateStream.Subprotocol);
+            o.AddSubProtocol(StateStream.TokenPrefix + Token);
+        });
+        Assert.Equal(StateStream.Subprotocol, socket.SubProtocol);
+        Assert.Equal("hello", (await Next(socket)).GetProperty("type").GetString());
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("token.wrong")]
+    public async Task Stream_refuses_without_the_token(string? subprotocol)
+    {
+        await Assert.ThrowsAsync<WebSocketException>(() => Connect(o =>
+        {
+            o.AddSubProtocol(StateStream.Subprotocol);
+            if (subprotocol is not null)
+            {
+                o.AddSubProtocol(subprotocol);
+            }
+        }));
+    }
+
+    [Fact]
+    public async Task Stream_is_a_websocket_only()
+    {
+        var (status, body) = await Get("stream");
+        Assert.Equal(HttpStatusCode.BadRequest, status);
+        Assert.Contains("WebSocket", body.GetProperty("error").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Stream_count_is_capped_and_freed_on_close()
+    {
+        var open = new List<ClientWebSocket>();
+        try
+        {
+            for (var i = 0; i < StateStream.MaxStreams; i++)
+            {
+                open.Add(await Connect());
+            }
+
+            await Assert.ThrowsAsync<WebSocketException>(() => Connect());
+
+            await open[0].CloseAsync(WebSocketCloseStatus.NormalClosure, "bye", Ct);
+            open[0].Dispose();
+            open.RemoveAt(0);
+            await Task.Delay(300, Ct); // The server notices the close on its next read.
+            open.Add(await Connect());
+        }
+        finally
+        {
+            foreach (var socket in open)
+            {
+                socket.Dispose();
+            }
+        }
+    }
+
+    [Fact]
+    public async Task Stopping_the_api_closes_open_streams_quickly()
+    {
+        using var socket = await Connect();
+        await Next(socket, "instruments");
+        var started = DateTime.UtcNow;
+        await _api.DisposeAsync();
+        Assert.True(DateTime.UtcNow - started < TimeSpan.FromSeconds(3));
+
+        var buffer = new byte[4096];
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+        WebSocketReceiveResult result;
+        do
+        {
+            result = await socket.ReceiveAsync(buffer, timeout.Token);
+        }
+        while (result.MessageType != WebSocketMessageType.Close);
+        Assert.Equal(WebSocketCloseStatus.EndpointUnavailable, result.CloseStatus);
+    }
+
+    [Fact]
+    public void Event_schema_is_served_and_names_every_event()
+    {
+        using var schema = JsonDocument.Parse(ControlApi.EventSchema());
+        var types = schema.RootElement.GetProperty("properties").GetProperty("type").GetProperty("enum").EnumerateArray().Select(t => t.GetString());
+        Assert.Equal(["hello", "state", "position", "instruments", "message"], types);
     }
 
     private sealed class Port : IMidiOutputPort

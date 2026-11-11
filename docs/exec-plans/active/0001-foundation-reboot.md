@@ -59,7 +59,7 @@ That is the first milestone of the [live band spec](../../product-specs/live-ban
 
 ### Phase 3: Control API v0
 - [x] OpenAPI spec: transport, queue, instruments, panic: `play --api`, `src/MetroDom.Conductor/Api/openapi.json` ([control API](../../references/control-api.md))
-- [ ] WebSocket state stream
+- [x] WebSocket state stream: `GET /api/v0/stream`, events in `src/MetroDom.Conductor/Api/events.schema.json`
 - [ ] Minimal web UI served by the Conductor
 
 ## Decisions log
@@ -205,6 +205,16 @@ That is the first milestone of the [live band spec](../../product-specs/live-ban
   sessions exist. Found while testing: the ASP.NET host swallowed SIGTERM, so `play` ignored
   `systemd stop`. Now the host ignores signals and `Session` treats SIGTERM like Ctrl+C (panic,
   exit). Limits: TD-27.
+
+- 2026-11-11: WebSocket state stream. Each connection polls the `/state` snapshot every 100 ms and
+  sends only changes, rather than the band pushing events: the scheduler and input threads never
+  touch a socket, and a slow phone can't stall the music. Position gets its own 250 ms event so
+  `state` only fires on real changes. Messages (the status panel's lines) are pushed through a
+  bounded per-stream queue that drops the oldest. The event contract is a JSON Schema beside the
+  OpenAPI file (ADR 0003). Browsers can't send headers on a WebSocket, so the token may also come
+  as a `token.<token>` subprotocol, which keeps it out of URLs and logs. Capped at 16 streams.
+  The close handshake needed care: cancelling a pending server read aborts the socket, so the
+  server sends or answers Close and waits up to 1 s before aborting.
 
 ## Open questions
 - Target box model (ADR 0002).

@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://metrodom.dev/schemas/control-api/v0/events.json",
+  "title": "MetroDom Control API v0 stream events",
+  "description": "One JSON text frame per event on GET /api/v0/stream (a WebSocket, subprotocol metrodom.v0). `seq` counts up from 1 per connection. On connect the server sends `hello`, then `state` and `instruments`. See docs/references/control-api.md.",
+  "type": "object",
+  "required": ["type", "seq"],
+  "properties": {
+    "type": { "enum": ["hello", "state", "position", "instruments", "message"] },
+    "seq": { "type": "integer", "minimum": 1 }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "type": { "const": "hello" },
+        "api": { "const": "v0" },
+        "positionEveryMs": { "type": "integer", "description": "How often position events come while playing." }
+      },
+      "required": ["api"]
+    },
+    {
+      "description": "Sent on connect and whenever anything but the position changes. Same shape as GET /state.",
+      "properties": {
+        "type": { "const": "state" },
+        "state": { "type": "object", "description": "The State schema from openapi.json." }
+      },
+      "required": ["state"]
+    },
+    {
+      "description": "While playing: the song moment being heard.",
+      "properties": {
+        "type": { "const": "position" },
+        "positionSeconds": { "type": "number" },
+        "durationSeconds": { "type": "number" }
+      },
+      "required": ["positionSeconds", "durationSeconds"]
+    },
+    {
+      "description": "Sent on connect and when an instrument connects or disconnects. Same items as GET /instruments.",
+      "properties": {
+        "type": { "const": "instruments" },
+        "instruments": { "type": "array", "items": { "type": "object" } }
+      },
+      "required": ["instruments"]
+    },
+    {
+      "description": "A line for people: section changes, panic, unplug/replug, tempo set while waiting.",
+      "properties": {
+        "type": { "const": "message" },
+        "text": { "type": "string" }
+      },
+      "required": ["text"]
+    }
+  ]
+}

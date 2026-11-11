@@ -42,6 +42,9 @@ internal sealed class MessageLog
     private readonly Queue<string> _messages = new();
     private readonly Lock _gate = new();
 
+    /// <summary>Raised after a message is added (unstamped), on the adding thread. Keep it cheap.</summary>
+    public event Action<string>? Added;
+
     public void Add(string message)
     {
         var stamped = $"{DateTime.Now:HH:mm:ss}  {message}";
@@ -53,6 +56,8 @@ internal sealed class MessageLog
                 _messages.Dequeue();
             }
         }
+
+        Added?.Invoke(message);
     }
 
     public IReadOnlyList<string> Snapshot()

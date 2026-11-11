@@ -28,6 +28,27 @@
         }
       }
     },
+    "/stream": {
+      "get": {
+        "operationId": "stream",
+        "summary": "Live state over a WebSocket (subprotocol metrodom.v0). Events: events.schema.json, served at /events.schema.json.",
+        "description": "Authenticate with the Authorization header, or (browsers can't set headers on a WebSocket) by also offering the subprotocol `token.<token>`. At most 16 streams at once.",
+        "responses": {
+          "101": { "description": "Switched to a WebSocket; JSON text frames follow." },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "503": { "description": "Too many streams open.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/events.schema.json": {
+      "get": {
+        "operationId": "getEventSchema",
+        "summary": "JSON Schema of the stream's events.",
+        "security": [],
+        "responses": { "200": { "description": "The schema.", "content": { "application/json": {} } } }
+      }
+    },
     "/queue": {
       "get": {
         "operationId": "getQueue",

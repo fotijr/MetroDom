@@ -73,6 +73,7 @@ internal sealed class ControlApi : IAsyncDisposable
     private const long MaxBodyBytes = 4096;
 
     private readonly WebApplication _app;
+    private int _disposed;
 
     private ControlApi(WebApplication app, Uri address)
     {
@@ -84,10 +85,15 @@ internal sealed class ControlApi : IAsyncDisposable
     public Uri Address { get; }
 
     /// <summary>The checked-in spec, embedded in the binary.</summary>
-    public static string Spec()
+    public static string Spec() => Resource("openapi.json");
+
+    /// <summary>The checked-in JSON Schema of the stream's events.</summary>
+    public static string EventSchema() => Resource("events.schema.json");
+
+    private static string Resource(string name)
     {
-        using var stream = typeof(ControlApi).Assembly.GetManifestResourceStream("MetroDom.Conductor.Api.openapi.json")
-            ?? throw new InvalidOperationException("openapi.json is not embedded.");
+        using var stream = typeof(ControlApi).Assembly.GetManifestResourceStream($"MetroDom.Conductor.Api.{name}")
+            ?? throw new InvalidOperationException($"{name} is not embedded.");
         using var reader = new StreamReader(stream, Encoding.UTF8);
         return reader.ReadToEnd();
     }
@@ -127,6 +133,11 @@ internal sealed class ControlApi : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        if (Interlocked.Exchange(ref _disposed, 1) == 1)
+        {
+            return;
+        }
+
         await _app.StopAsync().ConfigureAwait(false);
         await _app.DisposeAsync().ConfigureAwait(false);
     }
@@ -143,8 +154,11 @@ internal sealed class ControlApi : IAsyncDisposable
     {
         var expected = Encoding.UTF8.GetBytes(token);
         var spec = Spec();
+        var schema = EventSchema();
+        app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TimeSpan.FromSeconds(15) });
         var api = app.MapGroup(Prefix);
         api.MapGet("/openapi.json", () => Results.Text(spec, "application/json"));
+        api.MapGet("/events.schema.json", () => Results.Text(schema, "application/json"));
 
         var guarded = api.MapGroup("").AddEndpointFilter(async (context, next) =>
         {
@@ -158,19 +172,14 @@ internal sealed class ControlApi : IAsyncDisposable
         });
 
         guarded.MapGet("/state", () => Results.Json(State(live.Snapshot())));
+        var stream = new StateStream(live, session);
+        guarded.MapGet("/stream", (Delegate)((HttpContext context) => stream.Accept(context, app.Lifetime.ApplicationStopping)));
         guarded.MapGet("/queue", () =>
         {
             var state = live.Snapshot();
             return Results.Json(new { current = state.Index, songs = state.Setlist.Select((title, index) => new { index, title }) });
         });
-        guarded.MapGet("/instruments", () => Results.Json(session.Outputs.Select(o => new
-        {
-            name = o.Port.Name,
-            channels = o.Channels.Select(c => c + 1),
-            latencyMs = o.Profile.MaxLatency.TotalMilliseconds,
-            notes = o.Profile.Notes?.Order(),
-            connected = o.IsConnected,
-        })));
+        guarded.MapGet("/instruments", () => Results.Json(Instruments(session)));
 
         guarded.MapPost("/transport/start", () =>
         {
@@ -224,7 +233,18 @@ internal sealed class ControlApi : IAsyncDisposable
     private static IResult Navigate(LiveControl live, ControlAction action) =>
         live.Navigate(action) is { } message ? Results.Json(new { message }) : Conflict("Nothing is playing.");
 
-    private static object State(LiveState s) => new
+    /// <summary>The instruments as the API shows them (GET /instruments, stream events).</summary>
+    internal static object[] Instruments(Session session) => [.. session.Outputs.Select(o => new
+    {
+        name = o.Port.Name,
+        channels = o.Channels.Select(c => c + 1).ToArray(),
+        latencyMs = o.Profile.MaxLatency.TotalMilliseconds,
+        notes = o.Profile.Notes?.Order().ToArray(),
+        connected = o.IsConnected,
+    })];
+
+    /// <summary>The state as the API shows it (GET /state, stream events).</summary>
+    internal static object State(LiveState s) => new
     {
         state = s.Playing ? "playing" : "waiting",
         song = s.Index >= 0 && s.Index < s.Setlist.Count ? new { index = s.Index, title = s.Setlist[s.Index] } : null,
@@ -239,13 +259,16 @@ internal sealed class ControlApi : IAsyncDisposable
     {
         var header = request.Headers.Authorization.ToString();
         const string scheme = "Bearer ";
-        if (!header.StartsWith(scheme, StringComparison.OrdinalIgnoreCase))
+        if (header.StartsWith(scheme, StringComparison.OrdinalIgnoreCase))
         {
-            return false;
+            return CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(header[scheme.Length..].Trim()), expected);
         }
 
-        var given = Encoding.UTF8.GetBytes(header[scheme.Length..].Trim());
-        return CryptographicOperations.FixedTimeEquals(given, expected);
+        // A browser WebSocket can't set headers: the token may come as a subprotocol, token.<token>.
+        return request.Headers.SecWebSocketProtocol
+            .SelectMany(v => (v ?? "").Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+            .Where(p => p.StartsWith(StateStream.TokenPrefix, StringComparison.Ordinal))
+            .Any(p => CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(p[StateStream.TokenPrefix.Length..]), expected));
     }
 
     private static IResult Unauthorized() => Results.Json(
