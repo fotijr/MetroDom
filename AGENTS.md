@@ -40,6 +40,7 @@ tests/                 ← xUnit v3 tests
 Instruments/           ← Arduino firmware + per-instrument hardware notes
 hardware/              ← parts catalog, inventory, shared modules, build records (ADR 0008)
 docs/                  ← knowledge base (Markdown). docs/index.html etc. is the legacy GitHub Pages site.
+policies/              ← shipped policy profiles (live-band.json)
 scripts/check_docs.py  ← knowledge-base linter (run before committing doc changes)
 scripts/check_hardware.py ← hardware records linter (run before committing hardware changes)
 ```

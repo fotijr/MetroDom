@@ -1,0 +1,12 @@
+{
+  "schema": "metrodom.policy/0",
+  "mode": "live-band",
+  "controls": {
+    "start-stop": "cc:80",
+    "next": "cc:81",
+    "tap": "cc:64",
+    "vamp": "cc:82",
+    "outro": "cc:83",
+    "panic": "cc:85"
+  }
+}

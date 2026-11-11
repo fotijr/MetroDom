@@ -80,11 +80,15 @@ internal static class LiveStatus
     /// <param name="session">Stops the view when it stops.</param>
     /// <param name="render">Builds the panel, called every refresh.</param>
     /// <param name="onKey">Keys pressed in the terminal (interactive only), on the UI thread.</param>
-    public static void Run(Session session, Func<IRenderable> render, Action<ConsoleKeyInfo>? onKey = null)
+    /// <param name="until">Also stops the view when set (a song ended), without stopping the session.</param>
+    public static void Run(Session session, Func<IRenderable> render, Action<ConsoleKeyInfo>? onKey = null, ManualResetEventSlim? until = null)
     {
         if (!Ui.IsInteractive)
         {
-            session.WaitForStop();
+            while (!session.WaitForStop(Refresh) && until is not { IsSet: true })
+            {
+            }
+
             return;
         }
 
@@ -96,7 +100,7 @@ internal static class LiveStatus
                 .Overflow(VerticalOverflow.Ellipsis)
                 .Start(ctx =>
                 {
-                    while (!session.WaitForStop(Refresh))
+                    while (!session.WaitForStop(Refresh) && until is not { IsSet: true })
                     {
                         while (onKey is not null && Console.KeyAvailable)
                         {

@@ -32,6 +32,8 @@ All of this runs on Linux, macOS or Windows, with no hardware needed.
   save them per song.
 - **Count in and shape the song live.** A count-in on a real instrument (a woodblock, not a
   click), then **vamp** a section until you're ready, or **jump to the outro**.
+- **Run a set hands-free.** Play a setlist from a MIDI foot controller: start/stop, next song, tap
+  tempo, vamp, outro and panic, mapped in a policy file you can edit.
 - **Find instruments by itself.** It asks each MIDI port who it is and fetches a MetroDom
   instrument's profile (its notes, latency and limits) without any setup.
 - **Stay safe.** Every instrument sits behind a safety governor: velocity caps, note-rate limits,
@@ -48,7 +50,7 @@ From the [roadmap](docs/ROADMAP.md), roughly in order. Each step is small, cheap
   DAW, then a three-note xylophone on a swappable "brain" that reads its own profile.
 - **A two-piece band.** Xylophone plus snare and woodblock from the owner's drum kit, playing a
   song in time, with a human playing guitar over it.
-- **Hands-free control.** A foot controller for start/stop, next song, tap tempo, vamp and panic.
+- **A home-built foot controller.** Stomp switches on the same brain as the instruments.
 - **Lights.** LED strips and accents that flash with the notes, driven from the same timeline.
 - **A home band.** A full xylophone and drum pieces, setlists, a phone panic button, and regular
   play-along sessions.

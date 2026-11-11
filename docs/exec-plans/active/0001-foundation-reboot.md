@@ -53,7 +53,7 @@ That is the first milestone of the [live band spec](../../product-specs/live-ban
 - [x] Track roles (track names, GM drums channel, saved per-song mapping): `metrodom roles`, [song roles](../../references/song-roles.md)
 - [x] Seats: a human takes a role, arranger mutes it (generalize `--mute`): `--seat ROLE[=PLAYER]` on `play`/`simulate`/`arrange`
 - [x] Count-in on a chosen instrument. SMF marker sections. Vamp / jump to outro (`--count-in`, `--click`, V / O keys)
-- [ ] Foot controller mapping in the live-band policy (start/stop, next, tap, vamp, panic)
+- [x] Foot controller mapping in the live-band policy (start/stop, next, tap, vamp, panic): `play --control`, `policies/live-band.json`, setlists
 - [ ] Tempo tracker with beat prediction, tested with recorded human timings + fake clock
 - [ ] Human-leads input from drum triggers (`trigger-piezo`)
 
@@ -168,6 +168,16 @@ That is the first milestone of the [live band spec](../../product-specs/live-ban
   sent is taken back (every send is due at or after its play time, so the tail after the jump
   point is still unsent), and a vamp can be released right up to the boundary. Vamp and outro act
   at section ends so the band never cuts off mid-phrase. Limits: TD-24.
+
+- 2026-11-11: Foot controller. The policy profile (ADR 0005) starts here with only `controls`, as
+  `metrodom.policy/0`; a built-in copy of `policies/live-band.json` means it works with no file.
+  Controls reuse the tap trigger syntax, so a pedal press fires once. "Next" needs songs to go to,
+  so `play` takes a setlist; one session spans the set and inputs route to whichever song plays
+  (`LiveControl`). With start/stop mapped, songs wait for the pedal, and taps while waiting set the
+  next song's tempo (count off with your foot). Panic silences on the input thread first, then
+  waits to restart the same song, since quitting mid-gig is worse than holding. Keys mirror every
+  control. Measured with scripted pedals: start, next, panic, start all landed as expected.
+  Limits: TD-25.
 
 ## Open questions
 - Target box model (ADR 0002).

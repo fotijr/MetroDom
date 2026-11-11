@@ -5,6 +5,7 @@ using Melanchall.DryWetMidi.Interaction;
 using MetroDom.Conductor.Cli;
 using MetroDom.Conductor.Midi;
 using MetroDom.Core.Arranging;
+using MetroDom.Core.Policy;
 using MetroDom.Core.Timing;
 using Spectre.Console;
 using Spectre.Console.Cli;
@@ -17,16 +18,29 @@ namespace MetroDom.Conductor.Commands;
 /// </summary>
 internal sealed class PlayCommand : Command<PlayCommand.Settings>
 {
-    private const double Nudge = 1.02;
+    private const double NudgeFactor = 1.02;
 
     /// <summary>Lets the loop thread start before the first note, so beat one isn't late.</summary>
     private static readonly TimeSpan Preroll = TimeSpan.FromMilliseconds(250);
 
     public sealed class Settings : OutputSettings
     {
-        [CommandArgument(0, "<SONG>")]
-        [Description("Standard MIDI File to play (.mid).")]
-        public string Path { get; init; } = "";
+        [CommandArgument(0, "<SONGS>")]
+        [Description("Standard MIDI File(s) to play (.mid). Several make a setlist: each starts when the last ends, or on the start pedal when a controller maps one.")]
+        public string[] Paths { get; init; } = [];
+
+        [CommandOption("-c|--control <PORT>")]
+        [Description("MIDI input of a foot controller (or any control surface) that drives the set: start/stop, next, tap, vamp, outro, panic, mapped by the policy (see [bold]--policy[/]). With start/stop mapped, each song waits for the pedal.")]
+        public string? Control { get; init; }
+
+        [CommandOption("--policy <FILE>")]
+        [Description("Policy profile (metrodom.policy/0 JSON) whose [bold]controls[/] map pedals to actions. Default: the built-in live-band profile (policies/live-band.json: start-stop cc:80, next cc:81, vamp cc:82, outro cc:83, panic cc:85, tap cc:64).")]
+        public string? Policy { get; init; }
+
+        public PolicyProfile PolicyProfile =>
+            Policy is not null && File.Exists(Policy) && PolicyProfile.TryParse(File.ReadAllText(Policy), out var profile, out _)
+                ? profile
+                : PolicyProfile.LiveBand;
 
         [CommandOption("-a|--arrange")]
         [Description("Let the arranger give each output the part it plays best, on its first channel, using its /NOTES (transposed, folded, thinned to fit). Without it, outputs get their channels as written in the file.")]
@@ -69,9 +83,32 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
 
         public override ValidationResult Validate()
         {
-            if (!File.Exists(Path))
+            if (Paths.Length == 0)
             {
-                return ValidationResult.Error($"file not found: {Path}");
+                return ValidationResult.Error("give at least one SONG.");
+            }
+
+            if (Paths.FirstOrDefault(p => !File.Exists(p)) is { } missing)
+            {
+                return ValidationResult.Error($"file not found: {missing}");
+            }
+
+            if (Policy is not null)
+            {
+                if (!File.Exists(Policy))
+                {
+                    return ValidationResult.Error($"--policy: file not found: {Policy}");
+                }
+
+                if (!PolicyProfile.TryParse(File.ReadAllText(Policy), out _, out var policyError))
+                {
+                    return ValidationResult.Error($"--policy: {policyError}");
+                }
+            }
+
+            if (Control is not null && (Control == Tap || Control == ClockIn))
+            {
+                return ValidationResult.Error("--control and --tap/--clock-in can't share a port: map tap in the policy instead.");
             }
 
             if (!SeatList.TryParse(Seat, out _, out var seatError))
@@ -134,127 +171,69 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
 
     public override int Execute(CommandContext context, Settings settings, CancellationToken cancellationToken)
     {
-        var roles = SongRoles.Load(settings.Path);
-        var midiFile = SeatList.Apply(MidiFile.Read(settings.Path), settings.Seats, roles);
-        var tempoMap = midiFile.GetTempoMap();
-        var song = System.IO.Path.GetFileName(settings.Path);
-        var fileBpm = FileBpm(tempoMap, TimeSpan.Zero);
-        var startSpeed = settings.Tempo is { } bpm ? Clamp(bpm / fileBpm) : 1;
-
+        var policy = settings.PolicyProfile;
+        var songs = settings.Paths;
         string output;
         string[] heldBack;
         using (var session = new Session(settings))
         {
             output = session.OutputName;
-            var clock = new SystemClock();
-            var scheduler = new LatencyScheduler(session.Orchestra, clock, session.Profiles);
-            scheduler.Sent += s => session.Activity.Record(s.Event);
-            var timeline = SongTimeline.From(midiFile);
-            if (settings.Arrange)
+            using var live = new LiveControl(session, new SystemClock());
+            using var tapInput = settings.Tap is null ? null : TapInput(settings, live.Tap);
+            using var clockInput = settings.ClockIn is null ? null : ClockInput(settings, live.Clock, live.FollowClock);
+            using var controlInput = settings.Control is null ? null : ControlInput(settings.Control, policy, live.Control);
+            var startPedal = controlInput is not null && policy.Controls.ContainsKey(ControlAction.StartStop);
+            var canRestart = startPedal || Ui.IsInteractive;
+            var wait = startPedal;
+            var inputs = TempoFrom(tapInput, clockInput) + (controlInput is null ? "" : $" · controls from {controlInput.Name}");
+
+            for (var i = 0; i < songs.Length && !session.IsStopping;)
             {
-                var band = session.Outputs.Select(o => new BandMember(o.Profile, o.Channels[0])).ToArray();
-                var arrangement = Arranger.Arrange(midiFile, band, new ArrangerOptions { Roles = roles });
-                ArrangementView.Write(arrangement, band);
-                timeline = arrangement.Timeline;
-            }
-
-            var (beat, beatsPerBar) = CountIn.Meter(midiFile);
-            var (clickChannel, clickNote) = settings.ClickNote;
-            (timeline, var countIn) = CountIn.Prepend(timeline, settings.CountInBars, beat, beatsPerBar, clickChannel, clickNote);
-            var sections = new SectionNavigator(scheduler, SongSections.Shift(SongSections.From(midiFile), countIn));
-            scheduler.Jumped += (_, to) => session.Messages.Add(
-                sections.Sections.FirstOrDefault(s => s.Start == to) is { } target ? $"→ {target.Name}" : "→ jump");
-
-            // Start from silence. Also warms up every output's send path, so the first note isn't late.
-            session.Orchestra.Panic();
-            scheduler.Start(timeline, startSpeed, Preroll);
-            TimeSpan SongPosition() => scheduler.Position > countIn ? scheduler.Position - countIn : TimeSpan.Zero;
-
-            using var loop = new SchedulerLoop(scheduler, clock);
-            loop.Finished += session.RequestStop;
-            loop.Failed += ex =>
-            {
-                session.Messages.Add($"Scheduler stopped: {ex.Message}");
-                session.RequestStop();
-            };
-
-            var tap = new TapTempo();
-            var tapGate = new Lock(); // Keys (UI thread) and the pedal (input thread) share the tap history.
-            string? tempoSource = null;
-            void SetTempo(double bpm, string source)
-            {
-                scheduler.SetSpeed(Clamp(bpm / FileBpm(tempoMap, SongPosition())));
-                Volatile.Write(ref tempoSource, source);
-                loop.Wake();
-            }
-
-            void Tapped(string source)
-            {
-                double? bpm;
-                lock (tapGate)
+                if (wait)
                 {
-                    bpm = tap.Tap(clock.Now);
-                }
-
-                if (bpm is { } tapped)
-                {
-                    SetTempo(tapped, source);
-                }
-            }
-
-            using var tapInput = settings.Tap is null ? null : TapInput(settings, Tapped);
-            using var clockInput = settings.ClockIn is null ? null : ClockInput(settings, clock, bpm => SetTempo(bpm, "MIDI Clock"));
-
-            if (!Ui.IsInteractive)
-            {
-                Console.WriteLine(string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"Playing {song} to {output} at {fileBpm * startSpeed:0.#} BPM, lookahead {scheduler.Lookahead.TotalMilliseconds:0.#} ms{Muted(settings)}{CountInNote(settings)}{TempoFrom(tapInput, clockInput)}. Ctrl+C to stop."));
-            }
-
-            loop.Start();
-            LiveStatus.Run(
-                session,
-                () => LiveStatus.Panel(
-                    $"▶ {Markup.Escape(song)}",
-                    session,
-                    LiveStatus.Progress(scheduler.Position, scheduler.Duration),
-                    sections.Describe() is { } where
-                        ? new Rows(TempoLine(scheduler, FileBpm(tempoMap, SongPosition()), Volatile.Read(ref tempoSource)), new Markup($"[grey]Section[/] {Markup.Escape(where)}"))
-                        : TempoLine(scheduler, FileBpm(tempoMap, SongPosition()), Volatile.Read(ref tempoSource)),
-                    "Space tap · +/- tempo · 0 file tempo" + (sections.Sections.Count > 0 ? " · V vamp · O outro" : "") + TempoFrom(tapInput, clockInput)),
-                key =>
-                {
-                    switch (key.KeyChar)
+                    live.Begin(null);
+                    var signal = WaitForStart(session, live, songs, i, policy, controlInput);
+                    if (signal is null)
                     {
-                        case ' ' or 't' or 'T':
-                            Tapped("tapped");
-                            break;
-                        case '+' or '=':
-                            scheduler.SetSpeed(Clamp(scheduler.Speed * Nudge));
-                            Volatile.Write(ref tempoSource, "nudged");
-                            loop.Wake();
-                            break;
-                        case '-' or '_':
-                            scheduler.SetSpeed(Clamp(scheduler.Speed / Nudge));
-                            Volatile.Write(ref tempoSource, "nudged");
-                            loop.Wake();
-                            break;
-                        case 'v' or 'V':
-                            session.Messages.Add(sections.ToggleVamp());
-                            loop.Wake();
-                            break;
-                        case 'o' or 'O':
-                            session.Messages.Add(sections.JumpToOutro());
-                            loop.Wake();
-                            break;
-                        case '0':
-                            scheduler.SetSpeed(1);
-                            Volatile.Write(ref tempoSource, null);
-                            loop.Wake();
-                            break;
+                        break; // Ctrl+C
                     }
-                });
+
+                    if (signal == LiveSignal.Next)
+                    {
+                        i++;
+                        continue;
+                    }
+                }
+
+                var end = PlaySong(session, live, settings, songs, i, inputs);
+                switch (end)
+                {
+                    case null:
+                        i = songs.Length; // Ctrl+C or the scheduler failed: stop the set.
+                        break;
+                    case LiveSignal.Panic:
+                        wait = true; // Same song again, but only when someone says so.
+                        if (!canRestart)
+                        {
+                            i = songs.Length;
+                        }
+
+                        break;
+                    case LiveSignal.Stopped:
+                        wait = canRestart;
+                        i++;
+                        break;
+                    case LiveSignal.Next:
+                        wait = false;
+                        i++;
+                        break;
+                    default:
+                        wait = startPedal;
+                        i++;
+                        break;
+                }
+            }
+
             heldBack = [.. session.SafetySummary()];
         }
 
@@ -265,6 +244,199 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
 
         Ui.Success($"Stopped. Panic sent to {output}.");
         return 0;
+    }
+
+    /// <summary>Holds until start (pedal or Enter), next (skip) or Ctrl+C (null).</summary>
+    private static LiveSignal? WaitForStart(Session session, LiveControl live, string[] songs, int index, PolicyProfile policy, IMidiInputPort? controls)
+    {
+        var song = SongTitle(songs, index);
+        var how = controls is not null && policy.Controls.TryGetValue(ControlAction.StartStop, out var trigger)
+            ? $"start pedal ({trigger} on {controls.Name})"
+            : "Enter";
+        if (!Ui.IsInteractive)
+        {
+            Console.WriteLine($"Ready: {song}. Waiting for {how}.");
+        }
+
+        LiveStatus.Run(
+            session,
+            () => LiveStatus.Panel($"⏸ Ready: {Markup.Escape(song)}", session, progress: null, new Markup($"[grey]Press[/] {Markup.Escape(how)} [grey]to play.[/]"), "Enter start · N skip · Space tap the starting tempo"),
+            key =>
+            {
+                if (key.Key == ConsoleKey.Enter)
+                {
+                    live.End(LiveSignal.Start);
+                }
+                else if (char.ToLowerInvariant(key.KeyChar) == 'n')
+                {
+                    live.End(LiveSignal.Next);
+                }
+                else if (key.KeyChar == ' ')
+                {
+                    live.Tap("tapped");
+                }
+            },
+            live.Done);
+        return session.IsStopping ? null : live.Signal;
+    }
+
+    /// <summary>Plays one song of the set until it ends. Returns why, or null to stop the set.</summary>
+    private static LiveSignal? PlaySong(Session session, LiveControl live, Settings settings, string[] songs, int index, string inputs)
+    {
+        var path = songs[index];
+        var roles = SongRoles.Load(path);
+        var midiFile = SeatList.Apply(MidiFile.Read(path), settings.Seats, roles);
+        var tempoMap = midiFile.GetTempoMap();
+        var song = SongTitle(songs, index);
+        var fileBpm = FileBpm(tempoMap, TimeSpan.Zero);
+        var startBpm = live.TakePendingBpm() ?? settings.Tempo;
+        var startSpeed = startBpm is { } bpm ? Clamp(bpm / fileBpm) : 1;
+
+        var clock = live.Clock;
+        var scheduler = new LatencyScheduler(session.Orchestra, clock, session.Profiles);
+        scheduler.Sent += s => session.Activity.Record(s.Event);
+        var timeline = SongTimeline.From(midiFile);
+        if (settings.Arrange)
+        {
+            var band = session.Outputs.Select(o => new BandMember(o.Profile, o.Channels[0])).ToArray();
+            var arrangement = Arranger.Arrange(midiFile, band, new ArrangerOptions { Roles = roles });
+            ArrangementView.Write(arrangement, band);
+            timeline = arrangement.Timeline;
+        }
+
+        var (beat, beatsPerBar) = CountIn.Meter(midiFile);
+        var (clickChannel, clickNote) = settings.ClickNote;
+        (timeline, var countIn) = CountIn.Prepend(timeline, settings.CountInBars, beat, beatsPerBar, clickChannel, clickNote);
+        var sections = new SectionNavigator(scheduler, SongSections.Shift(SongSections.From(midiFile), countIn));
+        scheduler.Jumped += (_, to) => session.Messages.Add(
+            sections.Sections.FirstOrDefault(s => s.Start == to) is { } target ? $"→ {target.Name}" : "→ jump");
+
+        // Start from silence. Also warms up every output's send path, so the first note isn't late.
+        session.Orchestra.Panic();
+        scheduler.Start(timeline, startSpeed, Preroll);
+        TimeSpan SongPosition() => scheduler.Position > countIn ? scheduler.Position - countIn : TimeSpan.Zero;
+
+        using var loop = new SchedulerLoop(scheduler, clock);
+        loop.Finished += () => live.End(LiveSignal.Finished);
+        loop.Failed += ex =>
+        {
+            session.Messages.Add($"Scheduler stopped: {ex.Message}");
+            session.RequestStop();
+        };
+
+        live.TempoSource = startBpm is null || settings.Tempo == startBpm ? null : "tapped";
+        void SetTempo(double bpm, string source)
+        {
+            scheduler.SetSpeed(Clamp(bpm / FileBpm(tempoMap, SongPosition())));
+            live.TempoSource = source;
+            loop.Wake();
+        }
+
+        void Nudge(double speed, string? source)
+        {
+            scheduler.SetSpeed(Clamp(speed));
+            live.TempoSource = source;
+            loop.Wake();
+        }
+
+        live.Begin(new ActiveSong(scheduler, sections, SetTempo, loop.Wake));
+        if (!Ui.IsInteractive)
+        {
+            Console.WriteLine(string.Create(
+                CultureInfo.InvariantCulture,
+                $"Playing {song} to {session.OutputName} at {fileBpm * startSpeed:0.#} BPM, lookahead {scheduler.Lookahead.TotalMilliseconds:0.#} ms{Muted(settings)}{CountInNote(settings)}{inputs}. Ctrl+C to stop."));
+        }
+
+        loop.Start();
+        LiveStatus.Run(
+            session,
+            () => LiveStatus.Panel(
+                $"▶ {Markup.Escape(song)}",
+                session,
+                LiveStatus.Progress(scheduler.Position, scheduler.Duration),
+                sections.Describe() is { } where
+                    ? new Rows(TempoLine(scheduler, FileBpm(tempoMap, SongPosition()), live.TempoSource), new Markup($"[grey]Section[/] {Markup.Escape(where)}"))
+                    : TempoLine(scheduler, FileBpm(tempoMap, SongPosition()), live.TempoSource),
+                "Space tap · +/- tempo · 0 file tempo" + (sections.Sections.Count > 0 ? " · V vamp · O outro" : "")
+                    + (songs.Length > 1 ? " · N next" : "") + " · Enter stop · Esc panic" + inputs),
+            key =>
+            {
+                if (key.Key == ConsoleKey.Enter)
+                {
+                    live.Control(ControlAction.StartStop);
+                    return;
+                }
+
+                if (key.Key == ConsoleKey.Escape)
+                {
+                    live.Control(ControlAction.Panic);
+                    return;
+                }
+
+                switch (char.ToLowerInvariant(key.KeyChar))
+                {
+                    case ' ' or 't':
+                        live.Tap("tapped");
+                        break;
+                    case '+' or '=':
+                        Nudge(scheduler.Speed * NudgeFactor, "nudged");
+                        break;
+                    case '-' or '_':
+                        Nudge(scheduler.Speed / NudgeFactor, "nudged");
+                        break;
+                    case '0':
+                        Nudge(1, null);
+                        break;
+                    case 'v':
+                        live.Control(ControlAction.Vamp);
+                        break;
+                    case 'o':
+                        live.Control(ControlAction.Outro);
+                        break;
+                    case 'n':
+                        live.Control(ControlAction.Next);
+                        break;
+                }
+            },
+            live.Done);
+
+        var signal = live.Signal; // Read before Begin clears it.
+        live.Begin(null);
+        scheduler.Stop(); // Whatever ended the song, nothing is left sounding.
+        return session.IsStopping ? null : signal;
+    }
+
+    private static string SongTitle(string[] songs, int index) =>
+        songs.Length == 1
+            ? System.IO.Path.GetFileName(songs[index])
+            : string.Create(CultureInfo.InvariantCulture, $"{System.IO.Path.GetFileName(songs[index])} ({index + 1}/{songs.Length})");
+
+    /// <summary>Opens <c>--control</c>: every message goes through the policy's control map.</summary>
+    internal static IMidiInputPort ControlInput(string port, PolicyProfile policy, Action<ControlAction> act)
+    {
+        var input = PortPicker.Input(port, "--control");
+        Route(input, policy.NewControlMap(), act);
+        input.Start();
+        return input;
+    }
+
+    /// <summary>Feeds <paramref name="input"/> through <paramref name="map"/> into <paramref name="act"/>. Runs on the input thread.</summary>
+    internal static void Route(IMidiInputPort input, ControlMap map, Action<ControlAction> act)
+    {
+        var gate = new Lock();
+        input.EventReceived += e =>
+        {
+            IReadOnlyList<ControlAction> actions;
+            lock (gate)
+            {
+                actions = map.Match(e);
+            }
+
+            foreach (var action in actions)
+            {
+                act(action);
+            }
+        };
     }
 
     /// <summary>The file's tempo at a song position (tempo maps can change mid-song).</summary>
