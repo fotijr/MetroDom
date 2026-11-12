@@ -21,7 +21,7 @@ That is the first milestone of the [live band spec](../../product-specs/live-ban
 - [ ] Owner reviews and accepts/edits ADRs 0001–0005
 - [x] Replace Travis with GitHub Actions
 - [x] Migrate to .NET 10 SDK-style projects, cross-platform. Retire WinForms for the `metrodom` CLI
-- [ ] Confirm `build` workflow runs green on GitHub
+- [x] Confirm `build` workflow runs green on GitHub (Linux, macOS, Windows on the `feat/virtual-midi` PR, 2026-11-11)
 
 ### Phase 1: Instruments speak MIDI
 - [ ] Accept brain/body split ([ADR 0006](../../design-docs/0006-swappable-instrument-brains.md)). Define body connector + EEPROM layout
