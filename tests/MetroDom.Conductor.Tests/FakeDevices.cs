@@ -48,7 +48,7 @@ internal sealed class DeviceBackend : IMidiBackend
 
                     if (device.OnThread)
                     {
-                        _ = Task.Run(SendAll);
+                        OnOwnThread(SendAll);
                     }
                     else
                     {
@@ -74,7 +74,7 @@ internal sealed class DeviceBackend : IMidiBackend
             {
                 if (device.OnThread)
                 {
-                    _ = Task.Run(() => device.Input?.Raise(answer.ToReply()));
+                    OnOwnThread(() => device.Input?.Raise(answer.ToReply()));
                 }
                 else
                 {
@@ -102,6 +102,12 @@ internal sealed class DeviceBackend : IMidiBackend
     public IVirtualPort CreateVirtualInput(string name) => throw new NotSupportedException();
 
     private Device Find(MidiPortInfo port) => _devices.Single(d => d.Info.Name == port.Name);
+
+    /// <summary>
+    /// Answers from another thread, as a real device's input does. A thread of its own, not the
+    /// pool: a busy CI runner can start pool work later than the identify window.
+    /// </summary>
+    private static void OnOwnThread(Action answer) => new Thread(() => answer()) { IsBackground = true }.Start();
 
     private sealed record Device(MidiPortInfo Info, DeviceIdentity? Answer, bool Echo, bool HasInput, bool FailOpen, bool OnThread, string? Profile)
     {

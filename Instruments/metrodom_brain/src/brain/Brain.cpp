@@ -153,7 +153,9 @@ void Brain::noteOn(uint8_t channel, uint8_t note, uint8_t velocity, uint32_t now
   }
 
   uint8_t on = 0;
-  for (uint8_t i = 0; i < count_; ++i) on += state_[i].on ? 1 : 0;
+  for (uint8_t i = 0; i < count_; ++i) {
+    if (state_[i].on) ++on;
+  }
   if (on >= polyphony_) {
     lastRefusal_ = Refusal::Polyphony;
     counters_.polyphony++;

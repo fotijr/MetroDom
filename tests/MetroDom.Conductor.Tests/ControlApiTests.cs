@@ -386,19 +386,27 @@ public sealed class ControlApiTests : IAsyncDisposable
     {
         using var socket = await Connect();
         await Next(socket, "instruments");
+
+        // Keep reading, as a real client does, so the client answers the server's close. A client
+        // that isn't reading never answers; the server then resets the connection, and Windows
+        // drops the unread close frame with it.
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var closed = Task.Run(async () =>
+        {
+            var buffer = new byte[4096];
+            WebSocketReceiveResult result;
+            do
+            {
+                result = await socket.ReceiveAsync(buffer, timeout.Token);
+            }
+            while (result.MessageType != WebSocketMessageType.Close);
+            return result.CloseStatus;
+        });
+
         var started = DateTime.UtcNow;
         await _api.DisposeAsync();
         Assert.True(DateTime.UtcNow - started < TimeSpan.FromSeconds(3));
-
-        var buffer = new byte[4096];
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
-        WebSocketReceiveResult result;
-        do
-        {
-            result = await socket.ReceiveAsync(buffer, timeout.Token);
-        }
-        while (result.MessageType != WebSocketMessageType.Close);
-        Assert.Equal(WebSocketCloseStatus.EndpointUnavailable, result.CloseStatus);
+        Assert.Equal(WebSocketCloseStatus.EndpointUnavailable, await closed);
     }
 
     [Fact]

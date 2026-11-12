@@ -30,7 +30,7 @@ public class IdentifierTests
         backend.Add("piano", answer: Piano, profile: XyloProfile); // would answer, must never be asked
         backend.Add("quiet");
 
-        var ports = Identifier.Identify(backend, TimeSpan.FromMilliseconds(150));
+        var ports = Identifier.Identify(backend, TimeSpan.FromMilliseconds(500));
 
         Assert.Equal("xylo", ports[0].Profile?.Name);
         Assert.Equal([60, 64, 67], ports[0].Profile!.Notes!.Order());

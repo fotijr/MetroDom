@@ -204,6 +204,6 @@ public partial class LightingTests
     public void MulticastAddress_IsHiLo(int universe, string address) =>
         Assert.Equal(address, E131.MulticastAddress(universe));
 
-    [GeneratedRegex("```json\\n(.*?)```", RegexOptions.Singleline)]
+    [GeneratedRegex("```json\\r?\\n(.*?)```", RegexOptions.Singleline)] // CRLF on a Windows checkout
     private static partial Regex JsonBlock();
 }
