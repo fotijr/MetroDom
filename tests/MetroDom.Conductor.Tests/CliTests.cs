@@ -53,6 +53,7 @@ public class CliTests
     [InlineData("virtual")]
     [InlineData("demo-song")]
     [InlineData("panic")]
+    [InlineData("lights")]
     public void Help_RendersForEveryCommand(string command) =>
         Assert.Equal(0, MetroDomApp.Create().Run([command, "--help"], TestContext.Current.CancellationToken));
 

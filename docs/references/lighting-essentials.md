@@ -1,7 +1,8 @@
 # Lighting essentials (for MIDI people)
 
 Facts an agent or newcomer needs to plan MetroDom visuals. Decisions live in
-[ADR 0011](../design-docs/0011-visuals-are-part-of-the-band.md).
+[ADR 0011](../design-docs/0011-visuals-are-part-of-the-band.md). MetroDom's own format and
+sender: [light profile](light-profile.md).
 
 ## The one-line mental model
 **DMX is MIDI for lights.** A lighting controller sends a stream of numbers; each fixture listens

@@ -77,6 +77,8 @@ Reactive is the default and is overridden by live or authored cues.
 - **Video projection:** possible later as a Control API client. Out of scope for now.
 
 ## Open questions
-- Light profile format: extend the instrument profile with a `kind: light` or separate schema?
+- ~~Light profile format: extend the instrument profile with a `kind: light` or separate schema?~~
+  Separate schema, `metrodom.light-profile/0` ([light profile](../references/light-profile.md),
+  plan 0003 decisions log 2026-11-11).
 - Exact reactive mapping (colour per instrument, decay times) needs to be tried in a real room.
 - How many fixtures and which ones for a bar-sized rig? Budget first, see exec plan 0003.

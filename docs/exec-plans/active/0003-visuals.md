@@ -1,6 +1,6 @@
 # 0003: Visuals: lights, LED strips and matrix displays
 
-Status: Active · Last updated: 2026-11-10
+Status: Active · Last updated: 2026-11-11
 
 ## Goal
 A home session (and later, maybe, a gig) where every song gets a light show synced to the robots, with no extra work per
@@ -34,8 +34,8 @@ phase is fun on its own and doesn't wait for the next one.
 - [ ] Fits the xylophone body from exec plan 0002 without a second power supply design
 
 ### Phase V2: Conductor drives lights
-- [ ] Light profile format, written up next to the [instrument profile](../../references/instrument-profile.md) (shape sketched in ADR 0011 §2)
-- [ ] sACN output adapter in the Conductor (UDP, unit-tested with a fake socket)
+- [x] Light profile format, written up next to the [instrument profile](../../references/instrument-profile.md) (shape sketched in ADR 0011 §2): [light profile](../../references/light-profile.md)
+- [x] sACN output adapter in the Conductor (UDP, unit-tested with a fake socket): `SacnOutput`, `metrodom lights`
 - [ ] Reactive mode: colour per instrument, pulse on notes, intensity from velocity
 - [ ] Channel 16 lights track and pad scenes override reactive mode
 - [ ] Scheduler aligns light changes with measured instrument latency
@@ -63,9 +63,20 @@ phase is fun on its own and doesn't wait for the next one.
 - 2026-11-10: Visuals are three tiers (accent, stage, display) on the same MIDI timeline.
   Built light hardware speaks MIDI, bought lighting gets sACN/Art-Net/DMX. Reactive lights by
   default, live and authored cues override. Strobe capped by default, panic = safe look (ADR 0011).
+- 2026-11-11: V2 started on the software track (roadmap M4, B6 tier 2), ahead of the V0/V1
+  hardware, like the Control API and beat following before it. The light profile is its own
+  schema, `metrodom.light-profile/0`: a rig is fixtures at DMX addresses with scenes, not notes
+  on actuators, so sharing the instrument schema would make both worse. It keeps the instrument
+  profile's habits (`latencyMs`, `midi.channel`, defaults from ADR 0011: channel 16, CC 7 master).
+  Fixtures name their channels by role so scenes say "red 255" instead of slot numbers; a look
+  is a whole picture (unmentioned = 0) so recalling a scene never leaves stale channels lit.
+  `strobe` is forced to 0 until a venue policy can allow it, because a fixture's strobe channel
+  bypasses any rate cap the Conductor could apply. The safe look defaults to warm and dim. sACN
+  timing: send a change on the next 25 ms tick plus two repeats, keep-alive each second (inside
+  the receivers' 2.5 s timeout), three terminated packets on stop. `metrodom lights` exists so a
+  rig can be checked and lit without a song. Measured against a multicast listener on macOS.
 
 ## Open questions
 - Budget for V3 fixtures.
-- Light profile: extension of the instrument profile or its own schema?
 - ESP32 or Raspberry Pi for the matrix (ESP32 is cheaper. Pi is easier for text and QR rendering).
 - Wired Ethernet everywhere, or Wi-Fi allowed for small accent nodes?

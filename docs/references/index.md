@@ -16,6 +16,7 @@ Protocol and format facts agents need while coding. Keep each file factual and t
 | [virtual-band.md](virtual-band.md) | Prototyping without hardware: virtual instruments, `simulate`, `virtual` |
 | [legacy-serial-protocol.md](legacy-serial-protocol.md) | Touching or porting the 2017 firmware |
 | [lighting-essentials.md](lighting-essentials.md) | Planning lights: DMX, Art-Net/sACN, LED strips, matrices, MIDI-to-light |
+| [light-profile.md](light-profile.md) | `metrodom.light-profile/0`, fixtures and scenes, sACN packets and timing, `metrodom lights` |
 | [glossary.md](glossary.md) | A term in the docs is unclear |
 
 External specs (authoritative): MIDI 1.0 & 2.0 specs at midi.org · RTP-MIDI: RFC 6295 ·

@@ -61,6 +61,10 @@ internal static class MetroDomApp
             config.AddCommand<DemoSongCommand>("demo-song")
                 .WithDescription("Write the built-in two-piece demo song (xylophone + drums) to a .mid file.")
                 .WithExample("demo-song", "demo.mid");
+            config.AddCommand<LightsCommand>("lights")
+                .WithDescription("Check a light profile and show its patch, or hold a scene on the rig over sACN (DMX over the network).")
+                .WithExample("lights", "rig.json")
+                .WithExample("lights", "rig.json", "--scene", "36");
             config.AddCommand<PanicCommand>("panic")
                 .WithDescription("All sound and notes off on every channel of an output.")
                 .WithExample("panic", "--output", "0");
