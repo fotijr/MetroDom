@@ -73,4 +73,35 @@ public class BodyCliTests
             File.Delete(file);
         }
     }
+
+    [Fact]
+    public void Reader_GetsNoRecordBeforeAWrite_ThenTheRecordWritten()
+    {
+        var backend = new DeviceBackend();
+        backend.Add("MetroDom brain", bodies: new BodyReceiver());
+        var port = backend.Outputs()[0];
+        var record = BodyImage.Encode(BodyFile.Load(M1));
+
+        Assert.Equal((true, (byte[]?)null), BodyWriter.Read(backend, port, TimeSpan.FromSeconds(5)));
+        BodyWriter.Write(backend, port, record, TimeSpan.FromSeconds(5));
+        var (answered, back) = BodyWriter.Read(backend, port, TimeSpan.FromSeconds(5));
+
+        Assert.True(answered);
+        Assert.Equal(record, back);
+    }
+
+    [Fact]
+    public void Reader_SaysWhenNothingAnswers()
+    {
+        var backend = new DeviceBackend();
+        backend.Add("old firmware");
+
+        Assert.False(BodyWriter.Read(backend, backend.Outputs()[0], TimeSpan.FromMilliseconds(100)).Answered);
+    }
+
+    [Fact]
+    public void Write_NeedsAFile_OrCalibrated()
+    {
+        Assert.Equal(MetroDomApp.UsageError, MetroDomApp.Create().Run(["body", "write", "brain"], TestContext.Current.CancellationToken));
+    }
 }

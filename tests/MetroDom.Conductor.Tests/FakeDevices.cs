@@ -36,6 +36,19 @@ internal sealed class DeviceBackend : IMidiBackend
         var device = Find(port);
         var output = new FakeDevicePort(port.Name, e =>
         {
+            if (device.Bodies is { } reader && BodyWrite.IsReadRequest(e))
+            {
+                var chunks = BodyWrite.ReadReply(reader.Record);
+                OnOwnThread(() =>
+                {
+                    foreach (var chunk in chunks)
+                    {
+                        device.Input?.Raise(chunk);
+                    }
+                });
+                return;
+            }
+
             if (device.Bodies is { } receiver && BodyWrite.IsChunk(e))
             {
                 if (receiver.Add(e, out var written) is { } reply)

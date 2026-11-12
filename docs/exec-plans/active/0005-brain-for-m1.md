@@ -36,6 +36,11 @@ Conductor side, and one image fixture that both sides must agree on byte for byt
 - [x] `metrodom body check FILE` and `metrodom body write PORT FILE`
 - [x] M1 body fixture (`bodies/m1-xylophone.json` → `.hex`) checked by both test suites
 
+### Phase B5: Reading bodies and carrying measurements
+- [x] Body Read over MetroDom SysEx; `metrodom body read PORT [--out FILE]`
+- [x] `body write` checks the restarted brain booted from exactly the bytes written
+- [x] `body write PORT [FILE] --calibrated`: measured latencies into the body
+
 ### Phase B4: On real hardware (needs plan 0002 H1 and the backplane)
 - [ ] First real build with arduino-pico + TinyUSB; flash; the M0 bench body plays
 - [ ] Backplane bench tests ([body-backplane](../../../hardware/modules/body-backplane/README.md#bench-test))
@@ -60,5 +65,13 @@ Conductor side, and one image fixture that both sides must agree on byte for byt
   on an output fault, when USB is lost and after a body write. (3) Write protection is a
   momentary button wired to the EEPROM's `WP` pin, held during the write: it can't be left on
   like a jumper, sits outside the case, and needs no firmware. `body write` asks for it.
+
+- 2026-11-12: B5. Body Read returns the record the brain booted from (not the EEPROM's current
+  bytes), so it describes what's playing. Calibrations stay keyed by port on the Conductor and
+  still win on that rig; `--calibrated` copies them into the body, rounded to whole ms, so the
+  instrument carries its own latency to other Conductors. It's a deliberate command (with the
+  write button), never automatic. Checked on macOS: write the M1 body to the virtual xylophone,
+  `calibrate` (11 ms), `body write --calibrated`, and `devices --identify` showed 11 ms from the
+  instrument; a second run wrote nothing.
 
 ## Open questions

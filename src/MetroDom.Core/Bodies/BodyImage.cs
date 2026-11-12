@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using MetroDom.Core.Calibration;
 
 namespace MetroDom.Core.Bodies;
 
@@ -86,6 +87,7 @@ public static class BodyImage
     public const int ActuatorBytes = 10;
     public const int MaxBytes = HeaderBytes + (MaxActuators * ActuatorBytes) + MaxIdLength + MaxNameLength + 2;
     private const byte Version = 1;
+    private static readonly JsonSerializerOptions Indented = new() { WriteIndented = true };
     private const byte Omni = 0xFF;
 
     /// <summary>
@@ -399,6 +401,79 @@ public static class BodyImage
             error = $"not a valid body file: {ex.Message}";
             return false;
         }
+    }
+
+    /// <summary>
+    /// <paramref name="body"/> as a <c>metrodom.body/0</c> file: what <c>metrodom body read --out</c>
+    /// saves, and <see cref="TryParseJson"/> reads back to the same body.
+    /// </summary>
+    public static string ToJson(BodyDefinition body)
+    {
+        ArgumentNullException.ThrowIfNull(body);
+        var driver = new JsonObject { ["type"] = body.Driver == BodyDriver.Pca9685 ? "pca9685" : "gpio" };
+        if (body.Driver == BodyDriver.Pca9685)
+        {
+            driver["address"] = string.Create(CultureInfo.InvariantCulture, $"0x{body.Address:X2}");
+        }
+
+        var obj = new JsonObject
+        {
+            ["schema"] = Schema,
+            ["id"] = body.Id,
+            ["name"] = body.Name,
+            ["driver"] = driver,
+        };
+        if (body.Channel is { } channel)
+        {
+            obj["midi"] = new JsonObject { ["channel"] = channel + 1 };
+        }
+
+        obj["polyphony"] = body.Polyphony;
+        obj["safety"] = new JsonObject
+        {
+            ["maxOnMs"] = body.MaxOnMs,
+            ["maxDutyPercent"] = body.MaxDutyPercent,
+            ["dutyWindowMs"] = body.DutyWindowMs,
+            ["watchdogMs"] = body.WatchdogMs,
+        };
+        var notes = new JsonArray();
+        foreach (var a in body.Notes)
+        {
+            var entry = new JsonObject { ["note"] = a.Note, ["output"] = a.Output, ["pulseMs"] = a.PulseMs };
+            if (a.MinPulseMs > 0)
+            {
+                entry["minPulseMs"] = a.MinPulseMs;
+            }
+
+            entry["minIntervalMs"] = a.MinIntervalMs;
+            if (a.LatencyMs > 0)
+            {
+                entry["latencyMs"] = a.LatencyMs;
+            }
+
+            notes.Add(entry);
+        }
+
+        obj["notes"] = notes;
+        return obj.ToJsonString(Indented) + "\n";
+    }
+
+    /// <summary>
+    /// <paramref name="body"/> with the latencies <c>metrodom calibrate</c> measured, rounded to the
+    /// record's whole milliseconds (notes measured without their own value get the overall one).
+    /// </summary>
+    public static BodyDefinition WithMeasured(BodyDefinition body, MeasuredLatency measured)
+    {
+        ArgumentNullException.ThrowIfNull(body);
+        ArgumentNullException.ThrowIfNull(measured);
+        return body with
+        {
+            Notes = [.. body.Notes.Select(a =>
+            {
+                var latency = measured.NoteLatency.TryGetValue(a.Note, out var own) ? own : measured.Latency;
+                return a with { LatencyMs = (int)Math.Clamp(Math.Round(latency.TotalMilliseconds, MidpointRounding.AwayFromZero), 0, 1000) };
+            })],
+        };
     }
 
     /// <summary>Upper-case hex, two characters a byte: the fixture format and what Body Write carries.</summary>

@@ -40,4 +40,44 @@ internal static class BodyWriter
         answered.Wait(timeout);
         return reply;
     }
+
+    /// <summary>
+    /// Asks a brain for the body record it booted from.
+    /// </summary>
+    /// <returns>
+    /// <c>Answered</c> false if it said nothing within <paramref name="timeout"/>; else the record,
+    /// or <c>null</c> when it has none (the bench body or a silent brain).
+    /// </returns>
+    public static (bool Answered, byte[]? Record) Read(IMidiBackend backend, MidiPortInfo output, TimeSpan timeout)
+    {
+        ArgumentNullException.ThrowIfNull(backend);
+        ArgumentNullException.ThrowIfNull(output);
+        var inputInfo = backend.Inputs().FirstOrDefault(i => i.Name == output.Name)
+            ?? throw new MidiDeviceException($"{output.Name} has no input port, so its answer can't be heard.");
+
+        var assembler = new BodyReadAssembler();
+        using var done = new ManualResetEventSlim();
+        using var input = backend.OpenInput(inputInfo);
+        input.EventReceived += e =>
+        {
+            lock (assembler)
+            {
+                if (assembler.Add(e))
+                {
+                    done.Set();
+                }
+            }
+        };
+        input.Start();
+        using (var port = backend.OpenOutput(output))
+        {
+            port.Send(BodyWrite.ReadRequest());
+        }
+
+        done.Wait(timeout);
+        lock (assembler)
+        {
+            return (assembler.Done, assembler.Record);
+        }
+    }
 }

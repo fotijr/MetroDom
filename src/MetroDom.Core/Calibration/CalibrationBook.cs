@@ -30,9 +30,9 @@ public sealed record MeasuredLatency(string Port, DateTimeOffset MeasuredAt, Tim
 
 /// <summary>
 /// Measured latencies by output port name (<c>metrodom.calibrations/0</c>). A measurement belongs
-/// to the instrument on this rig (its mic or trigger, its cables), so it lives on the Conductor,
-/// not in the instrument's own profile. Pure data: reading and writing the file is the
-/// Conductor's job.
+/// to the instrument on this rig (its mic or trigger, its cables), so it lives on the Conductor
+/// and wins here. <c>metrodom body write --calibrated</c> can also copy it into a brain's body so
+/// other Conductors get it. Pure data: reading and writing the file is the Conductor's job.
 /// </summary>
 public sealed class CalibrationBook
 {

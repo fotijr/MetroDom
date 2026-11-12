@@ -125,6 +125,13 @@ class Brain {
   // Panic: every actuator off now.
   void allOff();
 
+  // The body record this brain booted from, sent back on a Body Read. nullptr (the default) for
+  // the compiled-in bench body or a silent brain: a read then says there's no record.
+  void setBodyRecord(const uint8_t* record, size_t length) {
+    record_ = record;
+    recordLength_ = record == nullptr ? 0 : length;
+  }
+
   bool isOn(uint8_t index) const { return index < count_ && state_[index].on; }
   bool faulted() const;
   bool outputsEnabled() const { return enabled_; }
@@ -159,6 +166,7 @@ class Brain {
   void sysex(const uint8_t* data, size_t length);
   void bodyChunk(const uint8_t* data, size_t length);
   void replyWrite(WriteStatus status, uint8_t detail = 0);
+  void sendBody();
   void sendIdentity();
   void sendProfile();
   void off(uint8_t index);
@@ -184,6 +192,8 @@ class Brain {
   size_t bodyLength_ = 0;
   uint8_t bodyNext_ = 0;
   uint8_t bodyCount_ = 0;
+  const uint8_t* record_ = nullptr;
+  size_t recordLength_ = 0;
   Refusal lastRefusal_ = Refusal::None;
   Counters counters_;
   char profile_[kProfileBufferSize] = {};

@@ -27,6 +27,8 @@ constexpr uint8_t kProfileReply = 0x02;
 constexpr uint8_t kAllOff = 0x03;
 constexpr uint8_t kBodyWrite = 0x04;
 constexpr uint8_t kBodyWriteReply = 0x05;
+constexpr uint8_t kBodyRead = 0x06;
+constexpr uint8_t kBodyReadReply = 0x07;
 constexpr size_t kBodyChunkHex = 128;
 constexpr size_t kChunk = 128;
 
@@ -280,6 +282,8 @@ void Brain::sysex(const uint8_t* data, size_t length) {
     allOff();  // F0 7D 4D 44 03 F7: panic in one message
   } else if (data[4] == kProfileRequest) {
     sendProfile();  // F0 7D 4D 44 01 F7
+  } else if (data[4] == kBodyRead) {
+    sendBody();  // F0 7D 4D 44 06 F7
   }
 }
 
@@ -343,6 +347,33 @@ void Brain::replyWrite(WriteStatus status, uint8_t detail) {
   const uint8_t reply[] = {0xF0, kManufacturer, kFamilyLsb, kFamilyMsb, kBodyWriteReply,
                            static_cast<uint8_t>(status), static_cast<uint8_t>(detail & 0x7F), 0xF7};
   replies_.sysex(reply, sizeof reply);
+}
+
+// F0 7D 4D 44 07 <index> <count> <hex...> F7, the record in 128-character chunks. No record:
+// one message with index and count 0.
+void Brain::sendBody() {
+  static const char kHex[] = "0123456789ABCDEF";
+  uint8_t chunk[7 + kBodyChunkHex + 1] = {0xF0, kManufacturer, kFamilyLsb, kFamilyMsb, kBodyReadReply};
+  size_t hex = recordLength_ * 2;
+  size_t count = (hex + kBodyChunkHex - 1) / kBodyChunkHex;
+  if (count == 0 || count > 127) {
+    chunk[5] = chunk[6] = 0;
+    chunk[7] = 0xF7;
+    replies_.sysex(chunk, 8);
+    return;
+  }
+  for (size_t index = 0; index < count; ++index) {
+    size_t start = index * kBodyChunkHex;
+    size_t n = hex - start < kBodyChunkHex ? hex - start : kBodyChunkHex;
+    chunk[5] = static_cast<uint8_t>(index);
+    chunk[6] = static_cast<uint8_t>(count);
+    for (size_t i = 0; i < n; ++i) {
+      uint8_t byte = record_[(start + i) / 2];
+      chunk[7 + i] = static_cast<uint8_t>(kHex[(start + i) % 2 == 0 ? byte >> 4 : byte & 0x0F]);
+    }
+    chunk[7 + n] = 0xF7;
+    replies_.sysex(chunk, 8 + n);
+  }
 }
 
 void Brain::sendIdentity() {

@@ -6,6 +6,7 @@ using Melanchall.DryWetMidi.MusicTheory;
 using MetroDom.Conductor.Cli;
 using MetroDom.Conductor.Midi;
 using MetroDom.Core.Bodies;
+using MetroDom.Core.Calibration;
 using MetroDom.Core.Discovery;
 using Spectre.Console;
 using Spectre.Console.Cli;
@@ -25,6 +26,25 @@ internal static class BodyFile
         return BodyImage.TryParseJson(File.ReadAllText(path), out var body, out var error)
             ? body
             : throw new UsageException($"{path}: {error}");
+    }
+
+    /// <summary>The body a brain booted from; a usage error when it has none or doesn't answer.</summary>
+    public static BodyDefinition ReadFrom(IMidiBackend backend, MidiPortInfo port)
+    {
+        var (answered, record) = BodyWriter.Read(backend, port, BodyWriter.DefaultTimeout);
+        if (!answered)
+        {
+            throw new UsageException($"{port.Name} didn't answer the Body Read. Its firmware may be older than 0.2.");
+        }
+
+        if (record is null)
+        {
+            throw new UsageException($"{port.Name} has no body record: it runs its compiled-in bench body, or a silent one (see metrodom devices --identify). Give a body file.");
+        }
+
+        return BodyImage.TryDecode(record, out var body, out var error)
+            ? body
+            : throw new UsageException($"{port.Name} sent a body record that doesn't read: {error}");
     }
 
     public static void Show(BodyDefinition body, byte[] record)
@@ -52,6 +72,41 @@ internal static class BodyFile
         AnsiConsole.Write(table);
         AnsiConsole.MarkupLine(string.Create(CultureInfo.InvariantCulture,
             $"[grey]Safety: pulse ≤ {body.MaxOnMs} ms, duty ≤ {body.MaxDutyPercent}% of {body.DutyWindowMs} ms, watchdog {body.WatchdogMs} ms. Record: {record.Length} bytes, {BodyWrite.Chunks(record).Count} SysEx messages.[/]"));
+    }
+}
+
+/// <summary>Shows the body record a brain booted from, and saves it as a body file.</summary>
+internal sealed class BodyReadCommand : Command<BodyReadCommand.Settings>
+{
+    public sealed class Settings : CommandSettings
+    {
+        [CommandArgument(0, "<PORT>")]
+        [Description("The brain's port: index, name, or unique part of a name from [bold]metrodom devices[/].")]
+        public string Port { get; init; } = "";
+
+        [CommandOption("--out <FILE>")]
+        [Description("Save it as a [bold]metrodom.body/0[/] file (a backup, or a start for editing).")]
+        public string? Out { get; init; }
+    }
+
+    public override int Execute(CommandContext context, Settings settings, CancellationToken cancellationToken)
+    {
+        var backend = MidiDevices.Backend.Value;
+        var port = MidiDevices.FindOutput(settings.Port);
+        if (Identifier.Identify(backend, Identifier.DefaultTimeout, [port])[0].Kind != PortKind.MetroDom)
+        {
+            throw new UsageException($"{port.Name} didn't identify as a MetroDom instrument, so it gets no Body Read.");
+        }
+
+        var body = BodyFile.ReadFrom(backend, port);
+        BodyFile.Show(body, BodyImage.Encode(body));
+        if (settings.Out is { } path)
+        {
+            File.WriteAllText(path, BodyImage.ToJson(body));
+            Ui.Success($"Saved {path}.");
+        }
+
+        return 0;
     }
 }
 
@@ -100,15 +155,26 @@ internal sealed class BodyWriteCommand : Command<BodyWriteCommand.Settings>
         [Description("The brain's port: index, name, or unique part of a name from [bold]metrodom devices[/].")]
         public string Port { get; init; } = "";
 
-        [CommandArgument(1, "<FILE>")]
-        [Description("A [bold]metrodom.body/0[/] JSON file. Checked here first; nothing is sent if it isn't valid.")]
-        public string File { get; init; } = "";
+        [CommandArgument(1, "[FILE]")]
+        [Description("A [bold]metrodom.body/0[/] JSON file. Checked here first; nothing is sent if it isn't valid. Omitted: the body the brain holds now (with [bold]--calibrated[/]).")]
+        public string? File { get; init; }
+
+        [CommandOption("--calibrated")]
+        [Description("Put the latencies [bold]metrodom calibrate[/] measured for this port into the body, so it carries them to any Conductor.")]
+        public bool Calibrated { get; init; }
+
+        [CommandOption("--calibrations <FILE>")]
+        [Description("The calibrations file to read with [bold]--calibrated[/]. Default: $METRODOM_CALIBRATIONS, else the one [bold]calibrate[/] saves.")]
+        public string? Calibrations { get; init; }
+
+        public override ValidationResult Validate() =>
+            File is null && !Calibrated
+                ? ValidationResult.Error("give a body FILE, or --calibrated to update the body the brain holds.")
+                : ValidationResult.Success();
     }
 
     public override int Execute(CommandContext context, Settings settings, CancellationToken cancellationToken)
     {
-        var body = BodyFile.Load(settings.File);
-        var record = BodyImage.Encode(body);
         var backend = MidiDevices.Backend.Value;
         var port = MidiDevices.FindOutput(settings.Port);
 
@@ -117,6 +183,30 @@ internal sealed class BodyWriteCommand : Command<BodyWriteCommand.Settings>
         if (before.Kind != PortKind.MetroDom)
         {
             throw new UsageException($"{port.Name} didn't identify as a MetroDom instrument, so it gets no Body Write. Check it with metrodom devices --identify.");
+        }
+
+        var held = settings.File is null ? BodyFile.ReadFrom(backend, port) : null;
+        var body = held ?? BodyFile.Load(settings.File!);
+        if (settings.Calibrated)
+        {
+            var path = CalibrationStore.Resolve(settings.Calibrations);
+            var measured = CalibrationStore.Load(path, Ui.Warn).Find(port.Name)
+                ?? throw new UsageException($"no calibration for {port.Name} in {path}. Run metrodom calibrate -o \"{port.Name}\" first.");
+            var calibrated = BodyImage.WithMeasured(body, measured);
+            foreach (var (old, fresh) in body.Notes.Zip(calibrated.Notes).Where(p => p.First.LatencyMs != p.Second.LatencyMs))
+            {
+                Ui.Note(string.Create(CultureInfo.InvariantCulture,
+                    $"{Note.Get((SevenBitNumber)(byte)fresh.Note)}: latency {(old.LatencyMs > 0 ? $"{old.LatencyMs} ms" : "not measured")} → {fresh.LatencyMs} ms (measured {measured.MeasuredAt.LocalDateTime:g})"));
+            }
+
+            body = calibrated;
+        }
+
+        var record = BodyImage.Encode(body);
+        if (held is not null && BodyImage.Encode(held).AsSpan().SequenceEqual(record))
+        {
+            Ui.Success($"{port.Name} already holds this body; nothing to write.");
+            return 0;
         }
 
         BodyFile.Show(body, record);
@@ -156,6 +246,18 @@ internal sealed class BodyWriteCommand : Command<BodyWriteCommand.Settings>
             if (now.Profile?.Name == body.Name)
             {
                 Ui.Success($"{output.Name} now answers as {body.Name} (notes {string.Join(",", now.Profile.Notes!.Order())}).");
+                var (answered, back) = BodyWriter.Read(backend, output, BodyWriter.DefaultTimeout);
+                if (answered && back is not null && !back.AsSpan().SequenceEqual(record))
+                {
+                    Ui.Warn($"{output.Name} booted from a record that differs from the one written. Check it with metrodom body read.");
+                    return 1;
+                }
+
+                if (answered && back is not null)
+                {
+                    Ui.Success("It booted from exactly the record written.");
+                }
+
                 return 0;
             }
         }

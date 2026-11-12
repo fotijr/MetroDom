@@ -79,9 +79,13 @@ internal static class MetroDomApp
                 body.AddCommand<BodyCheckCommand>("check")
                     .WithDescription("Check a body file the way a brain will, and show what the instrument becomes.")
                     .WithExample("body", "check", "Instruments/metrodom_brain/bodies/m1-xylophone.json");
+                body.AddCommand<BodyReadCommand>("read")
+                    .WithDescription("Show the body record a brain booted from; --out saves it as a body file.")
+                    .WithExample("body", "read", "\"MetroDom xylophone\"", "--out", "xylophone-backup.json");
                 body.AddCommand<BodyWriteCommand>("write")
                     .WithDescription("Write a body file into a MetroDom brain over MIDI. The brain checks it, stores it, reads it back and restarts as that instrument.")
-                    .WithExample("body", "write", "\"MetroDom brain\"", "Instruments/metrodom_brain/bodies/m1-xylophone.json");
+                    .WithExample("body", "write", "\"MetroDom brain\"", "Instruments/metrodom_brain/bodies/m1-xylophone.json")
+                    .WithExample("body", "write", "\"MetroDom xylophone\"", "--calibrated");
             });
             config.AddCommand<PanicCommand>("panic")
                 .WithDescription("All sound and notes off on every channel of an output.")

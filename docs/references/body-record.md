@@ -100,7 +100,8 @@ metrodom body write "MetroDom brain" Instruments/metrodom_brain/bodies/m1-xyloph
 bytes). `body write` checks the file, identifies the port (only MetroDom instruments get it),
 asks you to hold the body's write button (in a terminal: hold it, then press Enter), sends the record as Body Write SysEx ([profile exchange](midi-profile-exchange.md)), and waits
 for the reply. The brain turns everything off, writes the EEPROM page by page, reads it back,
-answers, and restarts; the command waits up to 5 s for it to answer as the new body.
+answers, and restarts; the command waits up to 5 s for it to answer as the new body, then reads
+the body back (Body Read) and checks it booted from exactly the bytes written.
 
 | Reply | Meaning |
 | --- | --- |
@@ -120,9 +121,29 @@ mistake. It's wired to the EEPROM, not read by the brain, so no firmware bug can
 `metrodom virtual` instruments accept Body Write too and then describe themselves as that body
 (they still play as their `-i` spec), so the command can be tried with no hardware.
 
+## Reading a body, and measured latencies
+
+```bash
+metrodom body read "MetroDom xylophone" --out xylophone-backup.json
+```
+
+```bash
+metrodom body write "MetroDom xylophone" --calibrated
+```
+
+`body read` shows the record the brain booted from (a bench or silent brain has none) and `--out`
+saves it as a body file: a backup before editing, or a start for a new body. `body write` without
+a file starts from that same record. `--calibrated` puts the latencies `metrodom calibrate`
+saved for this port into the body, rounded to whole milliseconds; notes measured without their
+own value get the overall one. If that changes nothing, nothing is written.
+
+Why both: the Conductor's [calibrations](calibration.md) belong to this rig (its trigger or mic,
+its cables) and still win here. The body carries the instrument's own number to every other
+Conductor it's plugged into, so a rental box or a friend's laptop schedules it right without a
+calibration run. Measure with `--onset-latency` set, so the trigger's own delay isn't written
+into the instrument.
+
 ## Not yet
 
 - Never run on a real Pico, EEPROM or PCA9685 (TD-29). The I²C parts are tested against fakes.
 - No MCP23017 driver; no servo (PWM) outputs.
-- `metrodom calibrate` doesn't write measured latencies into the body yet.
-- No Body Read: `body write` checks what the brain reports after the restart, not the raw bytes.

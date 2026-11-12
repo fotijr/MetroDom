@@ -24,6 +24,7 @@ An EEPROM with a bad record: a silent brain whose profile name says why.
 | Identity Request `F0 7E 7F 06 01 F7` | `F0 7E 7F 06 02 7D 4D 44 01 00 <version> F7`: MetroDom, model 1 = brain ([midi-identity](../../docs/references/midi-identity.md)) |
 | Profile Request `F0 7D 4D 44 01 F7` | Its [instrument profile](../../docs/references/instrument-profile.md) in 128-byte chunks ([profile exchange](../../docs/references/midi-profile-exchange.md)) |
 | Body Write `F0 7D 4D 44 04 …` | Checks the record, turns everything off, writes the EEPROM, reads it back, answers `05`, restarts as that body |
+| Body Read `F0 7D 4D 44 06 F7` | The record it booted from, as `07` chunks; "none" for the bench body or a silent brain |
 
 A note is **refused** (never queued) when:
 - its actuator is still striking, or struck less than `minIntervalMs` ago;
@@ -98,5 +99,5 @@ The brain restarts as "MetroDom xylophone".
 ## Not yet (TD-29)
 
 Never flashed or run against a real EEPROM or PCA9685. No MCP23017 driver or servo outputs.
-Measured latency isn't written into the body by `calibrate` yet. No silence timeout (USB unmount
+No silence timeout (USB unmount
 is the only host-loss signal).

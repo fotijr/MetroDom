@@ -17,6 +17,7 @@
 #include <MIDI.h>
 #include <Wire.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "config.h"
 #include "src/brain/Body.h"
@@ -71,6 +72,8 @@ void outputEnable(bool on) { digitalWrite(kOe, on ? LOW : HIGH); }
 WireBus bus;
 metrodom::Eeprom24 eeprom(bus, waitMs);
 metrodom::Body body;
+uint8_t bodyRecord[metrodom::kBodyMaxBytes];  // the EEPROM record booted from, for Body Read
+size_t bodyRecordLength = 0;
 metrodom::BrainConfig active;
 char silentName[64];
 Pins pins;
@@ -100,6 +103,8 @@ metrodom::Outputs& chooseBody() {
     return pins;
   }
   active = body.config();
+  memcpy(bodyRecord, record, sizeof record);
+  bodyRecordLength = static_cast<size_t>(record[4] | (record[5] << 8));
   if (body.driver == metrodom::BodyDriver::Pca9685) {
     static metrodom::Pca9685 chip(bus, body.address, outputEnable);
     pca = &chip;
@@ -156,6 +161,7 @@ void setup() {
   }
   static metrodom::Brain theBrain(active, outputs, replies, &eeprom);
   brain = &theBrain;
+  if (bodyRecordLength > 0) brain->setBodyRecord(bodyRecord, bodyRecordLength);
   brain->begin(millis());
 
   if (!TinyUSBDevice.isInitialized()) TinyUSBDevice.begin(0);

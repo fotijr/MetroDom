@@ -187,6 +187,17 @@ internal sealed class VirtualCommand : Command<VirtualCommand.Settings>
                 return;
             }
 
+            if (BodyWrite.IsReadRequest(e))
+            {
+                foreach (var chunk in BodyWrite.ReadReply(bodies.Record))
+                {
+                    port.Send(chunk); // nothing written yet: "no record", like a bench brain
+                }
+
+                Print(console, clock.Now, spec.Name, "[grey]body read: sent its body record[/]");
+                return;
+            }
+
             if (BodyWrite.IsChunk(e))
             {
                 // Like a brain: check the record and answer. It then describes itself as that body

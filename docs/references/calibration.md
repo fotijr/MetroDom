@@ -57,6 +57,11 @@ and exits 1.
 (what the instrument's profile says), and the command line (`@LATENCY`, `@PROFILE.json`) beats
 both. A line says so: `MetroDom xylo: using the latencies calibrated 2026-11-12 04:31 (13.2 ms).`
 
+To carry a measurement to other Conductors, write it into the instrument:
+`metrodom body write PORT --calibrated` puts this file's latencies for that port into the body's
+record, so the profile the brain sends declares them ([body record](body-record.md)). This rig's
+file still wins here.
+
 ## The quick check (`play`/`serve --onsets`, `calibrate --quick`)
 
 It runs before the first song and before any other input opens, so the onset input may share a

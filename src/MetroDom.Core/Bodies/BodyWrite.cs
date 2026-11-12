@@ -54,6 +54,8 @@ public static class BodyWrite
     private const byte FamilyMsb = (DeviceIdentity.MetroDomFamily >> 7) & 0x7F;
     private const byte WriteId = 0x04;
     private const byte ReplyId = 0x05;
+    private const byte ReadId = 0x06;
+    private const byte ReadReplyId = 0x07;
     private const byte EndOfExclusive = 0xF7;
 
     // The firmware's BodyError, by number (Body.h). Never renumber.
@@ -97,9 +99,101 @@ public static class BodyWrite
         return false;
     }
 
+    /// <summary><c>F0 7D 4D 44 06 F7</c>: "send me the body record you booted from".</summary>
+    public static NormalSysExEvent ReadRequest() => new([NonCommercial, FamilyLsb, FamilyMsb, ReadId, EndOfExclusive]);
+
+    public static bool IsReadRequest(MidiEvent midiEvent) =>
+        midiEvent is SysExEvent { Data: [NonCommercial, FamilyLsb, FamilyMsb, ReadId, ..] };
+
+    /// <summary>
+    /// A brain's answer to a Body Read: <c>F0 7D 4D 44 07 &lt;index&gt; &lt;count&gt; &lt;hex…&gt; F7</c>
+    /// chunks, or one message with index and count 0 when it has no record (bench or silent brain).
+    /// </summary>
+    public static IReadOnlyList<NormalSysExEvent> ReadReply(byte[]? record)
+    {
+        if (record is not { Length: > 0 })
+        {
+            return [new NormalSysExEvent([NonCommercial, FamilyLsb, FamilyMsb, ReadReplyId, 0, 0, EndOfExclusive])];
+        }
+
+        var hex = Encoding.ASCII.GetBytes(BodyImage.ToHex(record));
+        var count = (hex.Length + ChunkHex - 1) / ChunkHex;
+        return [.. Enumerable.Range(0, count).Select(i => new NormalSysExEvent(
+        [
+            NonCommercial, FamilyLsb, FamilyMsb, ReadReplyId, (byte)i, (byte)count,
+            .. hex.AsSpan(i * ChunkHex, Math.Min(ChunkHex, hex.Length - (i * ChunkHex))),
+            EndOfExclusive,
+        ]))];
+    }
+
+    /// <summary>Reads one Body Read reply message: its index, count and hex text.</summary>
+    internal static bool TryParseReadChunk(MidiEvent midiEvent, out int index, out int count, out string hex)
+    {
+        (index, count, hex) = (0, 0, "");
+        if (midiEvent is not SysExEvent { Data: [NonCommercial, FamilyLsb, FamilyMsb, ReadReplyId, var i, var n, .. var rest] }
+            || (n > 0 && i >= n))
+        {
+            return false;
+        }
+
+        (index, count, hex) = (i, n, Encoding.ASCII.GetString(rest is [.., EndOfExclusive] ? rest[..^1] : rest));
+        return true;
+    }
+
     /// <summary>Whether <paramref name="midiEvent"/> is a Body Write chunk.</summary>
     public static bool IsChunk(MidiEvent midiEvent) =>
         midiEvent is SysExEvent { Data: [NonCommercial, FamilyLsb, FamilyMsb, WriteId, ..] };
+}
+
+/// <summary>Puts a Body Read answer back together. Chunks may arrive in any order.</summary>
+/// <remarks>Not thread-safe: feed it from one thread or under a lock.</remarks>
+public sealed class BodyReadAssembler
+{
+    private string?[] _chunks = [];
+
+    /// <summary>Whether the answer is complete.</summary>
+    public bool Done { get; private set; }
+
+    /// <summary>The record once complete; <c>null</c> if the brain said it has none (or the hex was bad).</summary>
+    public byte[]? Record { get; private set; }
+
+    /// <summary>Feeds one event. Returns true when it completed the answer.</summary>
+    public bool Add(MidiEvent midiEvent)
+    {
+        if (Done || !BodyWrite.TryParseReadChunk(midiEvent, out var index, out var count, out var hex))
+        {
+            return false;
+        }
+
+        if (count == 0)
+        {
+            Done = true;
+            return true;
+        }
+
+        if (_chunks.Length != count)
+        {
+            _chunks = new string?[count];
+        }
+
+        _chunks[index] = hex;
+        if (_chunks.Any(c => c is null))
+        {
+            return false;
+        }
+
+        Done = true;
+        try
+        {
+            Record = Convert.FromHexString(string.Concat(_chunks));
+        }
+        catch (FormatException)
+        {
+            Record = null;
+        }
+
+        return true;
+    }
 }
 
 /// <summary>
@@ -112,6 +206,9 @@ public sealed class BodyReceiver
     private readonly List<byte> _record = [];
     private int _next;
     private int _count;
+
+    /// <summary>The last record written (what a Body Read returns), or <c>null</c> before any write.</summary>
+    public byte[]? Record { get; private set; }
 
     /// <summary>
     /// Feeds one event. Returns the reply to send when the event was a chunk that needs one
@@ -160,6 +257,7 @@ public sealed class BodyReceiver
         }
 
         written = body;
+        Record = record;
         return BodyWrite.Reply(BodyWriteStatus.Written);
     }
 

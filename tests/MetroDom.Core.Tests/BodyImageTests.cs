@@ -1,5 +1,6 @@
 using Melanchall.DryWetMidi.Core;
 using MetroDom.Core.Bodies;
+using MetroDom.Core.Calibration;
 
 namespace MetroDom.Core.Tests;
 
@@ -167,5 +168,65 @@ public class BodyImageTests
         Assert.Equal(BodyWriteStatus.Invalid, parsed.Status);
         Assert.Equal("the brain refused the record: bad CRC; nothing was stored", parsed.Describe());
         Assert.Contains("write button held", new BodyWriteReply(BodyWriteStatus.Failed, 0).Describe(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ToJson_ReadsBackToTheSameBody()
+    {
+        var m1 = M1() with { Channel = 3, Notes = [M1().Notes[0] with { LatencyMs = 13 }, .. M1().Notes.Skip(1)] };
+
+        Assert.True(BodyImage.TryParseJson(BodyImage.ToJson(m1), out var back, out var error), error);
+        Assert.Equal(BodyImage.Encode(m1), BodyImage.Encode(back));
+        Assert.Contains("\"address\": \"0x40\"", BodyImage.ToJson(m1), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void WithMeasured_RoundsToWholeMilliseconds_AndFillsNotesWithoutTheirOwn()
+    {
+        var measured = new MeasuredLatency("MetroDom xylophone", DateTimeOffset.UnixEpoch, TimeSpan.FromMilliseconds(14.2),
+            new Dictionary<int, TimeSpan> { [72] = TimeSpan.FromMilliseconds(12.5), [74] = TimeSpan.FromMilliseconds(13.4) });
+
+        var body = BodyImage.WithMeasured(M1(), measured);
+
+        Assert.Equal([13, 13, 14], body.Notes.Select(n => n.LatencyMs));
+        Assert.Null(BodyImage.Validate(body));
+        Assert.Equal(TimeSpan.FromMilliseconds(14), body.ToProfile().LatencyFor(76));
+    }
+
+    [Fact]
+    public void BodyRead_ReassemblesTheRecord_InAnyOrder_OrSaysThereIsNone()
+    {
+        var record = BodyImage.Encode(M1());
+        var chunks = BodyWrite.ReadReply(record);
+        Assert.Equal(2, chunks.Count);
+
+        var assembler = new BodyReadAssembler();
+        Assert.False(assembler.Add(chunks[1]));
+        Assert.True(assembler.Add(chunks[0]));
+        Assert.Equal(record, assembler.Record);
+
+        var none = new BodyReadAssembler();
+        Assert.True(none.Add(Assert.Single(BodyWrite.ReadReply(null))));
+        Assert.True(none.Done);
+        Assert.Null(none.Record);
+
+        // As the firmware sends "no record" (brain_test.cpp bodyRead_SendsTheRecordItBootedFrom).
+        var firmware = new BodyReadAssembler();
+        Assert.True(firmware.Add(new NormalSysExEvent([0x7D, 0x4D, 0x44, 0x07, 0, 0, 0xF7])));
+        Assert.Null(firmware.Record);
+        Assert.True(BodyWrite.IsReadRequest(BodyWrite.ReadRequest()));
+    }
+
+    [Fact]
+    public void Receiver_RemembersTheRecordItWrote()
+    {
+        var receiver = new BodyReceiver();
+        Assert.Null(receiver.Record);
+        foreach (var chunk in BodyWrite.Chunks(BodyImage.Encode(M1())))
+        {
+            receiver.Add(chunk, out _);
+        }
+
+        Assert.Equal(BodyImage.Encode(M1()), receiver.Record);
     }
 }

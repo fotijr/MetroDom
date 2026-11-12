@@ -20,6 +20,8 @@ sends these **only to ports whose Identity Reply said MetroDom**.
 | All Off (panic) | `F0 7D 4D 44 03 F7` |
 | Body Write (one chunk) | `F0 7D 4D 44 04 <index> <count> <hex…> F7` |
 | Body Write Reply | `F0 7D 4D 44 05 <status> <detail> F7` |
+| Body Read | `F0 7D 4D 44 06 F7` |
+| Body Read Reply (one chunk) | `F0 7D 4D 44 07 <index> <count> <hex…> F7` |
 
 - `<text>` is the profile JSON, ASCII only (non-ASCII is escaped as `\uXXXX`), so every byte is ≤ `7F`.
 - At most 128 text bytes per chunk, so any USB-MIDI SysEx buffer copes. `<index>` counts from 0,
@@ -35,7 +37,11 @@ sends these **only to ports whose Identity Reply said MetroDom**.
   (`<detail>` = the firmware's `BodyError` number), 3 the EEPROM didn't keep it, 4 no body store.
   A bad chunk is answered at once. Owner-only by hardware: `metrodom body write` is a local
   command, and the body's write button must be held while it runs.
-- Free sub-IDs after `05` are for later MetroDom messages.
+- **Body Read** asks for the record the brain booted from. The reply is the record as hex in
+  chunks like Body Write's (any order, the Conductor reassembles them), or one message with
+  `<index>` and `<count>` 0 when the brain has no record (its compiled-in bench body, or a silent
+  brain). After a Body Write the brain answers with the old record until it restarts.
+- Free sub-IDs after `07` are for later MetroDom messages.
 
 ## What `metrodom devices --identify` does
 

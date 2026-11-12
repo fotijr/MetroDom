@@ -817,6 +817,26 @@ void pca9685_OutputEnable_DrivesOe_EvenWithTheChipGone() {
   unwired.enable(false);  // no /OE: a no-op, not a crash
 }
 
+void bodyRead_SendsTheRecordItBootedFrom() {
+  Rig r;
+  r.raw({0xF0, 0x7D, 0x4D, 0x44, 0x06, 0xF7});
+  CHECK(r.replies.sent.size() == 1);
+  CHECK((r.replies.sent[0] == std::vector<uint8_t>{0xF0, 0x7D, 0x4D, 0x44, 0x07, 0, 0, 0xF7}));  // bench: no record
+
+  auto bytes = Encode(M1());
+  r.brain.setBodyRecord(bytes.data(), bytes.size());
+  r.replies.sent.clear();
+  r.raw({0xF0, 0x7D, 0x4D, 0x44, 0x06, 0xF7});
+  std::string hex;
+  for (size_t i = 0; i < r.replies.sent.size(); ++i) {
+    auto& c = r.replies.sent[i];
+    CHECK(c[4] == 0x07 && c[5] == i && c[6] == r.replies.sent.size() && c.back() == 0xF7);
+    hex.append(c.begin() + 7, c.end() - 1);
+  }
+  CHECK(r.replies.sent.size() == 2);
+  CHECK(hex == Hex(bytes));
+}
+
 }  // namespace
 
 int main() {
@@ -839,6 +859,7 @@ int main() {
       bodyWrite_SaysWhenItCant, pca9685_DrivesFullOnAndFullOff,
       pca9685_UnderTheBrain_FaultsWhenTheChipGoesAway, eeprom_WritesPages_AndVerifies,
       outputEnable_OnlyWhileTheBrainIsHealthy, pca9685_OutputEnable_DrivesOe_EvenWithTheChipGone,
+      bodyRead_SendsTheRecordItBootedFrom,
   };
   for (auto test : tests) test();
   std::printf("brain: %d checks, %d failed\n", checks, failures);
