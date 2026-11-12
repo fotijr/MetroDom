@@ -144,6 +144,14 @@ internal sealed class SimulateCommand : Command<SimulateCommand.Settings>
         return 0;
     }
 
+    /// <summary>Held by the governor, plus anything that still got past it to be dropped or refused.</summary>
+    private static string Held(InstrumentResult r)
+    {
+        var past = r.Dropped + r.Refused;
+        var held = r.Held == 0 ? "[grey]0[/]" : $"[yellow]{r.Held.ToString(CultureInfo.InvariantCulture)}[/]";
+        return past == 0 ? held : $"{held} [red]+{past.ToString(CultureInfo.InvariantCulture)} refused[/]";
+    }
+
     private static void Report(string songName, IReadOnlyList<InstrumentSpec> band, SimulationOptions options, SimulationResult result, bool showNotes)
     {
         var inv = CultureInfo.InvariantCulture;
@@ -161,7 +169,7 @@ internal sealed class SimulateCommand : Command<SimulateCommand.Settings>
             .AddColumn("Channels")
             .AddColumn(new TableColumn("Latency").RightAligned())
             .AddColumn(new TableColumn("Played").RightAligned())
-            .AddColumn(new TableColumn("Dropped").RightAligned())
+            .AddColumn(new TableColumn("Held").RightAligned())
             .AddColumn(new TableColumn("Heard").RightAligned())
             .AddColumn("Panic");
         for (var i = 0; i < band.Count; i++)
@@ -172,12 +180,16 @@ internal sealed class SimulateCommand : Command<SimulateCommand.Settings>
                 ChannelList.Format(band[i].Channels),
                 Ms(r.Latency),
                 r.Played.ToString(inv),
-                r.Dropped + r.Refused == 0 ? "[grey]0[/]" : $"[yellow]{r.Dropped + r.Refused}[/]",
+                Held(r),
                 r.Played == 0 ? "[grey]-[/]" : Offsets(r.MinOffset, r.MaxOffset),
                 r.GotPanic ? "[green]✓[/]" : "[red]✗[/]");
         }
 
         AnsiConsole.Write(table);
+        foreach (var r in result.Instruments.Where(r => r.HeldWhy is not null))
+        {
+            AnsiConsole.MarkupLine($"[grey]{Markup.Escape(r.Name)}: governor held {Markup.Escape(r.HeldWhy!)}[/]");
+        }
 
         if (showNotes)
         {

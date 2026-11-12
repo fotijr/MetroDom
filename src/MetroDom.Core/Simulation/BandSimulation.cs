@@ -1,3 +1,4 @@
+using MetroDom.Core.Safety;
 using MetroDom.Core.Timing;
 
 namespace MetroDom.Core.Simulation;
@@ -22,10 +23,17 @@ public sealed record SimulationOptions
 public sealed record SimulatedNote(string Instrument, int Note, TimeSpan SongTime, TimeSpan Offset);
 
 /// <summary>Per-instrument totals.</summary>
+/// <param name="Held">Notes the safety governor held back, as <c>play</c> would.</param>
+/// <param name="HeldWhy">The governor's summary (counts by reason, notes turned down), or null.</param>
+/// <param name="Dropped">Notes that reached the instrument and it has no actuator for.</param>
+/// <param name="Refused">Notes that reached the instrument and its firmware refused. With the
+/// governor in front this should stay 0: anything here means the two disagree.</param>
 public sealed record InstrumentResult(
     string Name,
     TimeSpan Latency,
     int Played,
+    int Held,
+    string? HeldWhy,
     int Dropped,
     int Refused,
     TimeSpan MinOffset,
@@ -47,7 +55,8 @@ public sealed record SimulationResult(
 
 /// <summary>
 /// Plays a song to a band of <see cref="VirtualInstrument"/>s on a <see cref="VirtualClock"/>,
-/// through the real <see cref="Orchestra"/> and <see cref="LatencyScheduler"/>, then panics.
+/// through the real <see cref="Orchestra"/>, <see cref="LatencyScheduler"/> and
+/// <see cref="SafetyGovernor"/> (profile rules, as <c>play</c> applies them), then panics.
 /// Runs instantly and gives the same answer every time: the cheap way to prove scheduling ideas
 /// before hardware exists (roadmap S1).
 /// </summary>
@@ -67,18 +76,21 @@ public static class BandSimulation
         var instruments = parts
             .Select((part, i) => new VirtualInstrument(part.Profile, clock, options.Jitter, options.Seed + i))
             .ToArray();
+        var governors = instruments
+            .Select(i => new SafetyGovernor(i, i.Profile, SafetyLimits.None, clock))
+            .ToArray();
         for (var i = 0; i < parts.Count; i++)
         {
             foreach (var channel in parts[i].Channels)
             {
-                orchestra.Assign(channel, instruments[i]);
+                orchestra.Assign(channel, governors[i]);
             }
         }
 
         var scheduler = new LatencyScheduler(
             orchestra,
             clock,
-            instruments.ToDictionary(i => (IMidiOutput)i, i => i.Profile),
+            governors.ToDictionary(g => (IMidiOutput)g, g => g.Profile),
             options.Compensate);
 
         var notes = new List<SimulatedNote>();
@@ -108,19 +120,21 @@ public static class BandSimulation
 
         return new SimulationResult(
             scheduler.Lookahead,
-            instruments.Select(i => Summarize(i, notes)).ToArray(),
+            instruments.Select((i, n) => Summarize(i, governors[n], notes)).ToArray(),
             notes.OrderBy(n => n.SongTime + n.Offset).ToArray(),
             shared.Length,
             shared.DefaultIfEmpty().Max());
     }
 
-    private static InstrumentResult Summarize(VirtualInstrument instrument, List<SimulatedNote> notes)
+    private static InstrumentResult Summarize(VirtualInstrument instrument, SafetyGovernor governor, List<SimulatedNote> notes)
     {
         var offsets = notes.Where(n => n.Instrument == instrument.Name).Select(n => n.Offset).DefaultIfEmpty().ToArray();
         return new InstrumentResult(
             instrument.Name,
             instrument.Profile.Latency,
             instrument.Strikes.Count,
+            (int)governor.TotalBlocked,
+            governor.Summary(),
             instrument.Dropped,
             instrument.Refused,
             offsets.Min(),

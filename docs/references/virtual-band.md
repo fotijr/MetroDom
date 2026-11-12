@@ -78,6 +78,11 @@ is counted in the table ("on a stand-in", "over polyphony N"). Played to note-li
 
 ## What the simulation measures
 
+Notes go through a `SafetyGovernor` per instrument (profile rules only, no policy limits), as in
+`play`, so the report's **Held** column is what `play` would hold back, with the reasons under the
+table ("4 too soon", "2 not playable"). A note that still gets past the governor and is dropped
+or refused by the instrument shows in red: the governor and the firmware disagree.
+
 `LatencyScheduler` sends each event to each instrument at
 `songTime + lookahead − latency(instrument, note)`, where lookahead is the slowest latency in the
 band ([ADR 0004](../design-docs/0004-latency-compensation.md)). `BandSimulation` reports, per

@@ -54,6 +54,11 @@ each phase closes its tech-debt rows and raises its row in [QUALITY_SCORE.md](..
   message instead of up to 32. It only goes to ports whose Identity Reply said MetroDom (the
   same rule as the profile request); everyone else gets CCs only. `metrodom panic` and a replug
   still send CCs only: they have no identity to go on, and the brain turns itself off at boot.
+- 2026-11-12: `metrodom panic` now sends the all-off too, after the CCs: CCs to every chosen
+  port at once (nothing waits), then one identify round, then the all-off to ports that answer as
+  MetroDom. `--all` panics every output. The replug panic stays CCs only (boot is all-off; the
+  same port name may be another device, TD-17). `simulate` runs notes through the governor, so
+  it reports what `play` holds back instead of what the firmware would refuse.
 - 2026-11-12: The governor mirrors the firmware's duty bucket exactly (capacity
   `dutyWindowMs × maxDutyPercent`, each strike costs its pulse, drains at `maxDutyPercent`) so
   the Conductor holds back what the brain would refuse, and the status panel can say why. Without

@@ -21,6 +21,9 @@ internal sealed class DeviceBackend : IMidiBackend
     /// <summary>Bodies written to each port through Body Write, as a brain would store them.</summary>
     public ConcurrentDictionary<string, BodyDefinition> Bodies { get; } = new();
 
+    /// <summary>Everything sent to each output, in order.</summary>
+    public ConcurrentDictionary<string, ConcurrentQueue<MidiEvent>> Sent { get; } = new();
+
     public int RequestsTo(string name) => _requests.GetValueOrDefault(name);
 
     public int MetroDomSysExTo(string name) => _metroDomSysEx.GetValueOrDefault(name);
@@ -36,6 +39,7 @@ internal sealed class DeviceBackend : IMidiBackend
         var device = Find(port);
         var output = new FakeDevicePort(port.Name, e =>
         {
+            Sent.GetOrAdd(port.Name, _ => new()).Enqueue(e);
             if (device.Bodies is { } reader && BodyWrite.IsReadRequest(e))
             {
                 var chunks = BodyWrite.ReadReply(reader.Record);

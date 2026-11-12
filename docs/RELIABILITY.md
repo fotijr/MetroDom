@@ -35,8 +35,11 @@ but is polled (1 ms full-speed frames).
 2. **Conductor safety governor** (`SafetyGovernor`, one in front of every output in `play` and `route`)
    - Panic (CC 120/123 + MetroDom SysEx all-off) to every instrument, bypassing queues. Built:
      instruments that answered as MetroDom get the one-message all-off `F0 7D 4D 44 03 F7` first,
-     then everyone gets CC 120/123 on all 16 channels. `metrodom panic` and the panic on replug
-     send CCs only (no identity to go on; the brain boots all-off anyway).
+     then everyone gets CC 120/123 on all 16 channels. `metrodom panic` (one port, several, or
+     `--all`) knows nothing about the ports, so it sends the CCs to every port at once, then asks
+     them who they are in one round and sends the all-off to those that answer as MetroDom: a
+     panic never waits on a reply. The panic on replug stays CCs only: the brain turns itself off
+     at boot, and the port with the old name may be a different device (TD-17).
    - Rate limits, velocity caps and quiet hours from the active policy profile. Built as flags
      until policy profiles exist: `--max-rate N` (strikes per second per output, extra notes held
      back), `--max-velocity N` (louder notes turned down, never dropped), `--quiet 23:00-07:00[@VEL]`

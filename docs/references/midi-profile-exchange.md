@@ -29,7 +29,9 @@ sends these **only to ports whose Identity Reply said MetroDom**.
 - Chunks may arrive in any order. A chunk with a different `<count>` starts the answer over.
 - **All Off** turns every actuator off at once, like CC 120 on every channel, in one message. It
   doesn't latch: the next Note On plays. The Conductor's panic sends it first, then CC 120/123,
-  so a MetroDom instrument is silent after one message instead of up to 32. Instruments ignore
+  so a MetroDom instrument is silent after one message instead of up to 32. `metrodom panic`
+  sends the CCs first instead (it doesn't know the ports yet and won't wait to ask), then the
+  All Off to ports that identify as MetroDom. Instruments ignore
   MetroDom sub-IDs they don't know.
 - **Body Write** carries a [body record](body-record.md) as upper-case hex, at most 128
   characters (64 bytes) per chunk, sent in order from `<index>` 0; chunk 0 starts over. After the
