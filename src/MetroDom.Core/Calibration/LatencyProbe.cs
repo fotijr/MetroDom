@@ -186,7 +186,7 @@ public sealed class LatencyProbe
         var perRound = _probes.Length / _options.Repeats;
         var pulse = _profile.PulseFor(note);
         var duty = _profile.Safety is { } safety && pulse > TimeSpan.Zero ? pulse * 100 / safety.MaxDutyPercent : TimeSpan.Zero;
-        var sameNote = new[] { _profile.MinInterval, duty }.Max();
+        var sameNote = new[] { _profile.IntervalFor(note), duty }.Max();
         if (sameNote > spacing * perRound)
         {
             spacing = sameNote / perRound + TimeSpan.FromMilliseconds(1);

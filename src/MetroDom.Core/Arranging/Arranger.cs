@@ -226,7 +226,8 @@ public static class Arranger
         var lastStart = new Dictionary<int, TimeSpan>();
         foreach (var note in placed.OrderBy(n => n.Start).ThenBy(n => n.Number))
         {
-            var minGap = profile.MinInterval > TimeSpan.Zero ? profile.MinInterval : TimeSpan.FromTicks(1);
+            var interval = profile.IntervalFor(note.Number);
+            var minGap = interval > TimeSpan.Zero ? interval : TimeSpan.FromTicks(1);
             if (lastStart.TryGetValue(note.Number, out var last) && note.Start - last < minGap)
             {
                 thinned++; // Too fast to repeat, or the same note twice at once after folding.

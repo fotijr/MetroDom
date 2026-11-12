@@ -112,6 +112,22 @@ public class ArrangerTests
     }
 
     [Fact]
+    public void OnlyTheSlowNote_IsThinned_WhenNotesHaveTheirOwnIntervals()
+    {
+        // 50 ms repeats of both 60 and 64; only 64's actuator is too slow for them.
+        var song = Song(("Lead", 0, [(0, 60), (0.1, 60), (0, 64), (0.1, 64)]));
+        var xylo = new BandMember(new InstrumentProfile("xylo", Ms(10))
+        {
+            MinInterval = Ms(60),
+            NoteInterval = new Dictionary<int, TimeSpan> { [60] = Ms(40), [64] = Ms(60) },
+        }, 0);
+
+        var a = Assert.Single(Arranger.Arrange(song, [xylo]).Assignments);
+
+        Assert.Equal((3, 1), (a.Played, a.Thinned));
+    }
+
+    [Fact]
     public void FoldingTwoNotesOntoOne_KeepsOnlyOne()
     {
         var song = Song(("Lead", 0, [(0, 60), (0, 72)]));

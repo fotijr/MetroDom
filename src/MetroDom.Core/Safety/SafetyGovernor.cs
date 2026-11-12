@@ -278,8 +278,9 @@ public sealed class SafetyGovernor : IMidiOutput
         {
             var now = _clock.Now;
             var pulse = Profile.PulseFor(note);
+            var interval = Profile.IntervalFor(note); // per note, as the brain enforces it
             var struck = _actuators.TryGetValue(note, out var actuator);
-            if (struck && (now < actuator.OnUntil || (Profile.MinInterval > TimeSpan.Zero && now - actuator.LastStrike < Profile.MinInterval)))
+            if (struck && (now < actuator.OnUntil || (interval > TimeSpan.Zero && now - actuator.LastStrike < interval)))
             {
                 reason = BlockReason.TooSoon;
                 return null;

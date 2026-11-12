@@ -43,8 +43,9 @@ Fields:
   `maxOnMs` per strike. No `safety` means no duty limit (software instruments).
 
 - `latencyMs` (optional, top level): latency for notes without their own. Default: the slowest note's.
-- `minIntervalMs` (optional, top level or per note): the Conductor uses one interval per
-  instrument today, the largest given, so no note is refused.
+- `minIntervalMs` (optional, top level or per note): the fastest repeat of a note. Each note
+  keeps its own, as the firmware enforces it (a snare can roll faster than the kick next to it).
+  The top-level value covers notes without their own; default: the slowest note's.
 - No `notes` array means the instrument plays any note (software instruments).
 - `midi.channel` (1-16) is where the [auto band](auto-band.md) puts the instrument when it isn't
   assigned, and the channel `-i NAME@profile.json` plays on.

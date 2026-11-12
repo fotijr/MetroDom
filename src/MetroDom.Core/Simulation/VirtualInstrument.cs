@@ -106,10 +106,10 @@ public sealed class VirtualInstrument : IMidiOutput
                 Dropped++;
                 reason = "no actuator for this note";
             }
-            else if (_lastStrike.TryGetValue(note, out var last) && now - last < Profile.MinInterval)
+            else if (_lastStrike.TryGetValue(note, out var last) && now - last < Profile.IntervalFor(note))
             {
                 Refused++;
-                reason = $"repeat faster than {Profile.MinInterval.TotalMilliseconds:0} ms";
+                reason = $"repeat faster than {Profile.IntervalFor(note).TotalMilliseconds:0} ms";
             }
             else
             {

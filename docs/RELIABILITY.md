@@ -42,8 +42,8 @@ but is polled (1 ms full-speed frames).
      back), `--max-velocity N` (louder notes turned down, never dropped), `--quiet 23:00-07:00[@VEL]`
      (local time, may cross midnight; no new notes, or capped at VEL).
    - Rejects notes outside an instrument's declared range or minimum inter-note interval. Built:
-     notes and min interval from the profile the instrument sends (or `-o PORT.../NOTES`), and no
-     repeat while the actuator is still in its pulse.
+     notes and each note's own min interval from the profile the instrument sends (or
+     `-o PORT.../NOTES`), and no repeat while the actuator is still in its pulse.
    - Holds back what the firmware would refuse for heat or power, from the profile's `safety`
      and `polyphony`: the same per-actuator duty bucket as the brain, and at most `polyphony`
      actuators inside their pulse at once. A note without `pulseMs` is assumed to cost `maxOnMs`.

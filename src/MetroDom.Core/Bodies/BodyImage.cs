@@ -54,6 +54,7 @@ public sealed record BodyDefinition(string Id, string Name, BodyDriver Driver, i
         NoteLatency = Notes.Where(n => n.LatencyMs > 0).ToDictionary(n => n.Note, n => TimeSpan.FromMilliseconds(n.LatencyMs)),
         NotePulse = Notes.ToDictionary(n => n.Note, n => TimeSpan.FromMilliseconds(n.PulseMs)),
         MinInterval = TimeSpan.FromMilliseconds(Notes.Max(n => n.MinIntervalMs)),
+        NoteInterval = Notes.ToDictionary(n => n.Note, n => TimeSpan.FromMilliseconds(n.MinIntervalMs)),
         Channel = Channel,
         Polyphony = Polyphony,
         Safety = new ActuatorSafety(TimeSpan.FromMilliseconds(MaxOnMs), MaxDutyPercent, TimeSpan.FromMilliseconds(DutyWindowMs)),

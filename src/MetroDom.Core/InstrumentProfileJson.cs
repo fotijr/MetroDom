@@ -72,7 +72,7 @@ public static class InstrumentProfileJson
 
         var latencies = new Dictionary<int, TimeSpan>();
         var pulses = new Dictionary<int, TimeSpan>();
-        var minInterval = Milliseconds(obj["minIntervalMs"]) ?? TimeSpan.Zero;
+        var intervals = new Dictionary<int, TimeSpan>();
         HashSet<int>? notes = null;
         if (obj["notes"] is JsonArray array)
         {
@@ -108,17 +108,20 @@ public static class InstrumentProfileJson
                     pulses[note.Value] = pulse;
                 }
 
-                // One interval for the whole instrument: the slowest note's, so nothing is refused.
-                if (Milliseconds(item["minIntervalMs"]) is { } interval && interval > minInterval)
+                if (Milliseconds(item["minIntervalMs"]) is { } interval)
                 {
-                    minInterval = interval;
+                    intervals[note.Value] = interval;
                 }
             }
         }
 
         // Notes without their own latency fall back to the top-level one, else the slowest note.
         var defaultLatency = Milliseconds(obj["latencyMs"]) ?? (latencies.Count > 0 ? latencies.Values.Max() : TimeSpan.Zero);
-        if (defaultLatency < TimeSpan.Zero || latencies.Values.Any(l => l < TimeSpan.Zero) || minInterval < TimeSpan.Zero)
+        // Notes without their own interval get the top-level one, else the slowest note's, so a
+        // guess never lets through a repeat the firmware would refuse.
+        var minInterval = Milliseconds(obj["minIntervalMs"]) ?? (intervals.Count > 0 ? intervals.Values.Max() : TimeSpan.Zero);
+        if (defaultLatency < TimeSpan.Zero || latencies.Values.Any(l => l < TimeSpan.Zero) || minInterval < TimeSpan.Zero
+            || intervals.Values.Any(i => i < TimeSpan.Zero))
         {
             error = "latencies and intervals can't be negative.";
             return false;
@@ -180,6 +183,7 @@ public static class InstrumentProfileJson
             Notes = notes,
             NoteLatency = latencies,
             MinInterval = minInterval,
+            NoteInterval = intervals,
         };
         error = null;
         return true;
@@ -223,6 +227,11 @@ public static class InstrumentProfileJson
                 if (profile.NotePulse.TryGetValue(note, out var pulse))
                 {
                     entry["pulseMs"] = pulse.TotalMilliseconds;
+                }
+
+                if (profile.NoteInterval.TryGetValue(note, out var interval))
+                {
+                    entry["minIntervalMs"] = interval.TotalMilliseconds;
                 }
 
                 notes.Add(entry);

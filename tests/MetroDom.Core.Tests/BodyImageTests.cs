@@ -123,6 +123,7 @@ public class BodyImageTests
         Assert.Equal(2, back.Polyphony);
         Assert.Equal(TimeSpan.FromMilliseconds(30), back.PulseFor(74));
         Assert.Equal(TimeSpan.FromMilliseconds(60), back.MinInterval);
+        Assert.Equal(TimeSpan.FromMilliseconds(60), back.IntervalFor(76));
         Assert.Equal(new ActuatorSafety(TimeSpan.FromMilliseconds(45), 30, TimeSpan.FromSeconds(1)), back.Safety);
     }
 

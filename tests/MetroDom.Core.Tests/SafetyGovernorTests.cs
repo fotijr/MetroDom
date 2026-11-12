@@ -65,6 +65,30 @@ public class SafetyGovernorTests
     }
 
     [Fact]
+    public void EachNote_HasItsOwnInterval_AsTheBrainEnforcesIt()
+    {
+        // A snare that rolls at 60 ms next to a kick that needs 150 ms: the kick's limit mustn't slow the snare.
+        var governor = Governor(new InstrumentProfile("drums", TimeSpan.Zero)
+        {
+            MinInterval = TimeSpan.FromMilliseconds(150),
+            NoteInterval = new Dictionary<int, TimeSpan> { [38] = TimeSpan.FromMilliseconds(60), [36] = TimeSpan.FromMilliseconds(150) },
+        });
+
+        governor.Send(On(38));
+        governor.Send(On(36));
+        _clock.Advance(TimeSpan.FromMilliseconds(70));
+        governor.Send(On(38)); // the snare's 60 ms has passed
+        governor.Send(On(36)); // the kick's 150 ms hasn't
+        governor.Send(On(42)); // no interval of its own: the instrument's 150 ms, but it's never struck
+        _clock.Advance(TimeSpan.FromMilliseconds(80));
+        governor.Send(On(36)); // 150 ms after the kick that played
+        governor.Send(On(42)); // only 80 ms after the hi-hat
+
+        Assert.Equal([38, 36, 38, 42, 36], SentNotes());
+        Assert.Equal(2, governor.BlockedFor(BlockReason.TooSoon));
+    }
+
+    [Fact]
     public void HeldBackNote_DoesNotRestartTheInterval()
     {
         var governor = Governor(new InstrumentProfile("xylo", TimeSpan.Zero) { MinInterval = TimeSpan.FromMilliseconds(60) });

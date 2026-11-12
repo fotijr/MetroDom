@@ -32,8 +32,14 @@ public sealed record InstrumentProfile(string Name, TimeSpan Latency)
     /// <summary>The channel (0-15) the instrument listens on by default, from <c>midi.channel</c>. <c>null</c> means it didn't say.</summary>
     public int? Channel { get; init; }
 
-    /// <summary>Fastest repeat of the same note. Faster repeats are refused by the firmware.</summary>
+    /// <summary>
+    /// Fastest repeat of the same note, for notes without their own entry in <see cref="NoteInterval"/>.
+    /// Faster repeats are refused by the firmware.
+    /// </summary>
     public TimeSpan MinInterval { get; init; }
+
+    /// <summary>Fastest repeat per note (a note's own <c>minIntervalMs</c>), overriding <see cref="MinInterval"/>.</summary>
+    public IReadOnlyDictionary<int, TimeSpan> NoteInterval { get; init; } = new Dictionary<int, TimeSpan>();
 
     /// <summary>
     /// Most actuators on at once (<c>polyphony</c>), a power-supply or actuator limit the firmware
@@ -63,6 +69,9 @@ public sealed record InstrumentProfile(string Name, TimeSpan Latency)
     /// </summary>
     public TimeSpan PulseFor(int note) =>
         NotePulse.TryGetValue(note, out var pulse) ? pulse : Safety?.MaxOnTime ?? TimeSpan.Zero;
+
+    /// <summary>How soon <paramref name="note"/> may strike again: its own interval, else <see cref="MinInterval"/>.</summary>
+    public TimeSpan IntervalFor(int note) => NoteInterval.TryGetValue(note, out var interval) ? interval : MinInterval;
 
     /// <summary>Latency for <paramref name="note"/>.</summary>
     public TimeSpan LatencyFor(int note) => NoteLatency.TryGetValue(note, out var latency) ? latency : Latency;

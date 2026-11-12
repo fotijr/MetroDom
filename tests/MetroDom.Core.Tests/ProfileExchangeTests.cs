@@ -34,7 +34,9 @@ public class ProfileExchangeTests
         Assert.Equal([60, 64, 67], profile.Notes!.Order());
         Assert.Equal(TimeSpan.FromMilliseconds(9), profile.LatencyFor(60));
         Assert.Equal(TimeSpan.FromMilliseconds(10), profile.MaxLatency);
-        Assert.Equal(TimeSpan.FromMilliseconds(80), profile.MinInterval); // slowest note wins
+        Assert.Equal(TimeSpan.FromMilliseconds(80), profile.MinInterval); // for notes without their own: the slowest
+        Assert.Equal(TimeSpan.FromMilliseconds(60), profile.IntervalFor(60)); // each note keeps its own
+        Assert.Equal(TimeSpan.FromMilliseconds(80), profile.IntervalFor(67));
         Assert.False(profile.CanPlay(62));
         Assert.Equal(0, profile.Channel); // "midi": { "channel": 1 }
         Assert.Equal(3, profile.Polyphony);
@@ -110,6 +112,7 @@ public class ProfileExchangeTests
             Notes = new HashSet<int> { 36, 38 },
             NoteLatency = new Dictionary<int, TimeSpan> { [36] = TimeSpan.FromMilliseconds(40) },
             MinInterval = TimeSpan.FromMilliseconds(50),
+            NoteInterval = new Dictionary<int, TimeSpan> { [38] = TimeSpan.FromMilliseconds(30) },
         };
         var any = new InstrumentProfile("xylo", TimeSpan.FromMilliseconds(10.5));
 
@@ -123,6 +126,7 @@ public class ProfileExchangeTests
             Assert.Equal(original.MinInterval, parsed.MinInterval);
             Assert.Equal(original.Notes?.Order(), parsed.Notes?.Order());
             Assert.Equal(original.NoteLatency, parsed.NoteLatency);
+            Assert.Equal(original.NoteInterval, parsed.NoteInterval);
         }
     }
 

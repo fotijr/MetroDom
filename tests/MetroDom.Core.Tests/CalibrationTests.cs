@@ -128,6 +128,8 @@ public class CalibrationTests
         Assert.True(new LatencyProbe(slow, [60], options, TimeSpan.Zero).Spacing(60) >= Ms(1000));
         Assert.True(new LatencyProbe(hot, [60], options, TimeSpan.Zero).Spacing(60) >= Ms(800)); // 40 ms at 5 %
         Assert.Equal(Ms(650), new LatencyProbe(Xylo(), [60, 64, 67], options, TimeSpan.Zero).Spacing(60));
+        var mixed = Xylo(10, 60) with { NoteInterval = new Dictionary<int, TimeSpan> { [60] = Ms(1000) } };
+        Assert.True(new LatencyProbe(mixed, [60], options, TimeSpan.Zero).Spacing(60) >= Ms(1000)); // the note's own interval
 
         var clock = new VirtualClock();
         var instrument = new VirtualInstrument(slow, clock);
