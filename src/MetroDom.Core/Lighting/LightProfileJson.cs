@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -90,6 +91,11 @@ public static class LightProfileJson
             return false;
         }
 
+        if (!TryReactive(root["reactive"], ids, out var reactive, out error))
+        {
+            return false;
+        }
+
         var channel = root["midi"]?["channel"]?.GetValue<int>() ?? LightProfile.DefaultChannel + 1;
         var masterCc = root["controls"]?["masterCc"]?.GetValue<int>() ?? LightProfile.DefaultMasterCc;
         var latency = root["latencyMs"]?.GetValue<double>() ?? 0;
@@ -116,6 +122,7 @@ public static class LightProfileJson
             Scenes = scenes,
             SafeLook = safe,
             Output = new LightOutput(destination, priority),
+            Reactive = reactive,
         };
         return true;
     }
@@ -175,6 +182,65 @@ public static class LightProfileJson
         }
 
         error = null;
+        return true;
+    }
+
+    private static bool TryReactive(JsonNode? node, HashSet<string> ids, out ReactiveSettings reactive, out string? error)
+    {
+        reactive = new ReactiveSettings();
+        error = null;
+        if (node is null)
+        {
+            return true;
+        }
+
+        if (node is not JsonObject obj)
+        {
+            error = "\"reactive\" must be an object.";
+            return false;
+        }
+
+        var baseLevel = obj["baseLevel"]?.GetValue<int>() ?? reactive.BaseLevel;
+        var decay = obj["decayMs"]?.GetValue<double>() ?? reactive.Decay.TotalMilliseconds;
+        if (baseLevel is < 0 or > 255 || decay is < 0 or > 10_000)
+        {
+            error = "\"reactive\": baseLevel must be 0-255 and decayMs 0-10000.";
+            return false;
+        }
+
+        var colours = reactive.Colours.ToArray();
+        foreach (var (key, value) in obj["colours"] as JsonObject ?? [])
+        {
+            if (!int.TryParse(key, NumberStyles.None, CultureInfo.InvariantCulture, out var channel) || channel is < 1 or > 16
+                || !Rgb.TryParse(value?.GetValue<string>(), out var colour))
+            {
+                error = $"\"reactive.colours\": '{key}' needs a channel 1-16 and a colour like \"#ffb000\".";
+                return false;
+            }
+
+            colours[channel - 1] = colour;
+        }
+
+        var follow = new Dictionary<string, IReadOnlySet<int>>(StringComparer.Ordinal);
+        foreach (var (fixture, value) in obj["follow"] as JsonObject ?? [])
+        {
+            var channels = (value as JsonArray ?? []).Select(c => c!.GetValue<int>()).ToList();
+            if (!ids.Contains(fixture) || channels.Count == 0 || channels.Any(c => c is < 1 or > 16))
+            {
+                error = $"\"reactive.follow\": '{fixture}' must be a fixture with a list of channels 1-16.";
+                return false;
+            }
+
+            follow[fixture] = channels.Select(c => c - 1).ToHashSet();
+        }
+
+        reactive = new ReactiveSettings
+        {
+            BaseLevel = (byte)baseLevel,
+            Decay = TimeSpan.FromMilliseconds(decay),
+            Colours = colours,
+            Follow = follow,
+        };
         return true;
     }
 

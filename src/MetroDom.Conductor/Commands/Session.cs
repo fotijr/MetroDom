@@ -166,6 +166,12 @@ internal sealed class Session : IDisposable
         MidiDevices.LogSink = log;
     }
 
+    /// <summary>Raised right after a panic silenced the band, on the panicking thread (lights go to their safe look).</summary>
+    public event Action? Panicked;
+
+    /// <summary>Tells listeners the band was just panicked. Call after the actuators are silent, never before.</summary>
+    public void NotifyPanic() => Panicked?.Invoke();
+
     public void RequestStop() => _stop.Set();
 
     public void WaitForStop() => _stop.Wait();

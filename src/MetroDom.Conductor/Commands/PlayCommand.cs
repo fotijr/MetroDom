@@ -4,8 +4,10 @@ using Melanchall.DryWetMidi.Core;
 using Melanchall.DryWetMidi.Interaction;
 using MetroDom.Conductor.Api;
 using MetroDom.Conductor.Cli;
+using MetroDom.Conductor.Lighting;
 using MetroDom.Conductor.Midi;
 using MetroDom.Core.Arranging;
+using MetroDom.Core.Lighting;
 using MetroDom.Core.Policy;
 using MetroDom.Core.Timing;
 using Spectre.Console;
@@ -97,6 +99,13 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
 
         public ApiEndpoint? ApiAt => Api is not null && MetroDom.Conductor.Api.ApiEndpoint.TryParse(Api, out var endpoint, out _) ? endpoint : null;
 
+        [CommandOption("--lights <RIG>")]
+        [Description("Light profile (metrodom.light-profile/0) to drive over sACN: reactive lights, each instrument's fixtures pulse in its colour with its notes, timed to land with the sound. Panic and the end of the set show the rig's safe look. Check a rig first with [bold]metrodom lights[/].")]
+        public string? Lights { get; init; }
+
+        public LightProfile? LightProfile =>
+            Lights is not null && File.Exists(Lights) && LightProfileJson.TryParse(File.ReadAllText(Lights), out var rig, out _) ? rig : null;
+
         [CommandOption("-t|--tempo <BPM>")]
         [Description("Start at this tempo instead of the file's. Tempo changes in the file scale with it.")]
         public double? Tempo { get; init; }
@@ -111,6 +120,19 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
             if (Api is not null && !MetroDom.Conductor.Api.ApiEndpoint.TryParse(Api, out _, out var apiError))
             {
                 return ValidationResult.Error($"--api: {apiError}");
+            }
+
+            if (Lights is not null)
+            {
+                if (!File.Exists(Lights))
+                {
+                    return ValidationResult.Error($"--lights: file not found: {Lights}");
+                }
+
+                if (!LightProfileJson.TryParse(File.ReadAllText(Lights), out _, out var lightsError))
+                {
+                    return ValidationResult.Error($"--lights: {lightsError}");
+                }
             }
 
             if (Paths.FirstOrDefault(p => !File.Exists(p)) is { } missing)
@@ -235,6 +257,12 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
             var inputs = TempoFrom(tapInput, clockInput, followInput) + (controlInput is null ? "" : $" · controls from {controlInput.Name}");
             live.UseSetlist([.. songs.Select((_, i) => SongTitle(songs, i))]);
             using var api = StartApi(settings, live, session);
+            using var lights = StartLights(settings, session, live);
+            if (lights is not null)
+            {
+                inputs += $" · lights {lights.Profile.Name}";
+            }
+
             session.WatchForDevices(MidiDevices.Backend.Value);
             if (api is not null)
             {
@@ -267,7 +295,7 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
 
                 // Hot-plugged devices join here, between songs, so the scheduler plans for their latency.
                 session.AdmitPending();
-                var end = PlaySong(session, live, settings, songs, i, inputs);
+                var end = PlaySong(session, live, settings, songs, i, inputs, lights);
                 switch (end)
                 {
                     case null:
@@ -309,6 +337,27 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
         return 0;
     }
 
+    /// <summary>
+    /// Starts the rig in reactive mode when <c>--lights</c> is given. Fixtures the profile doesn't
+    /// assign are shared out across the band as it is at the start of the set.
+    /// </summary>
+    private static LightShow? StartLights(Settings settings, Session session, LiveControl live)
+    {
+        if (settings.LightProfile is not { } rig)
+        {
+            return null;
+        }
+
+        var output = new SacnOutput(new UdpSacnSocket(), rig.Output, $"MetroDom {rig.Name}", log: session.Messages.Add, start: false);
+        var band = session.Outputs.Select(o => (IReadOnlyList<int>)[.. o.Channels]).ToList();
+        var show = new LightShow(rig, output, live.Clock, band);
+        session.Panicked += show.Safe;
+        var where = string.Join(", ", rig.Universes.Select(u => $"universe {u} → {output.DestinationFor(u)}"));
+        var follows = string.Join(", ", show.Reactive.Following.Select(f => $"{f.Key} {(f.Value is null ? "all" : "ch " + ChannelList.Format(f.Value))}"));
+        Ui.Note($"Lights: {rig.Name} on {where} (sACN). Reactive: {follows}.");
+        return show;
+    }
+
     /// <summary>Holds until start (pedal or Enter), next (skip) or Ctrl+C (null).</summary>
     private static LiveSignal? WaitForStart(Session session, LiveControl live, string[] songs, int index, PolicyProfile policy, IMidiInputPort? controls, IMidiInputPort? follow)
     {
@@ -348,7 +397,7 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
     }
 
     /// <summary>Plays one song of the set until it ends. Returns why, or null to stop the set.</summary>
-    private static LiveSignal? PlaySong(Session session, LiveControl live, Settings settings, string[] songs, int index, string inputs)
+    private static LiveSignal? PlaySong(Session session, LiveControl live, Settings settings, string[] songs, int index, string inputs, LightShow? lights)
     {
         var path = songs[index];
         var roles = SongRoles.Load(path);
@@ -363,6 +412,13 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
         var clock = live.Clock;
         var scheduler = new LatencyScheduler(session.Orchestra, clock, session.Profiles);
         scheduler.Sent += s => session.Activity.Record(s.Event);
+        if (lights is not null)
+        {
+            var profiles = session.Profiles; // fixed for the song, like the scheduler's
+            scheduler.Sent += s => lights.Played(s, profiles.GetValueOrDefault(s.Output));
+            lights.Resume();
+        }
+
         var timeline = SongTimeline.From(midiFile);
         if (settings.Arrange)
         {

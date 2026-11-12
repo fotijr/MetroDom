@@ -318,6 +318,7 @@ internal sealed class LiveControl(Session session, IClock clock) : IDisposable
                 // Safety first: silence now, on this thread, before anything else.
                 active?.Scheduler.Stop();
                 session.Orchestra.Panic();
+                session.NotifyPanic();
                 session.Messages.Add("PANIC: everything stopped.");
                 End(LiveSignal.Panic);
                 break;

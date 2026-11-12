@@ -36,11 +36,11 @@ phase is fun on its own and doesn't wait for the next one.
 ### Phase V2: Conductor drives lights
 - [x] Light profile format, written up next to the [instrument profile](../../references/instrument-profile.md) (shape sketched in ADR 0011 §2): [light profile](../../references/light-profile.md)
 - [x] sACN output adapter in the Conductor (UDP, unit-tested with a fake socket): `SacnOutput`, `metrodom lights`
-- [ ] Reactive mode: colour per instrument, pulse on notes, intensity from velocity
+- [x] Reactive mode: colour per instrument, pulse on notes, intensity from velocity: `play --lights` ([reactive lights](../../references/light-profile.md#reactive-lights-play---lights))
 - [ ] Channel 16 lights track and pad scenes override reactive mode
-- [ ] Scheduler aligns light changes with measured instrument latency
+- [x] Scheduler aligns light changes with measured instrument latency (light lands at sound time minus rig latency; a rig slower than its instrument is late by the difference, TD-28)
 - [ ] Strobe cap (≤ 3 flashes/s), brightness cap, quiet hours from the policy profile, unit-tested
-- [ ] Panic → safe look (steady, no flashing), tested
+- [x] Panic → safe look (steady, no flashing), tested
 
 ### Phase V3: Stage fixtures
 - [ ] Pick 2–4 budget DMX LED pars (RGB or RGBW, 3- or 5-pin XLR) and record them in equipment
@@ -75,6 +75,18 @@ phase is fun on its own and doesn't wait for the next one.
   timing: send a change on the next 25 ms tick plus two repeats, keep-alive each second (inside
   the receivers' 2.5 s timeout), three terminated packets on stop. `metrodom lights` exists so a
   rig can be checked and lit without a song. Measured against a multicast listener on macOS.
+- 2026-11-11: Reactive lights in `play --lights`, with latency alignment and panic → safe look in
+  the same change: lights in a set without the panic path would break "safety beats music".
+  Fixtures not assigned in the profile are shared out across the band's outputs in turn, so a
+  rig with one par per robot needs no config. Colour is per MIDI channel (a fixed 16-hue palette,
+  drums amber), the simplest stable "which robot is this". The flash cap is enforced in the
+  engine, not hoped for from settings: a fixture starts at most 3 pulses a second and ignores
+  notes in between (rather than holding or blending, which would still change luminance), over a
+  glow that is never dark. Timing hooks the scheduler's `Sent` (send time + that instrument's
+  per-note latency − rig latency) instead of making lights a scheduler output: one line in
+  `play` and right whenever the rig is no slower than the instrument; the general case is TD-28.
+  Panic reaches lights through a `Session.Panicked` event raised after All Notes Off, so lights
+  can never delay silencing the band.
 
 ## Open questions
 - Budget for V3 fixtures.

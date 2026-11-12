@@ -56,6 +56,9 @@ public sealed record LightProfile(string Name, IReadOnlyList<Fixture> Fixtures)
 
     public LightOutput Output { get; init; } = new();
 
+    /// <summary>How the rig follows the band when no cue says otherwise.</summary>
+    public ReactiveSettings Reactive { get; init; } = new();
+
     /// <summary>Every universe the rig uses, in order.</summary>
     public IReadOnlyList<int> Universes => [.. Fixtures.Select(f => f.Universe).Distinct().Order()];
 

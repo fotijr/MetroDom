@@ -75,6 +75,17 @@ public sealed class LiveControlTests : IDisposable
     }
 
     [Fact]
+    public void Panic_TellsListeners_AfterTheBandIsSilent()
+    {
+        var sentBefore = -1;
+        _session.Panicked += () => sentBefore = _port.Sent.Count;
+
+        _live.Control(ControlAction.Panic);
+
+        Assert.True(sentBefore > 0, "listeners (lights) must hear of a panic only after All Notes Off went out");
+    }
+
+    [Fact]
     public void Panic_StopsTheSongAndSilencesEveryOutput_FromAnyState()
     {
         var (_, _, scheduler) = Playing();

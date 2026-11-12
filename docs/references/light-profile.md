@@ -10,6 +10,7 @@ Status: **Draft**. The lighting counterpart of the [instrument profile](instrume
 metrodom lights rig.json                         # check it, print the patch and scenes
 metrodom lights rig.json --scene 36              # hold a scene until Ctrl+C
 metrodom lights rig.json --safe --to 192.168.1.40   # the safe look, unicast to one WLED
+metrodom play set.mid -o "MetroDom xylo=1-9,11-16" -o "MetroDom drums=10" --lights rig.json
 ```
 
 ## Format (`metrodom.light-profile/0`)
@@ -31,7 +32,8 @@ metrodom lights rig.json --safe --to 192.168.1.40   # the safe look, unicast to 
     { "note": 36, "name": "Blue wash", "set": { "*": { "dimmer": 255, "blue": 255 } } },
     { "note": 37, "name": "Warm",      "set": { "*": { "dimmer": 200, "red": 255, "green": 120 }, "strip": { "red": 80, "green": 40 } } }
   ],
-  "safeLook": { "*": { "dimmer": 140, "red": 160, "green": 140, "blue": 110 } }
+  "safeLook": { "*": { "dimmer": 140, "red": 160, "green": 140, "blue": 110 } },
+  "reactive": { "baseLevel": 40, "decayMs": 300, "colours": { "10": "#ffb000" }, "follow": { "right-par": [10] } }
 }
 ```
 
@@ -46,6 +48,10 @@ metrodom lights rig.json --safe --to 192.168.1.40   # the safe look, unicast to 
 | `fixtures[]` | `id`, `universe` (1-63999, default 1), `address` (1-512), `channels` in DMX order, `count` (pixels, default 1) | |
 | `scenes[]` | `note` (0-127, unique), `name`, `set` (a look) | none |
 | `safeLook` | A look for panic and stopping | warm, dim, steady |
+| `reactive.baseLevel` | Idle glow between notes, 0-255 | 40 |
+| `reactive.decayMs` | How long a pulse fades | 300 |
+| `reactive.colours` | Channel (1-16) → `#rrggbb` | a 16-hue palette, drums (10) amber |
+| `reactive.follow` | Fixture id → channels it pulses with | shared out across the band |
 
 - **Channel roles:** `dimmer`, `red`, `green`, `blue`, `white`, `amber`, `uv` are intensity (the
   master scales them). `strobe` is always sent as 0 (below). Any other name (`program`,
@@ -57,8 +63,38 @@ metrodom lights rig.json --safe --to 192.168.1.40   # the safe look, unicast to 
 - Checked when read: unique ids, scene notes and fixtures that exist, values 0-255, no fixture
   running past 512 or overlapping another in its universe.
 - Defaults follow ADR 0011: lights on channel 16, notes 36-51 for a 4×4 pad grid, CC 7 master.
-- Not used yet: `midi.channel`, `controls.masterCc` and `latencyMs` are parsed for the reactive
-  and live modes that come next (plan 0003 V2). `lights --master` sets the master by hand.
+- Not used yet: `controls.masterCc` and notes on `midi.channel` (live pad scenes and a lights
+  track come next, plan 0003 V2). `lights --master` sets the master by hand.
+
+## Reactive lights (`play --lights`)
+
+Every song gets a show with no authoring (ADR 0011 §3.1). Code:
+`src/MetroDom.Core/Lighting/ReactiveLights.cs`, `src/MetroDom.Conductor/Lighting/LightShow.cs`.
+
+- **Who follows whom:** fixtures in `reactive.follow` pulse with those channels. The others are
+  shared out across the band's outputs in turn, as the band is at the start of the set: with
+  `-o xylo=1-9,11-16 -o drums=10`, fixture 1 follows the xylophone, fixture 2 the drums,
+  fixture 3 the xylophone again. With no band (never in `play`), a fixture follows everything.
+  `play` prints the plan (`Reactive: left-par ch 1-9,11-15, right-par ch 10, …`).
+- **A pulse:** a Note On lifts the fixture from the glow to `glow + (255 − glow) × velocity/127`
+  in its channel's colour, fading back linearly over `decayMs`. A fixture with a `dimmer` gets
+  full colour with the level on the dimmer; one without (a strip) gets its colour scaled.
+  Idle fixtures glow in the colour of the first channel they follow. Channel 16 (the lights
+  channel) never pulses: it is for cues.
+- **On time:** the light changes when the note is heard (scheduler send time + that
+  instrument's latency for that note) minus the rig's `latencyMs`, so light and sound land
+  together (ADR 0004). Frames go out every 20 ms (50 per second).
+- **Flash cap:** a fixture starts at most 3 pulses a second; notes inside that window leave it
+  alone (they don't restart the pulse or change its colour). At 100 BPM eighth notes (300 ms)
+  that means every other note. The glow is never dark, so a pulse is never dark-to-full.
+- **Panic** (pedal, Esc, API): the safe look at once, steady, until the next song starts.
+  Muted channels and seats don't pulse (muted notes never reach the scheduler's `Sent`).
+- **End of set** (last song, Ctrl+C, SIGTERM): the safe look in full packets, then three
+  terminated packets (receivers ignore data in those).
+- Measured on macOS with two virtual instruments and the example rig: idle fixtures glowed blue
+  and amber, each pulsed with its own instrument (every other eighth note, never more than 2 a
+  second), and a panic through the Control API showed the safe look about 70 ms later and
+  nothing after it.
 
 ## Safety
 
