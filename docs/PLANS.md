@@ -29,3 +29,4 @@ Order and milestones across plans: [ROADMAP.md](ROADMAP.md).
 - [0001: Foundation reboot](exec-plans/active/0001-foundation-reboot.md)
 - [0002: Hardware bootstrap](exec-plans/active/0002-hardware-bootstrap.md)
 - [0003: Visuals](exec-plans/active/0003-visuals.md)
+- [0004: Software runs ahead](exec-plans/active/0004-software-runs-ahead.md)

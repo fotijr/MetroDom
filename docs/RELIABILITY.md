@@ -28,13 +28,19 @@ but is polled (1 ms full-speed frames).
      sketches have none of this (TD-03).
 2. **Conductor safety governor** (`SafetyGovernor`, one in front of every output in `play` and `route`)
    - Panic (CC 120/123 + MetroDom SysEx all-off) to every instrument, bypassing queues. Built:
-     CC 120/123. Not yet: MetroDom SysEx all-off.
+     instruments that answered as MetroDom get the one-message all-off `F0 7D 4D 44 03 F7` first,
+     then everyone gets CC 120/123 on all 16 channels. `metrodom panic` and the panic on replug
+     send CCs only (no identity to go on; the brain boots all-off anyway).
    - Rate limits, velocity caps and quiet hours from the active policy profile. Built as flags
      until policy profiles exist: `--max-rate N` (strikes per second per output, extra notes held
      back), `--max-velocity N` (louder notes turned down, never dropped), `--quiet 23:00-07:00[@VEL]`
      (local time, may cross midnight; no new notes, or capped at VEL).
    - Rejects notes outside an instrument's declared range or minimum inter-note interval. Built:
-     notes and min interval from the profile the instrument sends (or `-o PORT.../NOTES`).
+     notes and min interval from the profile the instrument sends (or `-o PORT.../NOTES`), and no
+     repeat while the actuator is still in its pulse.
+   - Holds back what the firmware would refuse for heat or power, from the profile's `safety`
+     and `polyphony`: the same per-actuator duty bucket as the brain, and at most `polyphony`
+     actuators inside their pulse at once. A note without `pulseMs` is assumed to cost `maxOnMs`.
    - Only new notes are ever held back or changed. Note Off, panic and every other message pass,
      so the governor can never leave an actuator on. Held-back counts show in the status panel
      and are printed when the run ends.

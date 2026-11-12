@@ -182,6 +182,120 @@ public class SafetyGovernorTests
         Assert.Equal(Orchestra.ChannelCount * 2, _out.Sent.OfType<ControlChangeEvent>().Count());
     }
 
+    private static InstrumentProfile Coil(int pulseMs = 30, int intervalMs = 30, int? polyphony = null, params int[] notes) =>
+        new("coil", TimeSpan.Zero)
+        {
+            Notes = notes.Length == 0 ? new HashSet<int> { 60 } : notes.ToHashSet(),
+            MinInterval = TimeSpan.FromMilliseconds(intervalMs),
+            NotePulse = (notes.Length == 0 ? [60] : notes).ToDictionary(n => n, _ => TimeSpan.FromMilliseconds(pulseMs)),
+            Polyphony = polyphony,
+            Safety = new ActuatorSafety(TimeSpan.FromMilliseconds(45), 30, ActuatorSafety.DefaultDutyWindow),
+        };
+
+    [Fact]
+    public void DutyCycle_HoldsBackWhatTheBrainWouldRefuse()
+    {
+        // The same run as the firmware's duty_RefusesWhenTheThermalBudgetIsSpent (brain_test.cpp):
+        // 30 ms pulses back to back against a 30% budget. 13 in a row, then about one in three.
+        var governor = Governor(Coil());
+        for (var i = 0; i < 20; i++)
+        {
+            governor.Send(On(60));
+            _clock.Advance(TimeSpan.FromMilliseconds(30));
+        }
+
+        Assert.Equal(15, governor.Passed);
+        Assert.Equal(5, governor.BlockedFor(BlockReason.DutyCycle));
+
+        _clock.Advance(TimeSpan.FromSeconds(1)); // a rest refills it
+        governor.Send(On(60));
+        Assert.Equal(16, governor.Passed);
+    }
+
+    [Fact]
+    public void DutyCycle_IsPerActuator()
+    {
+        var governor = Governor(Coil(notes: [60, 64]));
+        for (var i = 0; i < 20; i++)
+        {
+            governor.Send(On(60));
+            _clock.Advance(TimeSpan.FromMilliseconds(30));
+        }
+
+        governor.Send(On(64)); // a cold actuator plays while 60 is hot
+        Assert.Equal(64, (int)_out.Sent.OfType<NoteOnEvent>().Last().NoteNumber);
+    }
+
+    [Fact]
+    public void DutyCycle_WithoutAPulse_AssumesTheLongestTheFirmwareAllows()
+    {
+        // No pulseMs: each strike costs maxOnMs (45 ms of the 300 ms budget), draining 13.5 ms per
+        // 45 ms gap. 9 fit; a 30 ms pulse would fit 17.
+        var governor = Governor(Coil() with { NotePulse = new Dictionary<int, TimeSpan>(), MinInterval = TimeSpan.Zero });
+        for (var i = 0; i < 10; i++)
+        {
+            governor.Send(On(60));
+            _clock.Advance(TimeSpan.FromMilliseconds(45));
+        }
+
+        Assert.Equal(9, governor.Passed);
+        Assert.Equal(1, governor.BlockedFor(BlockReason.DutyCycle));
+    }
+
+    [Fact]
+    public void StillStriking_IsTooSoon_EvenWithoutAMinInterval()
+    {
+        var governor = Governor(Coil(pulseMs: 30, intervalMs: 0));
+        governor.Send(On(60));
+        _clock.Advance(TimeSpan.FromMilliseconds(10));
+        governor.Send(On(60));
+
+        Assert.Equal(1, governor.BlockedFor(BlockReason.TooSoon));
+    }
+
+    [Fact]
+    public void Polyphony_CapsActuatorsOnAtOnce_AndFreesThemWhenThePulseEnds()
+    {
+        var governor = Governor(Coil(polyphony: 2, notes: [60, 64, 67]));
+        var blocked = new List<BlockedNote>();
+        governor.Blocked += blocked.Add;
+
+        governor.Send(On(60));
+        governor.Send(On(64));
+        governor.Send(On(67)); // a third coil while two are on
+        _clock.Advance(TimeSpan.FromMilliseconds(30));
+        governor.Send(On(67)); // both pulses have ended
+
+        Assert.Equal([60, 64, 67], SentNotes());
+        Assert.Equal(BlockReason.Polyphony, Assert.Single(blocked).Reason);
+    }
+
+    [Fact]
+    public void ProfileWithoutSafety_HasNoDutyOrPolyphonyLimit()
+    {
+        var governor = Governor(new InstrumentProfile("synth", TimeSpan.Zero));
+        for (var i = 0; i < 100; i++)
+        {
+            governor.Send(On(60 + (i % 12)));
+        }
+
+        Assert.Equal(100, governor.Passed);
+    }
+
+    [Fact]
+    public void Panic_ToAMetroDomInstrument_StartsWithTheSysExAllOff()
+    {
+        var metroDom = Governor(Coil() with { SpeaksMetroDom = true });
+        var other = new SafetyGovernor(new FakeOutput("synth"), Coil(), SafetyLimits.None, _clock);
+
+        Orchestra.SendPanic(metroDom);
+        Orchestra.SendPanic(other);
+
+        Assert.True(Discovery.ProfileExchange.IsAllOff(_out.Sent[0]), "one message silences it before the CC burst");
+        Assert.Equal(1 + (Orchestra.ChannelCount * 2), _out.Sent.Count);
+        Assert.All(((FakeOutput)other.Inner).Sent, e => Assert.IsType<ControlChangeEvent>(e)); // 7D means something else to others
+    }
+
     [Fact]
     public void Summary_ListsReasonsAndCaps()
     {

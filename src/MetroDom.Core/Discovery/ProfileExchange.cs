@@ -4,8 +4,9 @@ using Melanchall.DryWetMidi.Core;
 namespace MetroDom.Core.Discovery;
 
 /// <summary>
-/// MetroDom SysEx for discovery step 3 (ADR 0007): ask a MetroDom instrument for its
-/// <a href="../../../docs/references/instrument-profile.md">profile</a> and read the answer.
+/// MetroDom SysEx: discovery step 3 (ADR 0007), asking a MetroDom instrument for its
+/// <a href="../../../docs/references/instrument-profile.md">profile</a> and reading the answer,
+/// and the all-off used by panic.
 /// See docs/references/midi-profile-exchange.md for the bytes. Draft until the owner reviews it;
 /// MIDI-CI Property Exchange may replace it later.
 /// </summary>
@@ -27,10 +28,21 @@ public static class ProfileExchange
     private const byte FamilyMsb = (DeviceIdentity.MetroDomFamily >> 7) & 0x7F;
     private const byte ProfileRequestId = 0x01;
     private const byte ProfileReplyId = 0x02;
+    private const byte AllOffId = 0x03;
     private const byte EndOfExclusive = 0xF7;
 
     /// <summary><c>F0 7D 4D 44 01 F7</c>: "send me your profile".</summary>
     public static NormalSysExEvent Request() => new([NonCommercial, FamilyLsb, FamilyMsb, ProfileRequestId, EndOfExclusive]);
+
+    /// <summary>
+    /// <c>F0 7D 4D 44 03 F7</c>: every actuator off now, in one message (panic). Sent before the
+    /// CC 120/123 burst, only to instruments that answered as MetroDom.
+    /// </summary>
+    public static NormalSysExEvent AllOff() => new([NonCommercial, FamilyLsb, FamilyMsb, AllOffId, EndOfExclusive]);
+
+    /// <summary>Whether <paramref name="midiEvent"/> is the MetroDom all-off.</summary>
+    public static bool IsAllOff(MidiEvent midiEvent) =>
+        midiEvent is SysExEvent { Data: [NonCommercial, FamilyLsb, FamilyMsb, AllOffId, EndOfExclusive] };
 
     /// <summary>Whether <paramref name="midiEvent"/> is a MetroDom profile request.</summary>
     public static bool IsRequest(MidiEvent midiEvent) =>

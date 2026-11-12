@@ -5,7 +5,8 @@
 // only moves bytes and pins: USB-MIDI in, SysEx out, GPIO, the hardware watchdog.
 //
 // Safety (docs/RELIABILITY.md, firmware layer), enforced here and never trusting the host:
-// - All off at begin(), on panic (CC 120/123 on any channel, System Reset) and when USB goes away.
+// - All off at begin(), on panic (CC 120/123 on any channel, System Reset, MetroDom SysEx all-off)
+//   and when USB goes away.
 // - A strike is a fixed pulse, never longer than maxOnMs, however long the Note On lasts.
 // - Per actuator: a minimum interval between strikes and a duty-cycle (thermal) budget.
 //   Notes over either limit are refused, never queued.

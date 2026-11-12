@@ -31,6 +31,9 @@ public class BrainFirmwareTests
         Assert.Equal([60], profile.Notes!.Order());
         Assert.Equal(TimeSpan.FromMilliseconds(60), profile.MinInterval);
         Assert.Null(profile.Channel); // omni: the auto band picks a free channel
+        Assert.Equal(TimeSpan.FromMilliseconds(30), profile.PulseFor(60));
+        Assert.Equal(1, profile.Polyphony);
+        Assert.Equal(new ActuatorSafety(TimeSpan.FromMilliseconds(45), 30, TimeSpan.FromSeconds(1)), profile.Safety);
     }
 
     [Fact]

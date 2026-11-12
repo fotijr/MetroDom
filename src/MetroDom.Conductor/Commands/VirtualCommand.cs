@@ -123,6 +123,14 @@ internal sealed class VirtualCommand : Command<VirtualCommand.Settings>
                 return;
             }
 
+            if (ProfileExchange.IsAllOff(e))
+            {
+                instrument.Send(e);
+                lastPanic = clock.Now; // the CC burst that follows is the same panic
+                Print(console, clock.Now, spec.Name, "[red]panic: all off[/] [grey](MetroDom SysEx)[/]");
+                return;
+            }
+
             if (e is not ChannelEvent channelEvent || !channels.Contains(channelEvent.Channel))
             {
                 return;

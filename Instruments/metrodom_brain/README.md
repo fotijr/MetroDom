@@ -16,7 +16,7 @@ in the [tech-debt tracker](../../docs/exec-plans/tech-debt-tracker.md).
 | --- | --- |
 | Note On (velocity > 0), a note in the table, any channel | A fixed pulse on that output: `pulseMs`, never more than `maxOnMs` |
 | Note Off, Note On velocity 0 | Nothing (the pulse is already fixed) |
-| CC 120 / CC 123 on **any** channel, System Reset | Every output off now (panic) |
+| CC 120 / CC 123 on **any** channel, System Reset, MetroDom All Off `F0 7D 4D 44 03 F7` | Every output off now (panic) |
 | Identity Request `F0 7E 7F 06 01 F7` | `F0 7E 7F 06 02 7D 4D 44 01 00 <version> F7`: MetroDom, model 1 = brain ([midi-identity](../../docs/references/midi-identity.md)) |
 | Profile Request `F0 7D 4D 44 01 F7` | Its [instrument profile](../../docs/references/instrument-profile.md) in 128-byte chunks ([profile exchange](../../docs/references/midi-profile-exchange.md)) |
 
@@ -31,8 +31,9 @@ A note is **refused** (never queued) when:
 Always off: at boot (before USB starts), on panic, when USB is unplugged, and when the loop
 hangs: the hardware watchdog (`watchdogMs`) restarts the brain, and boot turns everything off.
 
-The profile the brain sends is **built from the same table it enforces**, so they can't
-disagree. The bench profile is committed as [bench-profile.json](bench-profile.json); the host
+The profile the brain sends is **built from the same table it enforces** (including each
+note's `pulseMs` and the `dutyWindowMs`), so they can't disagree, and the Conductor's governor
+holds back what the brain would refuse. The bench profile is committed as [bench-profile.json](bench-profile.json); the host
 test checks the firmware generates exactly that, and a .NET test parses it with the
 Conductor's reader.
 
@@ -72,5 +73,5 @@ Current-limit the bench supply. Never power the coil from the Pico.
 ## Not yet (TD-29)
 
 Body EEPROM (the config is compiled in), PCA9685 / MCP23017 drivers, velocity → pulse length,
-the MetroDom SysEx all-off, a USB product string per body, rewriting the profile over SysEx,
+a USB product string per body, rewriting the profile over SysEx,
 measured latency in the table.

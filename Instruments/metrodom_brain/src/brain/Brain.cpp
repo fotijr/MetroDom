@@ -22,6 +22,7 @@ constexpr uint8_t kIdentityReply = 0x02;
 // MetroDom SysEx (docs/references/midi-profile-exchange.md).
 constexpr uint8_t kProfileRequest = 0x01;
 constexpr uint8_t kProfileReply = 0x02;
+constexpr uint8_t kAllOff = 0x03;
 constexpr size_t kChunk = 128;
 
 uint16_t clamp16(uint16_t value, uint16_t low, uint16_t high) {
@@ -207,10 +208,11 @@ void Brain::sysex(const uint8_t* data, size_t length) {
     return;
   }
 
-  // F0 7D 4D 44 01 F7: Profile Request.
-  if (length == 6 && data[1] == kManufacturer && data[2] == kFamilyLsb && data[3] == kFamilyMsb &&
-      data[4] == kProfileRequest) {
-    sendProfile();
+  if (length != 6 || data[1] != kManufacturer || data[2] != kFamilyLsb || data[3] != kFamilyMsb) return;
+  if (data[4] == kAllOff) {
+    allOff();  // F0 7D 4D 44 03 F7: panic in one message
+  } else if (data[4] == kProfileRequest) {
+    sendProfile();  // F0 7D 4D 44 01 F7
   }
 }
 
@@ -261,11 +263,11 @@ void Brain::buildProfile() {
     const Actuator& a = actuators_[i];
     w.add("%s{\"note\":%u", i == 0 ? "" : ",", a.note);
     if (a.latencyMs > 0) w.add(",\"latencyMs\":%u", a.latencyMs);
-    w.add(",\"minIntervalMs\":%u}", a.minIntervalMs);
+    w.add(",\"minIntervalMs\":%u,\"pulseMs\":%u}", a.minIntervalMs, a.pulseMs);
   }
   w.add("],\"polyphony\":%u,\"velocity\":{\"supported\":false}", polyphony_);
-  w.add(",\"safety\":{\"maxOnMs\":%u,\"maxDutyPercent\":%u,\"watchdogMs\":%u}}", config_.maxOnMs,
-        config_.maxDutyPercent, config_.watchdogMs);
+  w.add(",\"safety\":{\"maxOnMs\":%u,\"maxDutyPercent\":%u,\"dutyWindowMs\":%u,\"watchdogMs\":%u}}",
+        config_.maxOnMs, config_.maxDutyPercent, config_.dutyWindowMs, config_.watchdogMs);
   profileLength_ = w.overflow ? 0 : w.length;
 }
 

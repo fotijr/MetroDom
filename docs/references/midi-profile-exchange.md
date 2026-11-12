@@ -1,4 +1,4 @@
-# MIDI profile exchange (discovery step 3)
+# MIDI profile exchange (discovery step 3) and MetroDom SysEx
 
 Status: **Draft**, pending owner review. Implements step 3 of
 [ADR 0007](../design-docs/0007-instrument-discovery.md): a MetroDom instrument sends its
@@ -17,12 +17,17 @@ sends these **only to ports whose Identity Reply said MetroDom**.
 | --- | --- |
 | Profile Request | `F0 7D 4D 44 01 F7` |
 | Profile Reply (one chunk) | `F0 7D 4D 44 02 <index> <count> <text…> F7` |
+| All Off (panic) | `F0 7D 4D 44 03 F7` |
 
 - `<text>` is the profile JSON, ASCII only (non-ASCII is escaped as `\uXXXX`), so every byte is ≤ `7F`.
 - At most 128 text bytes per chunk, so any USB-MIDI SysEx buffer copes. `<index>` counts from 0,
   `<count>` is the total (1-127): profiles up to 16 KB.
 - Chunks may arrive in any order. A chunk with a different `<count>` starts the answer over.
-- Free sub-IDs after `02` are for later MetroDom messages (e.g. a SysEx all-off, TD-22).
+- **All Off** turns every actuator off at once, like CC 120 on every channel, in one message. It
+  doesn't latch: the next Note On plays. The Conductor's panic sends it first, then CC 120/123,
+  so a MetroDom instrument is silent after one message instead of up to 32. Instruments ignore
+  MetroDom sub-IDs they don't know.
+- Free sub-IDs after `03` are for later MetroDom messages.
 
 ## What `metrodom devices --identify` does
 

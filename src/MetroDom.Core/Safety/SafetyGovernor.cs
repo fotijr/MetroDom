@@ -54,6 +54,12 @@ public enum BlockReason
 
     /// <summary>Inside silent quiet hours.</summary>
     QuietHours,
+
+    /// <summary>The actuator's thermal budget is spent (the profile's <c>safety</c> duty cycle).</summary>
+    DutyCycle,
+
+    /// <summary>As many actuators as the profile's <c>polyphony</c> are already on.</summary>
+    Polyphony,
 }
 
 /// <summary>A note the governor held back.</summary>
@@ -64,6 +70,13 @@ public sealed record BlockedNote(string Instrument, int Note, int Channel, Block
 /// instrument's output and checks every new note against the instrument's profile and the
 /// policy's limits before it leaves the Conductor.
 /// </summary>
+/// <remarks>
+/// From the profile: playable notes, minimum interval (and no repeat while the actuator is still
+/// striking), the duty cycle and polyphony. The last two mirror the brain firmware's own checks
+/// (Instruments/metrodom_brain): a per-actuator leaky bucket holding <c>maxDutyPercent</c> of
+/// <c>dutyWindowMs</c> of on-time, filled by each strike's pulse and draining at
+/// <c>maxDutyPercent</c>; and at most <c>polyphony</c> actuators inside their pulse at once.
+/// </remarks>
 /// <remarks>
 /// Only new notes (Note On with velocity &gt; 0) are ever held back or changed. Anything that
 /// makes things quieter or stops them always passes: Note Off, All Sound Off / All Notes Off
@@ -81,7 +94,7 @@ public sealed class SafetyGovernor : IMidiOutput
     private readonly Lock _gate = new();
     private readonly IClock _clock;
     private readonly Func<TimeOnly> _timeOfDay;
-    private readonly Dictionary<int, TimeSpan> _lastStrike = [];
+    private readonly Dictionary<int, Actuator> _actuators = [];
     private readonly Queue<TimeSpan> _recent = new();
     private readonly long[] _blocked = new long[Enum.GetValues<BlockReason>().Length];
     private long _passed;
@@ -197,6 +210,8 @@ public sealed class SafetyGovernor : IMidiOutput
         BlockReason.TooSoon => "too soon",
         BlockReason.RateLimited => "over rate limit",
         BlockReason.QuietHours => "in quiet hours",
+        BlockReason.DutyCycle => "over duty cycle",
+        BlockReason.Polyphony => "too many at once",
         _ => reason.ToString(),
     };
 
@@ -226,11 +241,33 @@ public sealed class SafetyGovernor : IMidiOutput
         lock (_gate)
         {
             var now = _clock.Now;
-            if (Profile.MinInterval > TimeSpan.Zero
-                && _lastStrike.TryGetValue(note, out var last)
-                && now - last < Profile.MinInterval)
+            var pulse = Profile.PulseFor(note);
+            var struck = _actuators.TryGetValue(note, out var actuator);
+            if (struck && (now < actuator.OnUntil || (Profile.MinInterval > TimeSpan.Zero && now - actuator.LastStrike < Profile.MinInterval)))
             {
                 reason = BlockReason.TooSoon;
+                return null;
+            }
+
+            var heat = 0.0;
+            if (Profile.Safety is { } safety)
+            {
+                // Units as in the firmware: milliseconds x percent.
+                heat = struck ? Math.Max(0, actuator.Heat - ((now - actuator.HeatAt).TotalMilliseconds * safety.MaxDutyPercent)) : 0;
+                var capacity = safety.DutyWindow.TotalMilliseconds * safety.MaxDutyPercent;
+                var cost = pulse.TotalMilliseconds * 100;
+                if (heat + cost > capacity)
+                {
+                    reason = BlockReason.DutyCycle;
+                    return null;
+                }
+
+                heat += cost;
+            }
+
+            if (Profile.Polyphony is { } polyphony && _actuators.Values.Count(x => now < x.OnUntil) >= polyphony)
+            {
+                reason = BlockReason.Polyphony;
                 return null;
             }
 
@@ -250,11 +287,14 @@ public sealed class SafetyGovernor : IMidiOutput
                 _recent.Enqueue(now);
             }
 
-            _lastStrike[note] = now;
+            _actuators[note] = new Actuator(now, now + pulse, heat, now);
         }
 
         return noteOn.Velocity <= cap
             ? noteOn
             : new NoteOnEvent(noteOn.NoteNumber, (SevenBitNumber)cap) { Channel = noteOn.Channel, DeltaTime = noteOn.DeltaTime };
     }
+
+    /// <summary>One note's actuator: when it last struck, when that pulse ends, and its heat (ms x percent) as of <see cref="HeatAt"/>.</summary>
+    private readonly record struct Actuator(TimeSpan LastStrike, TimeSpan OnUntil, double Heat, TimeSpan HeatAt);
 }

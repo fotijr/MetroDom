@@ -71,7 +71,7 @@ public sealed class VirtualInstrument : IMidiOutput
     /// <summary>Note Ons that came faster than the profile's minimum interval.</summary>
     public int Refused { get; private set; }
 
-    /// <summary>How many panic messages (All Sound Off / All Notes Off) arrived.</summary>
+    /// <summary>How many panic messages (All Sound Off / All Notes Off / MetroDom all-off) arrived.</summary>
     public int PanicMessages { get; private set; }
 
     public void Send(MidiEvent midiEvent)
@@ -83,6 +83,7 @@ public sealed class VirtualInstrument : IMidiOutput
                 Strike(noteOn);
                 break;
             case ControlChangeEvent cc when cc.ControlNumber == ControlNumbers.AllSoundOff || cc.ControlNumber == ControlNumbers.AllNotesOff:
+            case SysExEvent when Discovery.ProfileExchange.IsAllOff(midiEvent):
                 lock (_gate)
                 {
                     PanicMessages++;

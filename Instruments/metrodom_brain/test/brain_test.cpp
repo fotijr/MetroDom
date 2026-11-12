@@ -170,6 +170,25 @@ void panic_TurnsEverythingOff_OnAnyChannel() {
   CHECK(!r.pins.level[3]);
 }
 
+void metroDomAllOff_TurnsEverythingOff_AndNotesStillPlayAfter() {
+  Rig r;
+  r.on(60, 0);
+  r.on(64, 0);
+  r.send({0xF0, 0x7D, 0x4D, 0x44, 0x03, 0xF7}, 5);
+  CHECK(!r.pins.level[2] && !r.pins.level[3]);
+  CHECK(r.replies.sent.empty());
+  r.on(60, 100);  // like CC 120: it stops what's on, it doesn't latch
+  CHECK(r.pins.level[2]);
+}
+
+void otherSysEx_DoesntPanic() {
+  Rig r;
+  r.on(60, 0);
+  r.send({0xF0, 0x7D, 0x00, 0x00, 0x03, 0xF7}, 1);  // someone else's 7D message
+  r.send({0xF0, 0x7D, 0x4D, 0x44, 0x7F, 0xF7}, 1);  // a MetroDom sub-ID we don't know
+  CHECK(r.pins.level[2]);
+}
+
 void otherControllers_DontPanic() {
   Rig r;
   r.on(60, 0);
@@ -248,8 +267,9 @@ void profile_DescribesWhatTheBrainEnforces() {
   Rig r;
   std::string json = r.brain.profileJson();
   CHECK(json.find("\"name\":\"Xylo \\\"test\\\"\"") != std::string::npos);
-  CHECK(json.find("{\"note\":60,\"latencyMs\":9,\"minIntervalMs\":60}") != std::string::npos);
-  CHECK(json.find("{\"note\":67,\"minIntervalMs\":45}") != std::string::npos);  // clamped, unmeasured
+  CHECK(json.find("{\"note\":60,\"latencyMs\":9,\"minIntervalMs\":60,\"pulseMs\":30}") != std::string::npos);
+  CHECK(json.find("{\"note\":67,\"minIntervalMs\":45,\"pulseMs\":45}") != std::string::npos);  // clamped, unmeasured
+  CHECK(json.find("\"dutyWindowMs\":1000") != std::string::npos);
   CHECK(json.find("\"polyphony\":2") != std::string::npos);
   CHECK(json.find("\"identity\":{\"manufacturer\":\"7D\",\"family\":8781,\"model\":1}") != std::string::npos);
   CHECK(json.find("\"channel\"") == std::string::npos);  // omni: no auto-band hint
@@ -295,6 +315,7 @@ int main() {
       clamps_PulseToMaxOn_AndIntervalToThePulse, minInterval_RefusesRepeatsThatComeTooSoon,
       stillStriking_IsRefused, duty_RefusesWhenTheThermalBudgetIsSpent, duty_SustainedRateMatchesThePercentage,
       polyphony_LimitsActuatorsOnAtOnce, panic_TurnsEverythingOff_OnAnyChannel, otherControllers_DontPanic,
+      metroDomAllOff_TurnsEverythingOff_AndNotesStillPlayAfter, otherSysEx_DoesntPanic,
       hostLost_TurnsOff_AndRefusesUntilBack, channel_OmniByDefault_OrOnlyItsOwn,
       unknownNotes_AndVelocityZero_DoNothing, identityRequest_GetsMetroDomsReply,
       profileRequest_SendsTheProfileInChunks, profile_DescribesWhatTheBrainEnforces,

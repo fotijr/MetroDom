@@ -7,8 +7,8 @@ namespace MetroDom.Core;
 /// <summary>
 /// Reads and writes the <a href="../../docs/references/instrument-profile.md">instrument profile</a>
 /// JSON (<c>metrodom.instrument-profile/0</c>). Only the fields the Conductor uses today become
-/// <see cref="InstrumentProfile"/> properties (of <c>midi</c>, only the channel); the rest (identity, polyphony, safety) are accepted
-/// and ignored until something needs them.
+/// <see cref="InstrumentProfile"/> properties (of <c>midi</c>, only the channel); the rest (identity, velocity,
+/// watchdog) are accepted and ignored until something needs them.
 /// </summary>
 public static class InstrumentProfileJson
 {
@@ -71,6 +71,7 @@ public static class InstrumentProfileJson
         }
 
         var latencies = new Dictionary<int, TimeSpan>();
+        var pulses = new Dictionary<int, TimeSpan>();
         var minInterval = Milliseconds(obj["minIntervalMs"]) ?? TimeSpan.Zero;
         HashSet<int>? notes = null;
         if (obj["notes"] is JsonArray array)
@@ -94,6 +95,17 @@ public static class InstrumentProfileJson
                 if (Milliseconds(item!["latencyMs"]) is { } latency)
                 {
                     latencies[note.Value] = latency;
+                }
+
+                if (Milliseconds(item["pulseMs"]) is { } pulse)
+                {
+                    if (pulse <= TimeSpan.Zero)
+                    {
+                        error = $"note {note}: \"pulseMs\" must be more than 0.";
+                        return false;
+                    }
+
+                    pulses[note.Value] = pulse;
                 }
 
                 // One interval for the whole instrument: the slowest note's, so nothing is refused.
@@ -125,9 +137,46 @@ public static class InstrumentProfileJson
             channel--;
         }
 
+        int? polyphony = obj["polyphony"]?.GetValue<int>();
+        if (polyphony is < 1)
+        {
+            error = "\"polyphony\" must be at least 1.";
+            return false;
+        }
+
+        ActuatorSafety? safety = null;
+        if (obj["safety"] is JsonObject safetyNode)
+        {
+            var maxOn = Milliseconds(safetyNode["maxOnMs"]);
+            var duty = safetyNode["maxDutyPercent"]?.GetValue<int>();
+            var window = Milliseconds(safetyNode["dutyWindowMs"]) ?? ActuatorSafety.DefaultDutyWindow;
+            if (maxOn is not { } maxOnTime || maxOnTime <= TimeSpan.Zero)
+            {
+                error = "\"safety.maxOnMs\" is required and must be more than 0.";
+                return false;
+            }
+
+            if (duty is not (>= 1 and <= 100))
+            {
+                error = "\"safety.maxDutyPercent\" is required and must be 1-100.";
+                return false;
+            }
+
+            if (window <= TimeSpan.Zero)
+            {
+                error = "\"safety.dutyWindowMs\" must be more than 0.";
+                return false;
+            }
+
+            safety = new ActuatorSafety(maxOnTime, duty.Value, window);
+        }
+
         profile = new InstrumentProfile(name, defaultLatency)
         {
             Channel = channel,
+            Polyphony = polyphony,
+            Safety = safety,
+            NotePulse = pulses,
             Notes = notes,
             NoteLatency = latencies,
             MinInterval = minInterval,
@@ -171,10 +220,30 @@ public static class InstrumentProfileJson
                     entry["latencyMs"] = latency.TotalMilliseconds;
                 }
 
+                if (profile.NotePulse.TryGetValue(note, out var pulse))
+                {
+                    entry["pulseMs"] = pulse.TotalMilliseconds;
+                }
+
                 notes.Add(entry);
             }
 
             obj["notes"] = notes;
+        }
+
+        if (profile.Polyphony is { } polyphony)
+        {
+            obj["polyphony"] = polyphony;
+        }
+
+        if (profile.Safety is { } safety)
+        {
+            obj["safety"] = new JsonObject
+            {
+                ["maxOnMs"] = safety.MaxOnTime.TotalMilliseconds,
+                ["maxDutyPercent"] = safety.MaxDutyPercent,
+                ["dutyWindowMs"] = safety.DutyWindow.TotalMilliseconds,
+            };
         }
 
         return obj.ToJsonString(WriteOptions);
