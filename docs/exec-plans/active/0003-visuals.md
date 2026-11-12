@@ -105,8 +105,10 @@ phase is fun on its own and doesn't wait for the next one.
   caps (whole day and quiet hours, the lower wins) scale every intensity channel, the safe look
   included, with a 10% floor so panic is never dark. Quiet hours go by the Conductor's local
   clock and may wrap past midnight.
+- 2026-11-11 (owner): Fixtures and the matrix are wired Ethernet. Small accent nodes may use
+  Wi-Fi through the Conductor's own access point (ADR 0002). Lights fail dark and never hold up
+  the music.
 
 ## Open questions
 - Budget for V3 fixtures.
 - ESP32 or Raspberry Pi for the matrix (ESP32 is cheaper. Pi is easier for text and QR rendering).
-- Wired Ethernet everywhere, or Wi-Fi allowed for small accent nodes?

@@ -42,4 +42,7 @@ Windows desktop and no monitor.
 
 ## Open questions
 - ALSA adapter: measure latency and add hot-plug (sequencer announce events) on a Pi.
-- Does the box also act as the Wi-Fi access point for the rental scenario?
+- ~~Does the box also act as the Wi-Fi access point for the rental scenario?~~ Yes, in every
+  mode (owner, 2026-11-11): the box runs its own access point by default, so it works anywhere
+  with no venue IT and predictable latency. It may also join a venue network as a client, only
+  for internet (cloud sync, updates).

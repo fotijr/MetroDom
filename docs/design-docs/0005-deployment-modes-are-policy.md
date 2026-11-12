@@ -1,6 +1,6 @@
 # 0005: Deployment modes are policy, not forks; local-first
 
-Status: **Proposed** (2026-11-10)
+Status: **Accepted** (2026-11-11, proposed 2026-11-10)
 
 ## Context
 MetroDom may be a bar band run by one person, a crowd-controlled jukebox, or a quartet rented
@@ -24,4 +24,6 @@ would triple maintenance.
   rental modes. Track in [product specs](../product-specs/index.md).
 
 ## Open questions
-- Remote management of rental units (updates, health) without exposing them to the internet.
+- ~~Remote management of rental units without exposing them to the internet?~~ Outbound-only
+  check-in (owner, 2026-11-11): when online, a unit polls the optional Cloud, pulls signed
+  updates and pushes health telemetry. No inbound ports, no remote shell.

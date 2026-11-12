@@ -252,6 +252,10 @@ That is the first milestone of the [live band spec](../../product-specs/live-ban
   profile is built from the config the brain enforces, and a committed bench profile is checked
   by both the C++ and the .NET tests, so firmware and Conductor can't drift apart. Identity model
   1 = brain: the body it drives is in its profile, so a model per instrument isn't needed yet.
+- 2026-11-11 (owner): Design review of every software-side open question. Accepted ADRs 0001,
+  0003, 0004, 0005, 0007 and 0012; 0011 stays Proposed until reactive lights are tried in a
+  room. Answers are in each ADR's open questions. Deleted the legacy GitHub Pages site (TD-12):
+  `docs/*.md` is the system of record.
 
 ## Open questions
 - Target box model (ADR 0002).

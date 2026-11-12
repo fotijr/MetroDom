@@ -1,6 +1,6 @@
 # 0003: One Control API for every app
 
-Status: **Proposed** (2026-11-10)
+Status: **Accepted** (2026-11-11, proposed 2026-11-10)
 
 ## Context
 Three very different products (bar band, jukebox, rental) each need a control app. Writing three
@@ -25,5 +25,10 @@ backends, or letting apps talk to instruments, would fork the system and bypass 
 - Safety lives below the API, so no client can bypass it.
 
 ## Open questions
-- Pairing/auth flow for the rental customer (QR code on the box? see [SECURITY.md](../SECURITY.md)). v0 draft: one bearer token shown on the Conductor or set by env ([control API](../references/control-api.md)); a QR code can carry it later.
-- Web app (PWA) first vs native apps. A PWA served by the Conductor avoids app stores.
+- ~~Pairing/auth flow for the rental customer?~~ A QR code carrying the Wi-Fi details and a
+  per-booking token that expires when the rental ends (owner, 2026-11-11). The owner's token is
+  separate and never printed. See [SECURITY.md](../SECURITY.md). Today's v0 is still one bearer
+  token ([control API](../references/control-api.md), TD-27).
+- ~~Web app (PWA) first vs native apps?~~ PWA first, served by the Conductor (owner,
+  2026-11-11): no app stores, any phone on the LAN, one codebase. Native only if a feature
+  needs it.

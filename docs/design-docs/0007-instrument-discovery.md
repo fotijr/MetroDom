@@ -1,6 +1,6 @@
 # 0007: Instrument discovery (MetroDom and general MIDI devices)
 
-Status: **Proposed** (2026-11-10). Supersedes the prototype's `md?` serial probe.
+Status: **Accepted** (2026-11-11, proposed 2026-11-10). Supersedes the prototype's `md?` serial probe.
 
 ## Context
 The prototype auto-detected instruments by opening every serial port and sending `md?`
@@ -49,4 +49,5 @@ a pid.codes VID/PID for MetroDom brains.
 
 ## Open questions
 - MetroDom SysEx sub-ID layout for profile get/set. Draft for get: [midi-profile-exchange](../references/midi-profile-exchange.md). Set is undefined.
-- How far to go with MIDI 2.0 now vs when OS and library support is solid on Linux/ARM.
+- ~~How far to go with MIDI 2.0 now?~~ Not yet: MIDI 1.0 now, 2.0 later
+  ([ADR 0001](0001-midi-is-the-contract.md), 2026-11-11).

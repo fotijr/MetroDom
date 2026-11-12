@@ -1,6 +1,6 @@
 # 0012: Humans in the band: play-along
 
-Status: **Proposed** (2026-11-10)
+Status: **Accepted** (2026-11-11, proposed 2026-11-10)
 
 ## Context
 The owner wants to **play with the robots**: jump on the drum set while MetroDom plays the
@@ -78,7 +78,10 @@ start/stop · next song · tap tempo · **vamp** (repeat the current section unt
   reliable input. Triggers and a foot pedal come first.
 
 ## Open questions
-- Role vocabulary: a fixed list or free-form tags? Draft: fixed list for detection, any one word in a saved mapping ([song roles](../references/song-roles.md)).
+- ~~Role vocabulary: a fixed list or free-form tags?~~ Both, as drafted (owner, 2026-11-11):
+  a fixed list for detection, any one word in a saved mapping ([song roles](../references/song-roles.md)).
 - How fast should the band follow a tempo change (beats to converge) without sounding nervous? Draft: phase error halves every beat, tempo moves ≤ 4% per beat, band correction ≤ 8% ([beat following](../references/beat-following.md)); retune with the owner's real drumming
-- Can a robot share the drum kit with the human (e.g. robot on a cymbal while the human plays
-  the rest), or are kits strictly one or the other?
+- ~~Can a robot share the drum kit with the human?~~ Yes, per piece (owner, 2026-11-11): a
+  drums seat can be narrowed to the kit pieces (GM drum notes) the human plays, and the arranger
+  keeps the rest for the robots. Robot actuators on a shared kit need guards that keep a
+  player's hands and sticks out of their stroke ([RELIABILITY.md](../RELIABILITY.md)).
