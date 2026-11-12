@@ -5,6 +5,7 @@ using MetroDom.Conductor.Cli;
 using MetroDom.Conductor.Service;
 using MetroDom.Core.Policy;
 using MetroDom.Core.Setlist;
+using MetroDom.Core.Timing;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
@@ -91,20 +92,38 @@ internal sealed class ServeCommand : Command<ServeCommand.Settings>
         Save();
         tokens.Changed += Save;
         queue.Changed += Save;
+        var policy = settings.PolicyProfile;
+        var desk = new RequestDesk(queue, policy.Queue, new SystemClock());
+        if (policy.Queue.Requests)
+        {
+            Ui.Note($"Requests open: {policy.Queue.MaxPerGuest} waiting per guest, one every {policy.Queue.Cooldown.TotalMinutes:0.#} min, a song again after {policy.Queue.SongCooldown.TotalMinutes:0} min{(policy.Queue.Votes ? ", votes on" : "")}.");
+        }
+
+        var random = new Random();
+        bool Fill()
+        {
+            if (!policy.Queue.Fill || desk.PickFill([.. library.Fresh().Select(s => s.Id)], random) is not { } id || library.Find(id) is not { } song)
+            {
+                return false;
+            }
+
+            return queue.TryAdd(song.Id, song.Title, "fill", null, SongKind.Set, out _, out _);
+        }
+
         return PlayCommand.RunSet(
             settings,
-            new SetOptions(queue, song => library.Find(song.Song)?.Path, KeepRunning: true, (live, session) => Start(settings, tokens, library, state, fromEnv is not null, live, session)));
+            new SetOptions(queue, song => library.Find(song.Song)?.Path, KeepRunning: true, (live, session) => Start(settings, tokens, library, desk, state, fromEnv is not null, live, session), Fill));
     }
 
     /// <summary>The songs still to play (the current one included), by library id.</summary>
     internal static IReadOnlyList<string> Upcoming(QueueSnapshot queue) =>
         [.. queue.Songs.Skip(Math.Max(0, queue.Current)).Select(s => s.Song)];
 
-    private static PlayCommand.ApiHandle Start(Settings settings, TokenStore tokens, SongLibrary library, ServiceState state, bool tokenFromEnv, LiveControl live, Session session)
+    private static PlayCommand.ApiHandle Start(Settings settings, TokenStore tokens, SongLibrary library, RequestDesk desk, ServiceState state, bool tokenFromEnv, LiveControl live, Session session)
     {
         var endpoint = settings.Endpoint;
         var policy = settings.PolicyProfile;
-        var api = ControlApi.Start(endpoint, tokens, policy, live, session, library);
+        var api = ControlApi.Start(endpoint, tokens, policy, live, session, library, desk);
         var link = ControlApi.PairingUrl(api.Address, endpoint, tokenFromEnv ? null : state.OwnerToken);
         Ui.Note($"Control API at {api.Address} (policy {policy.Mode}) · state in {state.Path}");
         Ui.Note(tokenFromEnv

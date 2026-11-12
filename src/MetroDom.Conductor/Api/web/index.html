@@ -59,11 +59,15 @@
 
     <section>
       <h2>Queue</h2>
+      <div id="requests-bar" class="row muted" hidden>
+        <span id="requests-status"></span>
+        <button id="requests-toggle" type="button" class="ghost" data-grant="queue.edit">Pause requests</button>
+      </div>
       <ol id="queue" class="queue"></ol>
       <p id="queue-empty" class="muted" hidden>Nothing queued.</p>
     </section>
 
-    <section id="library-panel" data-grant="queue.edit" hidden>
+    <section id="library-panel" data-grant="queue.edit queue.request" hidden>
       <h2>Library</h2>
       <div class="search">
         <input id="library-filter" type="search" placeholder="Find a song" aria-label="Find a song" autocomplete="off">

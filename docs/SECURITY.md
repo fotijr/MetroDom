@@ -30,7 +30,11 @@ guests only view, request and vote, only the owner hands out tokens.
   mode, never a token. Clients name library songs by id; only ids from the last scan resolve, and
   the API never shows file paths.
 - **Guests are untrusted input.** Validate and rate-limit everything: request floods, vote
-  stuffing, oversized payloads, offensive free text (avoid free text where possible).
+  stuffing, oversized payloads, offensive free text (avoid free text where possible). Built
+  (`RequestDesk`): guests name library ids only (no free text), one vote per token per song,
+  limits on songs waiting and time between requests, 20 tries a minute per token (refused ones
+  count), and `429` with `Retry-After`. A guest is a token, so the owner decides how many guests
+  a table gets.
 - **No live MIDI from the network for guests.** Live note input is operator-only.
 - **Song files are untrusted.** Enforce size, track and event-count limits when parsing SMF.
 - **Firmware updates are owner-only** and should be signed once there's a fleet (rental).

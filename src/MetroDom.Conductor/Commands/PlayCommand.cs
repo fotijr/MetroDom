@@ -129,17 +129,21 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
 
             live.Cue(0);
             var over = false;
+            var started = false; // has any song played yet? Until one has, a service waits for start.
             while (!over && !session.IsStopping)
             {
                 if (queue.Now is not { } entry)
                 {
-                    if (!options.KeepRunning || !WaitForSongs(session, live))
+                    // Ran dry: a policy with fill queues a library song so the room never goes quiet.
+                    var filled = options.KeepRunning && options.Fill?.Invoke() == true;
+                    if (!filled && (!options.KeepRunning || !WaitForSongs(session, live)))
                     {
                         break;
                     }
 
-                    // Someone queued a song: a jukebox plays it, a band waits for start.
-                    wait = startPedal || following || !policy.Queue.Autoplay;
+                    // Someone queued a song: a jukebox plays it, a band waits for start. A wait that
+                    // was already owed (a stop, or a box that just booted) stands, autoplay or not.
+                    wait = wait || !started || startPedal || following || !policy.Queue.Autoplay;
                     continue;
                 }
 
@@ -174,6 +178,7 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
 
                 // Hot-plugged devices join here, between songs, so the scheduler plans for their latency.
                 session.AdmitPending();
+                started = true;
                 var set = queue.Snapshot();
                 var end = PlaySong(session, live, settings, path, title, inputs, lights, hasNext: options.KeepRunning || set.Current + 1 < set.Songs.Count);
                 if (end is null)
@@ -853,4 +858,5 @@ internal class SetSettings : OutputSettings
 /// <param name="Resolve">The file to play for a queued song, or null when it's gone (skipped with a message).</param>
 /// <param name="KeepRunning">Wait for more songs when the queue runs dry (<c>serve</c>), instead of ending.</param>
 /// <param name="StartApi">Starts the Control API (and whatever goes with it) once the band is up, or returns null.</param>
-internal sealed record SetOptions(SetQueue Queue, Func<QueuedSong, string?> Resolve, bool KeepRunning, Func<LiveControl, Session, IDisposable?> StartApi);
+/// <param name="Fill">For <c>serve</c> with policy <c>fill</c>: queues a song when the queue runs dry; true if it did.</param>
+internal sealed record SetOptions(SetQueue Queue, Func<QueuedSong, string?> Resolve, bool KeepRunning, Func<LiveControl, Session, IDisposable?> StartApi, Func<bool>? Fill = null);

@@ -123,7 +123,7 @@ internal sealed class ControlApi : IAsyncDisposable
         Start(endpoint, new TokenStore(ownerToken), PolicyProfile.LiveBand, live, session);
 
     /// <summary>Starts listening. With a <paramref name="library"/> (serve), songs can be queued from it. Throws if the port is taken.</summary>
-    public static ControlApi Start(ApiEndpoint endpoint, TokenStore tokens, PolicyProfile policy, LiveControl live, Session session, SongLibrary? library = null)
+    public static ControlApi Start(ApiEndpoint endpoint, TokenStore tokens, PolicyProfile policy, LiveControl live, Session session, SongLibrary? library = null, RequestDesk? desk = null)
     {
         ArgumentNullException.ThrowIfNull(endpoint);
         ArgumentNullException.ThrowIfNull(tokens);
@@ -142,7 +142,7 @@ internal sealed class ControlApi : IAsyncDisposable
             options.AddServerHeader = false;
         });
         var app = builder.Build();
-        Map(app, endpoint, tokens, policy, live, session, library);
+        Map(app, endpoint, tokens, policy, live, session, library, desk);
         app.StartAsync().GetAwaiter().GetResult();
 
         var bound = app.Urls.Select(u => new Uri(u)).First();
@@ -183,7 +183,7 @@ internal sealed class ControlApi : IAsyncDisposable
             .Where(r => r.Item2.StartsWith(Prefix + "/", StringComparison.Ordinal))
             .Select(r => (r.m, r.Item2[Prefix.Length..]));
 
-    internal static void Map(WebApplication app, ApiEndpoint endpoint, TokenStore tokens, PolicyProfile policy, LiveControl live, Session session, SongLibrary? library)
+    internal static void Map(WebApplication app, ApiEndpoint endpoint, TokenStore tokens, PolicyProfile policy, LiveControl live, Session session, SongLibrary? library, RequestDesk? desk = null)
     {
         var spec = Spec();
         var schema = EventSchema();
@@ -231,13 +231,92 @@ internal sealed class ControlApi : IAsyncDisposable
             });
         }).Needs(null);
         guarded.MapGet("/state", () => Results.Json(State(live.Snapshot()))).Needs(Grant.View);
-        var stream = new StateStream(live, session);
+        var stream = new StateStream(live, session, desk);
         guarded.MapGet("/stream", (Delegate)((HttpContext context) =>
         {
             var holder = Holder(context);
-            return stream.Accept(context, () => tokens.IsValid(holder), app.Lifetime.ApplicationStopping);
+            return stream.Accept(context, () => tokens.IsValid(holder), app.Lifetime.ApplicationStopping, holder.Id);
         })).Needs(Grant.View);
-        guarded.MapGet("/queue", () => Results.Json(Queue(live.Queue.Snapshot()))).Needs(Grant.View);
+        guarded.MapGet("/queue", (HttpContext context) => Results.Json(Queue(live.Queue.Snapshot(), desk, Holder(context).Id))).Needs(Grant.View);
+
+        // Guest requests and votes (plan 0004 S6): every rule lives in the RequestDesk.
+        guarded.MapGet("/requests", (HttpContext context) =>
+        {
+            if (desk is null)
+            {
+                return Results.Json(new { open = false, votes = false });
+            }
+
+            var you = desk.Status(Holder(context).Id);
+            return Results.Json(new
+            {
+                open = desk.RequestsOpen,
+                votes = desk.VotesOpen,
+                maxPerGuest = desk.Rules.MaxPerGuest,
+                cooldownSeconds = desk.Rules.Cooldown.TotalSeconds,
+                songCooldownMinutes = desk.Rules.SongCooldown.TotalMinutes,
+                you = new { waiting = you.Waiting, maxWaiting = you.MaxWaiting, nextRequestInSeconds = you.NextRequestIn is { } next ? Math.Ceiling(next.TotalSeconds) : (double?)null },
+            });
+        }).Needs(Grant.View);
+        guarded.MapPut("/requests", (OpenRequest? request) =>
+        {
+            if (desk is null || !desk.Rules.Requests)
+            {
+                return Conflict("This policy takes no requests (queue.requests is false).");
+            }
+
+            if (request?.Open is not { } open)
+            {
+                return BadRequest("open is required: true to take requests, false to pause them.");
+            }
+
+            if (desk.Pause(!open))
+            {
+                session.Messages.Add(open ? "Requests are open again." : "Requests paused.");
+            }
+
+            return Results.Json(new { message = open ? "Requests are open." : "Requests are paused.", open });
+        }).Needs(Grant.QueueEdit);
+        guarded.MapPost("/requests", (HttpContext context, QueueRequest? request) =>
+        {
+            if (desk is null || library is null)
+            {
+                return Conflict("This set takes no requests: run metrodom serve with a jukebox policy.");
+            }
+
+            if (string.IsNullOrWhiteSpace(request?.Song) || request.Song.Length > 512)
+            {
+                return BadRequest("song is required: a library id from GET /library.");
+            }
+
+            if (library.Find(request.Song) is not { } song)
+            {
+                return NotFound($"No song \"{request.Song}\" in the library: GET {Prefix}/library lists them.");
+            }
+
+            var holder = Holder(context);
+            var reply = desk.Request(holder.Id, holder.Role == Role.Guest, song.Id, song.Title, holder.Label ?? RolePermissions.NameOf(holder.Role));
+            if (reply is { Accepted: true, CountedAsVote: false })
+            {
+                session.Messages.Add($"{holder.Label ?? "A guest"} requested {song.Title}.");
+            }
+
+            return Reply(context, reply, live.Queue.Snapshot(), desk, holder.Id);
+        }).Needs(Grant.QueueRequest);
+        guarded.MapPost("/queue/{id}/vote", (HttpContext context, string id) => Vote(context, id, up: true)).Needs(Grant.QueueVote);
+        guarded.MapDelete("/queue/{id}/vote", (HttpContext context, string id) => Vote(context, id, up: false)).Needs(Grant.QueueVote);
+
+        IResult Vote(HttpContext context, string id, bool up)
+        {
+            if (desk is null)
+            {
+                return Conflict("This set takes no votes: run metrodom serve with a jukebox policy.");
+            }
+
+            var holder = Holder(context);
+            return Reply(context, desk.Vote(holder.Id, holder.Role == Role.Guest, id, up), live.Queue.Snapshot(), desk, holder.Id);
+        }
+
         guarded.MapPost("/queue", (HttpContext context, QueueRequest? request) =>
         {
             if (library is null)
@@ -386,18 +465,58 @@ internal sealed class ControlApi : IAsyncDisposable
     }
 
     /// <summary>The queue as the API shows it (GET /queue, stream events). Never file paths.</summary>
-    internal static object Queue(QueueSnapshot queue) => new
+    internal static object Queue(QueueSnapshot queue, RequestDesk? desk = null, string? holder = null) => new
     {
         current = queue.Current,
         editableFrom = queue.EditableFrom,
         version = queue.Version,
-        songs = queue.Songs.Select(s => Entry(s, queue)),
+        songs = queue.Songs.Select(s => Entry(s, queue, holder)),
+        requests = desk is null ? null : new { open = desk.RequestsOpen, votes = desk.VotesOpen },
     };
 
-    private static object Entry(QueuedSong song, QueueSnapshot queue)
+    /// <summary>
+    /// One queued song as clients see it. <paramref name="holder"/> marks what that holder voted for
+    /// and asked for; nobody else's votes or ids are ever shown, only counted.
+    /// </summary>
+    private static object Entry(QueuedSong song, QueueSnapshot queue, string? holder = null)
     {
         var index = queue.Songs.ToList().FindIndex(s => s.Id == song.Id);
-        return new { index, id = song.Id, title = song.Title, addedBy = song.AddedBy, editable = index >= queue.EditableFrom };
+        return new
+        {
+            index,
+            id = song.Id,
+            title = song.Title,
+            addedBy = song.AddedBy,
+            editable = index >= queue.EditableFrom,
+            kind = song.Kind.ToString().ToLowerInvariant(),
+            votes = song.Votes,
+            voted = holder is not null && song.Voters.Contains(holder),
+            mine = holder is not null && song.RequestedBy == holder,
+        };
+    }
+
+    /// <summary>A desk decision as HTTP: 201 a new request, 200 a vote, 409 closed or the song can't be asked for, 429 (with Retry-After) a guest limit, 404 no such song.</summary>
+    private static IResult Reply(HttpContext context, DeskReply reply, QueueSnapshot queue, RequestDesk desk, string holder)
+    {
+        if (reply.Accepted)
+        {
+            return Results.Json(
+                new { message = reply.Message, countedAsVote = reply.CountedAsVote, song = Entry(reply.Song!, queue, holder) },
+                statusCode: reply.CountedAsVote || reply.Song!.RequestedBy != holder ? StatusCodes.Status200OK : StatusCodes.Status201Created);
+        }
+
+        if (reply.RetryAfter is { } retry)
+        {
+            context.Response.Headers.RetryAfter = Math.Max(1, Math.Ceiling(retry.TotalSeconds)).ToString(CultureInfo.InvariantCulture);
+        }
+
+        var status = reply.Refused switch
+        {
+            Refusal.TooSoon => StatusCodes.Status429TooManyRequests,
+            Refusal.NotFound => StatusCodes.Status404NotFound,
+            _ => StatusCodes.Status409Conflict,
+        };
+        return Results.Json(new { error = reply.Message, open = desk.RequestsOpen }, statusCode: status);
     }
 
     private static string Capitalize(string text) => text.Length == 0 ? text : char.ToUpperInvariant(text[0]) + text[1..];
@@ -546,6 +665,8 @@ internal sealed class ControlApi : IAsyncDisposable
     private sealed record QueueRequest(string? Song, int? At);
 
     private sealed record MoveRequest(int? To);
+
+    private sealed record OpenRequest(bool? Open);
 
     private sealed record TempoRequest(double? Bpm);
 

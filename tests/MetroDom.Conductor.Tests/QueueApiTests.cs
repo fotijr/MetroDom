@@ -9,6 +9,7 @@ using MetroDom.Conductor.Commands;
 using MetroDom.Conductor.Midi;
 using MetroDom.Conductor.Service;
 using MetroDom.Core.Policy;
+using MetroDom.Core.Setlist;
 using MetroDom.Core.Simulation;
 using MetroDom.Core.Timing;
 
@@ -36,7 +37,8 @@ public sealed class QueueApiTests : IAsyncDisposable
 
         _session = new Session([new SessionOutput(new NullPort(), [0], TimeSpan.Zero)], []);
         _live = new LiveControl(_session, new VirtualClock());
-        _api = ControlApi.Start(new ApiEndpoint(IPAddress.Loopback, 0), _tokens, Policy("crowd-jukebox"), _live, _session, new SongLibrary(_dir));
+        var policy = Policy("crowd-jukebox");
+        _api = ControlApi.Start(new ApiEndpoint(IPAddress.Loopback, 0), _tokens, policy, _live, _session, new SongLibrary(_dir), new RequestDesk(_live.Queue, policy.Queue, new SystemClock()));
         _http = new HttpClient { BaseAddress = _api.Address };
     }
 
@@ -212,6 +214,97 @@ public sealed class QueueApiTests : IAsyncDisposable
         var svg = reply.GetProperty("pairingQr").GetString()!;
         Assert.StartsWith("<svg", svg, StringComparison.Ordinal);
         Assert.Equal(PairingQr.Svg(reply.GetProperty("pairingUrl").GetString()!), svg);
+    }
+
+    private Task<(HttpStatusCode Status, JsonElement Body)> Request(string song, string token) =>
+        Send(HttpMethod.Post, "requests", JsonSerializer.Serialize(new { song }), token);
+
+    [Fact]
+    public async Task Guests_request_songs_and_the_crowd_votes_them_up()
+    {
+        await Queue("Opener.mid");
+        _live.Cue(0);
+        var table4 = await Token(Role.Guest, "table 4");
+        var table7 = await Token(Role.Guest, "table 7");
+        var table9 = await Token(Role.Guest, "table 9");
+
+        var (status, reply) = await Request("Ballad.mid", table4);
+        Assert.Equal(HttpStatusCode.Created, status);
+        Assert.Equal("request", reply.GetProperty("song").GetProperty("kind").GetString());
+        Assert.True(reply.GetProperty("song").GetProperty("mine").GetBoolean());
+        Assert.Equal(HttpStatusCode.Created, (await Request("covers/Closer.mid", table7)).Status);
+
+        // Asking for a song already requested is a vote for it.
+        var (again, vote) = await Request("covers/Closer.mid", table9);
+        Assert.Equal(HttpStatusCode.OK, again);
+        Assert.True(vote.GetProperty("countedAsVote").GetBoolean());
+        Assert.Equal(["Opener", "Closer", "Ballad"], await Titles());
+
+        var (_, queue) = await Send(HttpMethod.Get, "queue", token: table9);
+        var closer = queue.GetProperty("songs")[1];
+        Assert.Equal((2, true, false), (closer.GetProperty("votes").GetInt32(), closer.GetProperty("voted").GetBoolean(), closer.GetProperty("mine").GetBoolean()));
+        Assert.True(queue.GetProperty("requests").GetProperty("open").GetBoolean());
+        Assert.DoesNotContain(table4, queue.GetRawText(), StringComparison.Ordinal);
+
+        var ballad = queue.GetProperty("songs")[2].GetProperty("id").GetString();
+        Assert.Equal(HttpStatusCode.OK, (await Send(HttpMethod.Post, $"queue/{ballad}/vote", token: table9)).Status);
+        Assert.Equal(HttpStatusCode.OK, (await Send(HttpMethod.Post, $"queue/{ballad}/vote", token: table7)).Status);
+        Assert.Equal(["Opener", "Ballad", "Closer"], await Titles()); // 3 votes beat 2
+        Assert.Equal(HttpStatusCode.Conflict, (await Send(HttpMethod.Post, $"queue/{ballad}/vote", token: table7)).Status);
+        Assert.Equal(HttpStatusCode.OK, (await Send(HttpMethod.Delete, $"queue/{ballad}/vote", token: table7)).Status);
+    }
+
+    [Fact]
+    public async Task Guest_limits_answer_429_with_retry_after()
+    {
+        var guest = await Token(Role.Guest, "table 4");
+        Assert.Equal(HttpStatusCode.Created, (await Request("Ballad.mid", guest)).Status);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "requests") { Content = new StringContent("""{"song":"Opener.mid"}""", Encoding.UTF8, "application/json") };
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", guest);
+        using var response = await _http.SendAsync(request, Ct);
+        Assert.Equal(HttpStatusCode.TooManyRequests, response.StatusCode);
+        Assert.InRange(response.Headers.RetryAfter!.Delta!.Value.TotalSeconds, 290, 300); // crowd-jukebox: one every 5 min
+
+        var (_, status) = await Send(HttpMethod.Get, "requests", token: guest);
+        Assert.Equal(1, status.GetProperty("you").GetProperty("waiting").GetInt32());
+        Assert.InRange(status.GetProperty("you").GetProperty("nextRequestInSeconds").GetDouble(), 290, 300);
+    }
+
+    [Fact]
+    public async Task The_owner_pauses_requests_and_guests_cannot()
+    {
+        var guest = await Token(Role.Guest, "table 4");
+        Assert.Equal(HttpStatusCode.Forbidden, (await Send(HttpMethod.Put, "requests", """{"open":false}""", guest)).Status);
+        Assert.Equal(HttpStatusCode.OK, (await Send(HttpMethod.Put, "requests", """{"open":false}""")).Status);
+
+        var (status, body) = await Request("Ballad.mid", guest);
+        Assert.Equal(HttpStatusCode.Conflict, status);
+        Assert.Contains("paused", body.GetProperty("error").GetString(), StringComparison.Ordinal);
+        Assert.False((await Send(HttpMethod.Get, "queue")).Body.GetProperty("requests").GetProperty("open").GetBoolean());
+
+        Assert.Equal(HttpStatusCode.OK, (await Send(HttpMethod.Put, "requests", """{"open":true}""")).Status);
+        Assert.Equal(HttpStatusCode.Created, (await Request("Ballad.mid", guest)).Status);
+        Assert.Equal(HttpStatusCode.BadRequest, (await Send(HttpMethod.Put, "requests", "{}")).Status);
+    }
+
+    [Fact]
+    public async Task Requests_need_a_library_song()
+    {
+        var guest = await Token(Role.Guest, "table 4");
+        Assert.Equal(HttpStatusCode.NotFound, (await Request("../secret.mid", guest)).Status);
+        Assert.Equal(HttpStatusCode.BadRequest, (await Send(HttpMethod.Post, "requests", "{}", guest)).Status);
+        Assert.Empty(await Titles());
+    }
+
+    [Fact]
+    public async Task Play_sets_take_no_requests()
+    {
+        await using var api = ControlApi.Start(new ApiEndpoint(IPAddress.Loopback, 0), Owner, _live, _session);
+        using var http = new HttpClient { BaseAddress = api.Address };
+        Assert.Equal(HttpStatusCode.Conflict, (await Send(HttpMethod.Post, "requests", """{"song":"Opener.mid"}""", http: http)).Status);
+        var (_, requests) = await Send(HttpMethod.Get, "requests", http: http);
+        Assert.False(requests.GetProperty("open").GetBoolean());
     }
 
     private static async Task<JsonElement> NextQueue(ClientWebSocket socket)

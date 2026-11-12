@@ -123,7 +123,7 @@
     const session = await response.json();
     grants = new Set(session.grants);
     document.querySelectorAll("[data-grant]").forEach((element) => {
-      element.hidden = !grants.has(element.dataset.grant);
+      element.hidden = !element.dataset.grant.split(" ").some((grant) => grants.has(grant));
     });
     const until = session.expiresAt ? ` · until ${when(session.expiresAt)}` : "";
     $("role").textContent = `${session.label ? `${session.label} · ` : ""}${session.role} · ${session.mode}${until}`;
@@ -131,7 +131,7 @@
       $("status").textContent = `This ${session.role} link can't see the band under the ${session.mode} policy.`;
       return false;
     }
-    if (grants.has("queue.edit")) loadLibrary();
+    if (grants.has("queue.edit") || grants.has("queue.request")) loadLibrary();
     if (grants.has("tokens")) loadTokens();
     return true;
   }
@@ -179,6 +179,7 @@
       case "queue":
         queue = event.queue;
         renderQueue();
+        renderLibrary();
         break;
       case "instruments":
         renderInstruments(event.instruments);
@@ -239,6 +240,13 @@
   function renderQueue() {
     const canEdit = grants.has("queue.edit");
     const last = queue.songs.length - 1;
+    const requests = queue.requests;
+    const canVote = grants.has("queue.vote") && requests && requests.votes;
+    $("requests-bar").hidden = !requests || !(grants.has("queue.request") || canEdit);
+    if (requests) {
+      $("requests-status").textContent = requests.open ? `Requests open${requests.votes ? " · vote for what plays next" : ""}` : "Requests paused";
+      $("requests-toggle").textContent = requests.open ? "Pause requests" : "Open requests";
+    }
     $("queue").replaceChildren(...queue.songs.map((song) => {
       const item = document.createElement("li");
       if (song.index < queue.current) item.className = "played";
@@ -249,13 +257,26 @@
       const text = document.createElement("span");
       text.className = "song";
       text.textContent = song.title;
-      if (song.addedBy) {
+      if (song.addedBy || song.mine) {
         const who = document.createElement("span");
         who.className = "muted";
-        who.textContent = ` · ${song.addedBy}`;
+        who.textContent = song.mine ? " · your request" : ` · ${song.addedBy}`;
         text.append(who);
       }
+      if (song.editable && song.kind === "pinned") {
+        const pin = document.createElement("span");
+        pin.className = "muted";
+        pin.textContent = " · next up";
+        text.append(pin);
+      }
       item.append(text);
+      if (song.editable && song.kind === "request") {
+        const votes = button(`▲ ${song.votes}`, song.voted ? `Take back your vote for ${song.title}` : `Vote for ${song.title}`,
+          () => call(`queue/${song.id}/vote`, null, song.voted ? "DELETE" : "POST"), !canVote || song.mine);
+        votes.classList.add("vote");
+        votes.setAttribute("aria-pressed", String(song.voted));
+        item.append(votes);
+      }
       if (canEdit && song.editable) {
         const tools = document.createElement("span");
         tools.className = "tools";
@@ -290,7 +311,13 @@
       detail.className = "muted";
       detail.textContent = ` · ${clock(song.durationSeconds)} · ${Math.round(song.bpm)} BPM`;
       text.append(detail);
-      const add = button("Add", `Queue ${song.title}`, () => call("queue", { song: song.id }));
+      // Operators add to the set; guests ask (the Conductor applies the request rules).
+      const asking = !grants.has("queue.edit");
+      const waiting = queue && queue.songs.some((s) => s.index >= queue.current && s.title === song.title);
+      const closed = asking && !(queue && queue.requests && queue.requests.open);
+      const add = asking
+        ? button(waiting ? "Queued" : "Request", `Request ${song.title}`, () => call("requests", { song: song.id }), closed)
+        : button("Add", `Queue ${song.title}`, () => call("queue", { song: song.id }));
       add.classList.add("add");
       item.append(text, add);
       return item;
@@ -432,6 +459,7 @@
   $("outro").addEventListener("click", () => call("sections/outro"));
   $("panic").addEventListener("click", () => call("panic"));
   $("library-filter").addEventListener("input", renderLibrary);
+  $("requests-toggle").addEventListener("click", () => call("requests", { open: !(queue && queue.requests && queue.requests.open) }, "PUT"));
   $("library-refresh").addEventListener("click", loadLibrary);
   $("invite-form").addEventListener("submit", invite);
   $("invite-copy").addEventListener("click", async () => {

@@ -8,7 +8,7 @@ one architecture, many modes. Sections, all optional, each defaulting to the saf
 | `controls` | Foot-controller mapping ([ADR 0012](../design-docs/0012-humans-in-the-band.md) §4) | `play --control` |
 | `limits` | Velocity cap, notes per second, quiet hours for every instrument | The safety governors in `play` and `route` |
 | `roles` | What operators and guests may do over the Control API | The Control API, every route ([SECURITY](../SECURITY.md)) |
-| `queue` | Whether a song added to an empty queue starts by itself; the jukebox's rules for guest requests | `autoplay` enforced by `serve`; request rules read and checked, enforced once guests can request (plan 0004 S6) |
+| `queue` | Whether a song added to an empty queue starts by itself; the jukebox's rules for guest requests | `autoplay`, `fill` and the request rules enforced by `serve` once guests can request (plan 0004 S6) |
 | `sessions` | How long handed-out tokens may last | `POST /tokens` |
 | `lights` | What the venue lets the lights do ([ADR 0011](../design-docs/0011-visuals-are-part-of-the-band.md) §5) | `play --lights`, `lights` |
 
@@ -117,7 +117,8 @@ tokens from the owner (`POST /tokens`), and the policy lists what each may do:
 | `sections` | `POST /sections/vamp`, `/outro` |
 | `panic` | `POST /panic` |
 | `queue.edit` | `POST /queue`, `POST /queue/{id}/move`, `DELETE /queue/{id}` |
-| `queue.request`, `queue.vote` | None yet (plan 0004 S6) |
+| `queue.request` | `POST /requests` |
+| `queue.vote` | `POST`/`DELETE /queue/{id}/vote` |
 | `tokens` | `GET`/`POST /tokens`, `DELETE /tokens/{id}`: the owner's alone |
 
 Rules that hold whatever a file says ([SECURITY](../SECURITY.md)), refused with a reason:
@@ -132,15 +133,21 @@ nothing.
 ## Queue
 
 ```json
-"queue": { "requests": true, "votes": true, "maxPerGuest": 2, "cooldownSeconds": 300, "autoplay": true }
+"queue": { "requests": true, "votes": true, "maxPerGuest": 2, "cooldownSeconds": 300,
+           "songCooldownMinutes": 45, "autoplay": true, "fill": true }
 ```
 
 - `autoplay` (default false): when the queue has run dry and someone queues a song, the band
   plays it without anyone pressing start (a jukebox). Without it the band waits for start (a
   band, a rental). Never after a restart: `serve` always waits for start before its first song,
   so a box that rebooted doesn't start playing by itself.
-- `requests` and `votes` (default false), `maxPerGuest` (1-20, default 1) and `cooldownSeconds`
-  (0-3600, default 300). Checked when the file is read; enforced once guests can request (S6).
+- `requests` and `votes` (default false), `maxPerGuest` (1-20, default 1: requests one guest may
+  have waiting) and `cooldownSeconds` (0-3600, default 300: between one guest's requests).
+  `songCooldownMinutes` (0-1440, default 60): how long before a song that played can be asked
+  for again. Enforced by `serve` ([control API](control-api.md#requests-and-votes-jukebox)).
+- `fill` (default false): when the queue runs dry, `serve` queues a random library song that has
+  rested past `songCooldownMinutes` (else the one that played longest ago), so the room never
+  goes quiet even if guest Wi-Fi dies. Fill songs follow `autoplay` like any added song.
 
 ## Sessions
 
@@ -159,7 +166,8 @@ token request without `hours` gets this. A rental's should cover the booking; a 
 | Limits | None | 16 notes/s, silent 01:00-10:00 | Velocity 100, 16 notes/s, silent 22:00-08:00 |
 | Operator | Default | Default | Default |
 | Guest | Nothing | View, request, vote | View, request |
-| Requests | Closed | 2 each, 5 min apart, votes | 1 each, 10 min apart |
+| Requests | Closed | 2 each, 5 min apart, votes, a song again after 45 min | 1 each, 10 min apart, a song again after 60 min |
+| Fill | No | Yes | No |
 | Autoplay | No | Yes | No |
 | Tokens last | 24 h | 12 h | 72 h |
 | Lights | Defaults | Defaults | 80%, 30% from 22:00 |

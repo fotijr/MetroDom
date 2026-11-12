@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "MetroDom Control API",
-    "version": "0.4.0",
+    "version": "0.5.0",
     "summary": "The one front door for apps that control a MetroDom band (ADR 0003).",
     "description": "HTTP + JSON on the local network. Every path except this spec needs `Authorization: Bearer <token>`: the token the Conductor shows when it starts (or METRODOM_API_TOKEN). The token the Conductor shows is the owner's; the owner hands out operator and guest tokens that expire, and the policy's roles say what each may do (each operation's `x-metrodom-grant`; a 403 otherwise). v0 serves a running `metrodom play` set or the `metrodom serve` service (which adds a library to queue from). Safety lives below the API: no request can bypass the safety governor. See docs/references/control-api.md.",
     "license": { "name": "MIT", "identifier": "MIT" }
@@ -110,6 +110,80 @@
           "401": { "$ref": "#/components/responses/Unauthorized" },
           "403": { "$ref": "#/components/responses/Forbidden" },
           "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" }
+        }
+      }
+    },
+    "/queue/{id}/vote": {
+      "post": {
+        "operationId": "vote",
+        "x-metrodom-grant": "queue.vote",
+        "summary": "Vote for a coming request (one vote per token per song). Requests play most votes first.",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": {
+          "200": { "$ref": "#/components/responses/DeskAccepted" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "429": { "$ref": "#/components/responses/TooSoon" }
+        }
+      },
+      "delete": {
+        "operationId": "unvote",
+        "x-metrodom-grant": "queue.vote",
+        "summary": "Take back your vote (not on your own request).",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": {
+          "200": { "$ref": "#/components/responses/DeskAccepted" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "429": { "$ref": "#/components/responses/TooSoon" }
+        }
+      }
+    },
+    "/requests": {
+      "get": {
+        "operationId": "getRequests",
+        "x-metrodom-grant": "view",
+        "summary": "Whether requests and votes are open, the rules, and where the caller stands.",
+        "responses": {
+          "200": {
+            "description": "Request rules and the caller's standing.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Requests" } } }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      },
+      "post": {
+        "operationId": "request",
+        "x-metrodom-grant": "queue.request",
+        "summary": "Ask for a library song. Joins the requests (after pinned songs, before the set), ordered by votes. A song already requested counts as a vote.",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["song"], "properties": { "song": { "type": "string", "description": "A library id from GET /library." } } } } } },
+        "responses": {
+          "200": { "$ref": "#/components/responses/DeskAccepted" },
+          "201": { "$ref": "#/components/responses/DeskAccepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "429": { "$ref": "#/components/responses/TooSoon" }
+        }
+      },
+      "put": {
+        "operationId": "setRequestsOpen",
+        "x-metrodom-grant": "queue.edit",
+        "summary": "Pause or reopen guest requests and votes (the policy decides whether there are any).",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["open"], "properties": { "open": { "type": "boolean" } } } } } },
+        "responses": {
+          "200": { "$ref": "#/components/responses/Message" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
           "409": { "$ref": "#/components/responses/Conflict" }
         }
       }
@@ -312,7 +386,19 @@
       "Forbidden": { "description": "The token works, but its role may not do this under the policy (or the route declares no grant).", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
       "Unauthorized": { "description": "Missing, wrong, revoked or expired bearer token.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
       "Conflict": { "description": "Not possible in the current state (e.g. stop while waiting).", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
-      "NotFound": { "description": "No such song or token.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+      "NotFound": { "description": "No such song or token.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+      "TooSoon": {
+        "description": "A guest limit: songs waiting, time between requests, or too many tries a minute. Retry-After says when trying again can work.",
+        "headers": { "Retry-After": { "schema": { "type": "integer" }, "description": "Seconds." } },
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+      },
+      "DeskAccepted": {
+        "description": "The request or vote counted.",
+        "content": { "application/json": { "schema": { "type": "object", "required": ["message", "countedAsVote", "song"], "properties": {
+          "message": { "type": "string" },
+          "countedAsVote": { "type": "boolean", "description": "The song was already requested, so this counted as a vote." },
+          "song": { "$ref": "#/components/schemas/QueuedSong" } } } } }
+      }
     },
     "schemas": {
       "Message": {
@@ -386,7 +472,25 @@
           "id": { "type": "string", "description": "Stable while queued: moves and removes name it." },
           "title": { "type": "string" },
           "addedBy": { "type": ["string", "null"], "description": "The label (or role) of the token that queued it; null for the set it started with." },
-          "editable": { "type": "boolean", "description": "Whether it can still be moved or removed (it's coming, not played or playing)." }
+          "editable": { "type": "boolean", "description": "Whether it can still be moved or removed (it's coming, not played or playing)." },
+          "kind": { "type": "string", "enum": ["pinned", "request", "set"], "description": "Coming songs play pinned first, then requests (most votes first), then the set." },
+          "votes": { "type": "integer", "minimum": 0, "description": "Votes for a request (the requester's included)." },
+          "voted": { "type": "boolean", "description": "Whether the caller voted for it." },
+          "mine": { "type": "boolean", "description": "Whether the caller requested it." }
+        }
+      },
+      "Requests": {
+        "type": "object",
+        "required": ["open", "votes"],
+        "properties": {
+          "open": { "type": "boolean", "description": "Guests can ask for songs now (policy queue.requests, not paused)." },
+          "votes": { "type": "boolean", "description": "Guests can vote now." },
+          "maxPerGuest": { "type": "integer" },
+          "cooldownSeconds": { "type": "number" },
+          "songCooldownMinutes": { "type": "number" },
+          "you": { "type": "object", "properties": {
+            "waiting": { "type": "integer" }, "maxWaiting": { "type": "integer" },
+            "nextRequestInSeconds": { "type": ["number", "null"] } } }
         }
       },
       "Queue": {
@@ -396,7 +500,8 @@
           "current": { "type": "integer", "minimum": -1, "description": "Index of the song playing or up next; -1 before the set; songs.length when the queue ran dry." },
           "editableFrom": { "type": "integer", "minimum": 0, "description": "First index that can be moved, removed or inserted at." },
           "version": { "type": "integer", "description": "Counts changes." },
-          "songs": { "type": "array", "items": { "$ref": "#/components/schemas/QueuedSong" } }
+          "songs": { "type": "array", "items": { "$ref": "#/components/schemas/QueuedSong" } },
+          "requests": { "type": ["object", "null"], "description": "Under serve: whether requests and votes are open now.", "properties": { "open": { "type": "boolean" }, "votes": { "type": "boolean" } } }
         }
       },
       "QueueRequest": {

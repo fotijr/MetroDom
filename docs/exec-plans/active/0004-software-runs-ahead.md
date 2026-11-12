@@ -45,7 +45,8 @@ each phase closes its tech-debt rows and raises its row in [QUALITY_SCORE.md](..
       ([calibration](../../references/calibration.md))
 
 ### Phase S6: Crowd jukebox mode (M7)
-- [ ] Guest requests, votes, cooldowns, rate limits on untrusted input
+- [x] Guest requests, votes, cooldowns, rate limits on untrusted input
+      ([requests and votes](../../references/control-api.md#requests-and-votes-jukebox))
 
 ## Decisions log
 - 2026-11-12: Safety first, chosen by the owner. The all-off is its own MetroDom SysEx message
@@ -106,6 +107,17 @@ each phase closes its tech-debt rows and raises its row in [QUALITY_SCORE.md](..
   not in the instrument, because they include this rig's mic and cables. Measured beats declared,
   and the command line beats both. The boot check only flags (ADR 0004); applying drift by
   itself is left open below.
+
+- 2026-11-12: S6 shape. Requests live in the one queue, not beside it: what's coming is pinned,
+  then requests by votes, then the set, so every client draws one list and the set loop didn't
+  change. An operator placing a song pins it ahead of requests or drops it into the set by where
+  it lands, which keeps `move` meaning "put it here". The guest rules are one Core class on the
+  monotonic clock (`RequestDesk`), with the token as the guest (no accounts, no device
+  fingerprinting, SECURITY.md privacy). A request for a song already requested becomes a vote,
+  so duplicates never queue. Refused tries count toward the flood limit. Policy gained
+  `songCooldownMinutes` and `fill` (the spec's per-song cooldown and auto-fill playlist). Found
+  and fixed on the way: a service that booted with an empty queue would autoplay the first song
+  added under a jukebox policy. It now waits for start, as RELIABILITY says.
 
 ## Open questions
 - Should the boot check apply what it measured when an instrument drifted (rental boxes that

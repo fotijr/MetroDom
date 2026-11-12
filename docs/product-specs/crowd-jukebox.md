@@ -1,6 +1,12 @@
 # Spec: Crowd-controlled jukebox
 
-Status: Draft · Profile: `crowd-jukebox`
+Status: Draft, first cut built (plan 0004 S6) · Profile: `crowd-jukebox`
+
+Built: guest join by QR, the library to request from, requests ordered by votes, de-duplication
+(a repeat request is a vote), per-guest and per-song cooldowns, a flood limit, owner pin, remove,
+skip and pause requests, policy velocity cap and quiet hours, and fill when the queue runs dry
+([requests and votes](../references/control-api.md#requests-and-votes-jukebox)). Not yet: venue
+filters beyond the library folder, the big-screen view, paid priority (TD-27).
 
 ## Story
 A venue installs the band. Patrons scan a QR code, browse the venue-approved library, and request

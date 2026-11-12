@@ -339,12 +339,23 @@ public sealed record PolicyProfile(string Mode, IReadOnlyDictionary<ControlActio
             return false;
         }
 
+        var songCooldown = obj["songCooldownMinutes"]?.GetValue<double>() ?? QueueRules.Closed.SongCooldown.TotalMinutes;
+        if (songCooldown is < 0 or > 1440)
+        {
+            error = "\"queue.songCooldownMinutes\" must be 0-1440.";
+            return false;
+        }
+
         queue = new QueueRules(
             obj["requests"]?.GetValue<bool>() ?? false,
             obj["votes"]?.GetValue<bool>() ?? false,
             maxPerGuest,
             TimeSpan.FromSeconds(cooldown),
-            obj["autoplay"]?.GetValue<bool>() ?? false);
+            obj["autoplay"]?.GetValue<bool>() ?? false)
+        {
+            SongCooldown = TimeSpan.FromMinutes(songCooldown),
+            Fill = obj["fill"]?.GetValue<bool>() ?? false,
+        };
         return true;
     }
 
@@ -459,6 +470,8 @@ public sealed record PolicyProfile(string Mode, IReadOnlyDictionary<ControlActio
                 ["maxPerGuest"] = Queue.MaxPerGuest,
                 ["cooldownSeconds"] = Queue.Cooldown.TotalSeconds,
                 ["autoplay"] = Queue.Autoplay,
+                ["songCooldownMinutes"] = Queue.SongCooldown.TotalMinutes,
+                ["fill"] = Queue.Fill,
             };
         }
 

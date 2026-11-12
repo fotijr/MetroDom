@@ -15,7 +15,8 @@
     "requests": true,
     "votes": false,
     "maxPerGuest": 1,
-    "cooldownSeconds": 600
+    "cooldownSeconds": 600,
+    "songCooldownMinutes": 60
   },
   "sessions": { "maxTokenHours": 72 },
   "lights": {

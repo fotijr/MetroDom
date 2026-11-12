@@ -31,10 +31,10 @@ public enum Grant
     /// <summary>Stop every actuator. Always the operator's, never a guest's.</summary>
     Panic,
 
-    /// <summary>Ask for a song (jukebox). Rules in <see cref="QueueRules"/>. No route yet.</summary>
+    /// <summary>Ask for a song (jukebox): <c>POST /requests</c>. Rules in <see cref="QueueRules"/>.</summary>
     QueueRequest,
 
-    /// <summary>Vote on queued songs (jukebox). No route yet.</summary>
+    /// <summary>Vote on coming requests (jukebox): <c>POST</c>/<c>DELETE /queue/{id}/vote</c>.</summary>
     QueueVote,
 
     /// <summary>Add, reorder and remove queued songs directly (POST/DELETE /queue).</summary>
@@ -150,8 +150,8 @@ public sealed record RolePermissions
 }
 
 /// <summary>
-/// The jukebox's rules for guest requests (the policy's <c>queue</c>). Read and checked now,
-/// enforced once the queue takes requests (exec plan 0004, S3 and S6).
+/// The jukebox's rules for guest requests (the policy's <c>queue</c>), enforced by
+/// <see cref="Setlist.RequestDesk"/> (exec plan 0004, S3 and S6).
 /// </summary>
 /// <param name="Requests">Whether guests may ask for songs at all.</param>
 /// <param name="Votes">Whether guests may vote queued songs up.</param>
@@ -163,6 +163,12 @@ public sealed record RolePermissions
 /// </param>
 public sealed record QueueRules(bool Requests, bool Votes, int MaxPerGuest, TimeSpan Cooldown, bool Autoplay = false)
 {
+    /// <summary>Least time before a song that played (or was asked for and is waiting) can be requested again.</summary>
+    public TimeSpan SongCooldown { get; init; } = TimeSpan.FromMinutes(60);
+
+    /// <summary>When the queue runs dry, queue a library song by itself, so the room never goes quiet (<c>serve</c>).</summary>
+    public bool Fill { get; init; }
+
     /// <summary>No requests, no votes: the band plays its own setlist.</summary>
     public static readonly QueueRules Closed = new(false, false, 1, TimeSpan.FromMinutes(5));
 }

@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Channels;
 using MetroDom.Conductor.Commands;
+using MetroDom.Core.Setlist;
 using Microsoft.AspNetCore.Http;
 
 namespace MetroDom.Conductor.Api;
@@ -12,7 +13,7 @@ namespace MetroDom.Conductor.Api;
 /// <c>events.schema.json</c>. Each connection polls the same snapshot as <c>GET /state</c> and
 /// sends only what changed, so clients never poll and the band's threads never wait on a socket.
 /// </summary>
-internal sealed class StateStream(LiveControl live, Session session)
+internal sealed class StateStream(LiveControl live, Session session, RequestDesk? desk = null)
 {
     public const string Subprotocol = "metrodom.v0";
 
@@ -34,7 +35,7 @@ internal sealed class StateStream(LiveControl live, Session session)
     public int Open => Volatile.Read(ref _open);
 
     /// <param name="stillValid">Checked every poll: once the caller's token is revoked or expires, the stream closes.</param>
-    public async Task<IResult> Accept(HttpContext context, Func<bool> stillValid, CancellationToken stopping)
+    public async Task<IResult> Accept(HttpContext context, Func<bool> stillValid, CancellationToken stopping, string? holder = null)
     {
         if (!context.WebSockets.IsWebSocketRequest)
         {
@@ -58,7 +59,7 @@ internal sealed class StateStream(LiveControl live, Session session)
         {
             using var socket = await context.WebSockets.AcceptWebSocketAsync(named.Length > 0 ? Subprotocol : null).ConfigureAwait(false);
             using var done = CancellationTokenSource.CreateLinkedTokenSource(stopping, context.RequestAborted);
-            await Run(socket, done, stillValid).ConfigureAwait(false);
+            await Run(socket, done, stillValid, holder).ConfigureAwait(false);
         }
         finally
         {
@@ -68,7 +69,7 @@ internal sealed class StateStream(LiveControl live, Session session)
         return Results.Empty;
     }
 
-    private async Task Run(WebSocket socket, CancellationTokenSource done, Func<bool> stillValid)
+    private async Task Run(WebSocket socket, CancellationTokenSource done, Func<bool> stillValid, string? holder)
     {
         var messages = Channel.CreateBounded<string>(new BoundedChannelOptions(64) { FullMode = BoundedChannelFullMode.DropOldest });
         void OnMessage(string text) => messages.Writer.TryWrite(text);
@@ -100,10 +101,11 @@ internal sealed class StateStream(LiveControl live, Session session)
                 }
 
                 var queue = live.Queue.Snapshot();
-                if (queue.Version != lastQueue)
+                var queueKey = queue.Version * 2 + (desk?.RequestsOpen == true ? 1 : 0); // pausing requests is news too
+                if (queueKey != lastQueue)
                 {
-                    lastQueue = queue.Version;
-                    await Send(socket, new { type = "queue", seq = ++seq, queue = ControlApi.Queue(queue) }, done.Token).ConfigureAwait(false);
+                    lastQueue = queueKey;
+                    await Send(socket, new { type = "queue", seq = ++seq, queue = ControlApi.Queue(queue, desk, holder) }, done.Token).ConfigureAwait(false);
                 }
 
                 var instruments = JsonSerializer.Serialize(ControlApi.Instruments(session), Json);

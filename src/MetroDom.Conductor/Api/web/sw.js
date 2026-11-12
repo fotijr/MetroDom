@@ -3,7 +3,7 @@
 // band state, queue and controls always go to the Conductor, live.
 "use strict";
 
-const CACHE = "metrodom-shell-v1";
+const CACHE = "metrodom-shell-v2";
 const SHELL = ["./", "app.js", "app.css", "manifest.webmanifest", "icon.svg", "icon-192.png", "icon-512.png"];
 
 self.addEventListener("install", (event) => {

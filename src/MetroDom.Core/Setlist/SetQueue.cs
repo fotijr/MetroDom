@@ -5,7 +5,39 @@ namespace MetroDom.Core.Setlist;
 /// <param name="Song">What to play: a library id, or a file path for <c>play</c>.</param>
 /// <param name="Title">What people see.</param>
 /// <param name="AddedBy">Who queued it (a token label or role), or null for the set it started with.</param>
-public sealed record QueuedSong(string Id, string Song, string Title, string? AddedBy);
+public sealed record QueuedSong(string Id, string Song, string Title, string? AddedBy)
+{
+    /// <summary>Where it sits among what's coming: pinned, then requests by votes, then the set.</summary>
+    public SongKind Kind { get; init; } = SongKind.Set;
+
+    /// <summary>Who voted for it (anonymous holder ids; the requester is the first). Never shown, only counted.</summary>
+    public IReadOnlySet<string> Voters { get; init; } = new HashSet<string>();
+
+    /// <summary>Who asked for it, for a request: the holder id the guest limits count against.</summary>
+    public string? RequestedBy { get; init; }
+
+    /// <summary>Order of asking, so equal votes play first come, first served.</summary>
+    internal long Asked { get; init; }
+
+    public int Votes => Voters.Count;
+}
+
+/// <summary>
+/// The three kinds of coming song (plan 0004 S6). What's coming is always pinned songs, then
+/// guest requests (most votes first, then first asked), then the set: the venue's or band's own
+/// list, which plays when nobody has asked for anything.
+/// </summary>
+public enum SongKind
+{
+    /// <summary>The set (or fill): plays after any requests.</summary>
+    Set,
+
+    /// <summary>Placed ahead of the requests by an operator ("play this next").</summary>
+    Pinned,
+
+    /// <summary>Asked for by a guest; ordered by votes.</summary>
+    Request,
+}
 
 /// <summary>A moment's view of the queue.</summary>
 /// <param name="Current">The song playing or up next; -1 before the set; <c>Songs.Count</c> when it ran dry.</param>
@@ -39,6 +71,7 @@ public sealed class SetQueue
     private int _current = -1;
     private long _version;
     private long _nextId;
+    private long _asked;
     private int _dropped;
 
     /// <summary>After any change, outside the lock.</summary>
@@ -140,9 +173,16 @@ public sealed class SetQueue
 
     /// <summary>
     /// Queues <paramref name="song"/> at <paramref name="at"/> (an index, at least
-    /// <see cref="QueueSnapshot.EditableFrom"/>), or at the end. Errors say what to change.
+    /// <see cref="QueueSnapshot.EditableFrom"/>), or at the end. It's pinned when everything
+    /// coming before where it lands is pinned (so "add at the front" means "play this next", even
+    /// ahead of requests), else part of the set; <paramref name="kind"/> says so outright. Errors
+    /// say what to change.
     /// </summary>
-    public bool TryAdd(string song, string title, string? addedBy, int? at, out QueuedSong added, out string? error)
+    public bool TryAdd(string song, string title, string? addedBy, int? at, out QueuedSong added, out string? error) =>
+        TryAdd(song, title, addedBy, at, null, out added, out error);
+
+    /// <inheritdoc cref="TryAdd(string, string, string?, int?, out QueuedSong, out string?)"/>
+    public bool TryAdd(string song, string title, string? addedBy, int? at, SongKind? kind, out QueuedSong added, out string? error)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(song);
         ArgumentException.ThrowIfNullOrWhiteSpace(title);
@@ -164,12 +204,126 @@ public sealed class SetQueue
 
             added = new QueuedSong(NewId(), song, title, addedBy);
             _songs.Insert(index, added);
+            added = Place(index, kind);
             _version++;
         }
 
         error = null;
         Changed?.Invoke();
         return true;
+    }
+
+    /// <summary>
+    /// A guest's request: joins the requests, ordered by votes, with the requester's own vote.
+    /// The guest rules (limits, cooldowns, duplicates) are <see cref="RequestDesk"/>'s.
+    /// </summary>
+    public bool TryRequest(string song, string title, string? addedBy, string requester, out QueuedSong added, out string? error)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(song);
+        ArgumentException.ThrowIfNullOrWhiteSpace(title);
+        ArgumentException.ThrowIfNullOrWhiteSpace(requester);
+        added = null!;
+        lock (_gate)
+        {
+            if (_songs.Count - Math.Max(0, _current) >= MaxSongs)
+            {
+                error = $"the queue is full ({MaxSongs} songs).";
+                return false;
+            }
+
+            added = new QueuedSong(NewId(), song, title, addedBy)
+            {
+                Kind = SongKind.Request,
+                Voters = new HashSet<string>(StringComparer.Ordinal) { requester },
+                RequestedBy = requester,
+                Asked = ++_asked,
+            };
+            _songs.Add(added);
+            Arrange();
+            _version++;
+        }
+
+        error = null;
+        Changed?.Invoke();
+        return true;
+    }
+
+    /// <summary>Adds (or, with <paramref name="up"/> false, takes back) <paramref name="voter"/>'s vote for a coming request.</summary>
+    public bool TryVote(string id, string voter, bool up, out QueuedSong song, out string? error)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(voter);
+        song = null!;
+        lock (_gate)
+        {
+            var index = _songs.FindIndex(s => s.Id == id);
+            if (index < 0)
+            {
+                error = $"no song {id} in the queue.";
+                return false;
+            }
+
+            var found = _songs[index];
+            if (index < EditableFrom || found.Kind != SongKind.Request)
+            {
+                error = index < EditableFrom ? "that song has played or is playing." : "only requests are voted on; this one is placed by the band.";
+                return false;
+            }
+
+            if (up == found.Voters.Contains(voter))
+            {
+                error = up ? "you already voted for it." : "you haven't voted for it.";
+                return false;
+            }
+
+            if (!up && found.RequestedBy == voter)
+            {
+                error = "you asked for it; an operator can remove it.";
+                return false;
+            }
+
+            var voters = new HashSet<string>(found.Voters, StringComparer.Ordinal);
+            _ = up ? voters.Add(voter) : voters.Remove(voter);
+            song = found with { Voters = voters };
+            _songs[index] = song;
+            Arrange();
+            _version++;
+        }
+
+        error = null;
+        Changed?.Invoke();
+        return true;
+    }
+
+    /// <summary>
+    /// Decides what the song just put at <paramref name="index"/> is (pinned when everything coming
+    /// before it is pinned, else the set, unless <paramref name="kind"/> says), then re-sorts.
+    /// </summary>
+    private QueuedSong Place(int index, SongKind? kind)
+    {
+        var first = EditableFrom;
+        var pinned = kind ?? (_songs.Skip(first).Take(index - first).All(s => s.Kind == SongKind.Pinned) ? SongKind.Pinned : SongKind.Set);
+        var song = _songs[index] with { Kind = pinned };
+        _songs[index] = song;
+        Arrange();
+        return song;
+    }
+
+    /// <summary>What's coming, in order: pinned (as placed), requests (votes, then first asked), the set (as placed).</summary>
+    private void Arrange()
+    {
+        var first = EditableFrom;
+        if (first >= _songs.Count)
+        {
+            return;
+        }
+
+        var coming = _songs.Skip(first).ToList();
+        var ordered = coming.Where(s => s.Kind == SongKind.Pinned)
+            .Concat(coming.Where(s => s.Kind == SongKind.Request).OrderByDescending(s => s.Votes).ThenBy(s => s.Asked))
+            .Concat(coming.Where(s => s.Kind == SongKind.Set))
+            .ToList();
+        _songs.RemoveRange(first, coming.Count);
+        _songs.AddRange(ordered);
     }
 
     /// <summary>Moves a coming song to index <paramref name="to"/> (in the queue as it is now).</summary>
@@ -197,9 +351,11 @@ public sealed class SetQueue
                 return false;
             }
 
+            // An operator placing a song decides where it plays: a moved request stops riding on votes.
             var song = _songs[from];
             _songs.RemoveAt(from);
             _songs.Insert(to, song);
+            Place(to, null);
             _version++;
         }
 

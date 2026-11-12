@@ -19,7 +19,9 @@
     "votes": true,
     "maxPerGuest": 2,
     "cooldownSeconds": 300,
-    "autoplay": true
+    "songCooldownMinutes": 45,
+    "autoplay": true,
+    "fill": true
   },
   "sessions": { "maxTokenHours": 12 }
 }

@@ -115,6 +115,9 @@ button.small { min-height: 2.5rem; min-width: 2.5rem; padding: .2rem .6rem; }
 .queue li.played { opacity: .5; }
 .song { flex: 1; min-width: 0; }
 .tools { display: flex; gap: .3rem; flex: none; }
+.vote { flex: none; font-variant-numeric: tabular-nums; min-width: 3.2rem; }
+.vote[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
+#requests-bar { justify-content: space-between; align-items: center; }
 .library { max-height: 22rem; overflow-y: auto; }
 .search { display: flex; gap: .5rem; margin-bottom: .5rem; }
 .search input { flex: 1; }

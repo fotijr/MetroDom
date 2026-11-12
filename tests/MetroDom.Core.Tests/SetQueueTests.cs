@@ -54,7 +54,8 @@ public sealed class SetQueueTests
         var queue = Queue("a", "b", "c");
         var c = queue.Snapshot().Songs[2];
         Assert.True(queue.TryMove(c.Id, 0, out _));
-        Assert.Equal(c, queue.Snapshot().Songs[0]);
+        Assert.Equal(c.Id, queue.Snapshot().Songs[0].Id);
+        Assert.Equal(SongKind.Pinned, queue.Snapshot().Songs[0].Kind); // placed at the front: "play this next"
         Assert.Equal(3, queue.Snapshot().Songs.Select(s => s.Id).Distinct().Count());
         Assert.False(queue.TryRemove("nope", out var error));
         Assert.Contains("no song nope", error, StringComparison.Ordinal);

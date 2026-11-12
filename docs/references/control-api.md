@@ -74,6 +74,36 @@ METRODOM_API_TOKEN=… metrodom play song.mid -o 0 --api 0.0.0.0:7890    # one s
 - What happens when a queue that ran dry gets a song is the policy's `queue.autoplay`
   ([policy profile](policy-profile.md)).
 
+## Requests and votes (jukebox)
+
+Under `serve`, guests ask for songs and vote on them, within the policy's `queue` rules
+([policy profile](policy-profile.md#queue)). The rules live in `RequestDesk`
+(`src/MetroDom.Core/Setlist/RequestDesk.cs`).
+
+- **Order of what's coming:** `pinned` songs first, then `request`s (most votes first, then the
+  one asked first), then the `set` (the venue's or band's own list, and fill songs). Each song
+  shows its `kind` and `votes`, and for the caller, `voted` and `mine`. Nobody's ids or votes are
+  shown, only counted.
+- An operator placing a song decides where it plays. Added or moved ahead of every request, it's
+  **pinned** ("play this next"); anywhere after, it's part of the set. A request an operator
+  moves stops riding on votes.
+- `POST /requests {"song": "<library id>"}` (grant `queue.request`): `201` a new request with the
+  requester's vote. `200` with `countedAsVote` when someone already requested the song.
+  - `409`: requests closed or paused, the song is already queued, up now, or played within
+    `songCooldownMinutes`. The message says when it can be asked for again.
+  - `429` with `Retry-After`: a guest limit (`maxPerGuest` waiting, `cooldownSeconds` between
+    requests, or more than 20 tries a minute, refused ones included).
+  - Owners and operators skip the guest limits but not the song rules.
+- `POST /queue/{id}/vote` and `DELETE /queue/{id}/vote` (grant `queue.vote`): one vote per token
+  per request. You can't take back the vote on your own request. `409` for a song that isn't a
+  coming request, `404` for an unknown id.
+- `GET /requests` (grant `view`): `open`, `votes`, the rules, and `you` (`waiting`, `maxWaiting`,
+  `nextRequestInSeconds`). `PUT /requests {"open": false}` (grant `queue.edit`) pauses requests
+  and votes; the policy decides whether there are any at all. The queue's `requests.open` follows
+  on the stream.
+- A guest token is the guest. One QR handed to a table is one guest for the limits.
+- `play` takes no requests: `409`.
+
 ## Web remote
 
 `play --api` and `serve` also serve a phone-sized remote at `/` (`src/MetroDom.Conductor/Api/web/`:
@@ -83,6 +113,10 @@ next, tempo ±2%, tap, vamp, outro and a big **PANIC** button.
 
 - **Queue and library** (with `queue.edit`): ↑ ↓ ✕ on each coming song, and a searchable library
   with an Add button per song. Everyone with `view` sees the queue and who added what.
+- **Requests** (with `queue.request` / `queue.vote`): guests get the library with a Request
+  button ("Queued" once it's in), ▲ N on each coming request to vote or take a vote back, and
+  "your request" on their own. Refusals show as messages ("try again in 5 min"). Operators get
+  Pause requests / Open requests.
 - **Invite** (owner): pick operator or guest, a name and hours; the page shows the QR code to scan
   with a phone camera, a Copy link (and Share where the phone has it) button, and the tokens out
   now with Revoke.

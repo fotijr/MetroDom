@@ -34,10 +34,16 @@ metrodom serve ~/songs --api 7890 --no-mdns                         # this compu
 - The queue is the set: history (up to 20 played songs), the song up now, and what's coming.
   Owners and operators with `queue.edit` add from the library, reorder and remove what's coming
   from the remote or the API ([control API](control-api.md#queue-and-library)).
-- Songs play one after another as in `play`. When the last one ends, the band waits for more.
+- Guests with a jukebox policy request and vote ([requests and votes](control-api.md#requests-and-votes-jukebox)).
+  What's coming plays pinned songs, then requests by votes, then the set.
+- Songs play one after another as in `play`. When the last one ends, the band waits for more,
+  unless the policy has `queue.fill`, which queues a rested library song (added by "fill").
 - A song added to a queue that ran dry starts by itself only with the policy's `queue.autoplay`
   (the crowd-jukebox profile); otherwise it waits for start (Enter, the start pedal, or Start on
-  the remote). Stop and panic always wait for someone to start again.
+  the remote). Stop and panic always wait for someone to start again, and so does the first song
+  after boot, even one queued (or filled) into an empty queue.
+- After a restart the songs still to play come back in order, but as set songs: requests lose
+  their votes and guests' limits start fresh (TD-27).
 - A queued song whose file was removed is skipped with a message.
 
 ## State file (`state.json`, `metrodom.service-state/0`)
