@@ -495,7 +495,7 @@ std::string Hex(const std::vector<uint8_t>& bytes) {
 void body_RoundTrips() {
   Body m1 = M1();
   auto bytes = Encode(m1);
-  CHECK(bytes.size() == 20 + 3 * 10 + 12 + 18 + 2);
+  CHECK(bytes.size() == 20 + 3 * 10 + 12 + 18 + 4 + 3 * 5 + 2);
   Body back;
   CHECK(parseBody(bytes.data(), bytes.size(), back) == BodyError::None);
   CHECK(back.driver == BodyDriver::Pca9685 && back.address == 0x40 && back.count == 3);
@@ -533,16 +533,15 @@ std::string ReadFixture(const char* path) {
   return committed;
 }
 
-void accent_RoundTripsAsVersion2_AndMatchesTheFixture() {
+void accent_RoundTrips_AndMatchesTheFixture() {
   auto bytes = Encode(M1Accent());
   CHECK(bytes.size() == 20 + 3 * 10 + 19 + 18 + 4 + 3 * 5 + 2);
-  CHECK(bytes[3] == 2);
   Body back;
   CHECK(parseBody(bytes.data(), bytes.size(), back) == BodyError::None);
   CHECK(back.ledCount == 9 && back.ledBrightnessPercent == 20 && back.flashMs == 80);
   CHECK(back.actuators[2].ledFirst == 6 && back.actuators[2].ledCount == 3 && back.actuators[2].color[2] == 0xFF);
   CHECK(Encode(back) == bytes);
-  CHECK(Encode(M1())[3] == 1);  // no LEDs: still version 1, byte for byte
+  CHECK(Encode(M1()).size() == 20 + 3 * 10 + 12 + 18 + 4 + 3 * 5 + 2);  // no LEDs: the block is zeros
 
   std::string expected = Hex(bytes);
   std::string committed = ReadFixture(BODY_ACCENT_FIXTURE);
@@ -598,7 +597,7 @@ void accent_BodyRefusesWhatItCantShow() {
   gpio.flashMs = 80;
   CHECK(validateBody(gpio) == BodyError::Output);
 
-  // A version 2 record must have a strip.
+  // No strip, but the notes still name LEDs.
   auto bytes = Encode(M1Accent());
   bytes[20 + 3 * 10 + 19 + 18] = 0;  // ledCount
   uint16_t crc = crc16(bytes.data(), bytes.size() - 2);
@@ -1086,7 +1085,7 @@ int main() {
       bodyWrite_SaysWhenItCant, pca9685_DrivesFullOnAndFullOff,
       pca9685_UnderTheBrain_FaultsWhenTheChipGoesAway, eeprom_WritesPages_AndVerifies,
       outputEnable_OnlyWhileTheBrainIsHealthy, pca9685_OutputEnable_DrivesOe_EvenWithTheChipGone,
-      bodyRead_SendsTheRecordItBootedFrom, accent_RoundTripsAsVersion2_AndMatchesTheFixture,
+      bodyRead_SendsTheRecordItBootedFrom, accent_RoundTrips_AndMatchesTheFixture,
       accent_BodyRefusesWhatItCantShow, accent_StrikeFlashesItsLeds_ForFlashMs,
       accent_RefusedNotesDontFlash_AndPanicDarkens, accent_CeilingsAndRanges_AreClamped, accent_LargestProfileFits,
   };

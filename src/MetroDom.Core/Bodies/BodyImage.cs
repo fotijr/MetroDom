@@ -49,7 +49,7 @@ public sealed record BodyDefinition(string Id, string Name, BodyDriver Driver, i
 
     public int WatchdogMs { get; init; } = 500;
 
-    /// <summary>The body's accent LED strip, or <c>null</c> for none (a version 1 record).</summary>
+    /// <summary>The body's accent LED strip, or <c>null</c> for none.</summary>
     public AccentStrip? Accent { get; init; }
 
     /// <summary>Whether any note's strike gets shorter with lower velocity.</summary>
@@ -74,8 +74,9 @@ public sealed record BodyDefinition(string Id, string Name, BodyDriver Driver, i
 
 /// <summary>
 /// Body records: JSON ↔ definition ↔ bytes. The byte layout, the limits and the error numbers are
-/// shared with the brain firmware; both test suites check <c>bodies/m1-xylophone.hex</c> (version 1)
-/// and <c>bodies/m1-xylophone-accent.hex</c> (version 2, with accent LEDs).
+/// shared with the brain firmware; both test suites check <c>bodies/m1-xylophone.hex</c> and
+/// <c>bodies/m1-xylophone-accent.hex</c> (with accent LEDs). The format byte stays 1 until the owner
+/// calls production: until then the layout changes in place, with no old-layout support.
 /// </summary>
 public static class BodyImage
 {
@@ -109,7 +110,6 @@ public static class BodyImage
     public const int MaxBytes = HeaderBytes + (MaxActuators * ActuatorBytes) + MaxIdLength + MaxNameLength
         + LedHeaderBytes + (MaxActuators * LedBytes) + 2;
     private const byte Version = 1;
-    private const byte VersionLeds = 2;
     private static readonly JsonSerializerOptions Indented = new() { WriteIndented = true };
     private const byte Omni = 0xFF;
 
@@ -286,11 +286,10 @@ public static class BodyImage
             throw new ArgumentException(error, nameof(body));
         }
 
-        var total = HeaderBytes + (body.Notes.Count * ActuatorBytes) + body.Id.Length + body.Name.Length + 2
-            + (body.Accent is null ? 0 : LedHeaderBytes + (body.Notes.Count * LedBytes));
+        var total = RecordLength(body.Notes.Count, body.Id.Length, body.Name.Length);
         var bytes = new byte[total];
         "MDB"u8.CopyTo(bytes);
-        bytes[3] = body.Accent is null ? Version : VersionLeds;
+        bytes[3] = Version;
         Put16(bytes, 4, total);
         bytes[6] = (byte)body.Driver;
         bytes[7] = (byte)body.Address;
@@ -317,9 +316,10 @@ public static class BodyImage
 
         Encoding.ASCII.GetBytes(body.Id, bytes.AsSpan(at));
         Encoding.ASCII.GetBytes(body.Name, bytes.AsSpan(at + body.Id.Length));
+        at += body.Id.Length + body.Name.Length;
         if (body.Accent is { } strip)
         {
-            at += body.Id.Length + body.Name.Length;
+            // No strip: the block stays all zeros.
             bytes[at] = (byte)strip.Leds;
             bytes[at + 1] = (byte)strip.MaxBrightnessPercent;
             Put16(bytes, at + 2, strip.FlashMs);
@@ -353,10 +353,9 @@ public static class BodyImage
             return false;
         }
 
-        var version = bytes[3];
-        if (version is not (Version or VersionLeds))
+        if (bytes[3] != Version)
         {
-            error = $"body record version {version}; this Conductor reads versions {Version} and {VersionLeds}.";
+            error = $"body record format {bytes[3]}; this Conductor reads format {Version}.";
             return false;
         }
 
@@ -374,8 +373,7 @@ public static class BodyImage
         }
 
         int count = bytes[11], idLength = bytes[18], nameLength = bytes[19];
-        var plain = HeaderBytes + (count * ActuatorBytes) + idLength + nameLength + 2;
-        if (total != (version == Version ? plain : plain + LedHeaderBytes + (count * LedBytes)))
+        if (total != RecordLength(count, idLength, nameLength))
         {
             error = "bad length.";
             return false;
@@ -384,15 +382,14 @@ public static class BodyImage
         var text = HeaderBytes + (count * ActuatorBytes);
         var ledsAt = text + idLength + nameLength;
         AccentStrip? accent = null;
-        if (version == VersionLeds)
+        if (bytes[ledsAt] != 0)
         {
-            if (bytes[ledsAt] == 0)
-            {
-                error = "bad accent LEDs.";
-                return false;
-            }
-
             accent = new AccentStrip(bytes[ledsAt], bytes[ledsAt + 1], Get16(bytes, ledsAt + 2));
+        }
+        else if ((bytes[ledsAt + 1] | bytes[ledsAt + 2] | bytes[ledsAt + 3]) != 0)
+        {
+            error = "bad accent LEDs.";
+            return false;
         }
 
         var notes = new List<BodyActuator>(count);
@@ -402,11 +399,11 @@ public static class BodyImage
             var led = ledsAt + LedHeaderBytes + (i * LedBytes);
             notes.Add(new BodyActuator(bytes[at], bytes[at + 1], Get16(bytes, at + 2), Get16(bytes, at + 4), Get16(bytes, at + 6), Get16(bytes, at + 8))
             {
-                Led = accent is null || bytes[led + 1] == 0
+                Led = bytes[led + 1] == 0
                     ? null
                     : new AccentLed(bytes[led], bytes[led + 1], (bytes[led + 2] << 16) | (bytes[led + 3] << 8) | bytes[led + 4]),
             });
-            if (accent is not null && bytes[led + 1] == 0 && (bytes[led] | bytes[led + 2] | bytes[led + 3] | bytes[led + 4]) != 0)
+            if (bytes[led + 1] == 0 && (bytes[led] | bytes[led + 2] | bytes[led + 3] | bytes[led + 4]) != 0)
             {
                 error = "bad accent LEDs.";
                 return false;
@@ -669,6 +666,9 @@ public static class BodyImage
         return text.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
             && int.TryParse(text.AsSpan(2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out address);
     }
+
+    private static int RecordLength(int count, int idLength, int nameLength) =>
+        HeaderBytes + (count * (ActuatorBytes + LedBytes)) + idLength + nameLength + LedHeaderBytes + 2;
 
     private static int Get16(ReadOnlySpan<byte> bytes, int at) => bytes[at] | (bytes[at + 1] << 8);
 

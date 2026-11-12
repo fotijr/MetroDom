@@ -62,8 +62,8 @@ phase is fun on its own and doesn't wait for the next one.
 
 ## Decisions log
 - 2026-11-12: V1 firmware built ahead of the hardware, like the body record. Proposed, not yet
-  accepted by the owner: the strip is part of the body record (version 2; a body without one stays
-  version 1, byte for byte), on brain GPIO 7 through a 74AHCT125, at most 64 LEDs and 25%
+  accepted by the owner: the strip is part of the body record (an LED block after the name, all
+  zeros on a body without one), on brain GPIO 7 through a 74AHCT125, at most 64 LEDs and 25%
   brightness (about 1 A worst case). Each note owns a range of LEDs and a color; ranges can't
   overlap, so one note's flash ending never darkens another's. Only strikes flash (a refused note
   stays dark), brightness scales with velocity, and every panic turns the LEDs off with the coils.

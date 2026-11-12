@@ -1,7 +1,7 @@
 # Body record (the body's ID EEPROM)
 
 Status: **Accepted** by the owner on 2026-11-12 (binary record, hold-to-write button, `/OE` on
-the brain). [Accent LEDs](#accent-leds) (version 2) are **Proposed**, built ahead of the hardware. Implements [ADR 0006](../design-docs/0006-swappable-instrument-brains.md) §3:
+the brain). [Accent LEDs](#accent-leds) are **Proposed**, built ahead of the hardware. Implements [ADR 0006](../design-docs/0006-swappable-instrument-brains.md) §3:
 a body describes itself, so any brain plugged into it becomes that instrument.
 Code: firmware `Instruments/metrodom_brain/src/brain/Body.{h,cpp}`, Conductor
 `src/MetroDom.Core/Bodies/`, `metrodom body`. Plan: [0005](../exec-plans/active/0005-brain-for-m1.md).
@@ -58,15 +58,19 @@ What the owner writes and keeps next to the instrument. [bodies/m1-xylophone.jso
 **Ceilings.** The firmware refuses any body over 250 ms per pulse or 50% duty, and clamps a
 compiled-in config to them too. Raising them means changing the firmware, on purpose.
 
-## Bytes (version 1)
+## Bytes
 
-Little-endian, at EEPROM address 0. A 24LC32 holds 4 KB; the largest record is 346 bytes
-(262 without accent LEDs).
+Little-endian, at EEPROM address 0. A 24LC32 holds 4 KB; the largest record is 346 bytes.
+
+**No versioning until production.** The format byte stays `1`. Until the owner says MetroDom is
+in production (polished hardware playing gigs), the layout changes in place: a change rewrites
+the fixtures, and bodies are written again with `metrodom body write`. Neither side keeps code
+for an old layout.
 
 | Offset | Size | Field |
 | --- | --- | --- |
 | 0 | 3 | `MDB` |
-| 3 | 1 | version `1` |
+| 3 | 1 | format `1` (not bumped until production) |
 | 4 | 2 | record length, including the CRC |
 | 6 | 1 | driver: 0 GPIO, 1 PCA9685 |
 | 7 | 1 | PCA9685 address (0 for GPIO) |
@@ -81,11 +85,11 @@ Little-endian, at EEPROM address 0. A 24LC32 holds 4 KB; the largest record is 3
 | 19 | 1 | name length |
 | 20 | 10 per note | note, output, pulseMs (2), minPulseMs (2), minIntervalMs (2), latencyMs (2) |
 | … | | id, then name (ASCII, no terminator) |
-| … | | Version 2 only: LED count, maxBrightnessPercent, flashMs (2), then 5 per note in note order: first, count (0 = none), R, G, B |
+| … | 1 | accent LED count, 0 = none (and the rest of this block all zero) |
+| … | 1 | accent maxBrightnessPercent |
+| … | 2 | accent flashMs |
+| … | 5 per note | in note order: LED first, LED count (0 = none), R, G, B |
 | end − 2 | 2 | CRC-16/CCITT-FALSE (poly `1021`, init `FFFF`) of everything before it |
-
-A body without accent LEDs is always written as version 1, byte for byte as before, so a brain
-that only knows version 1 still reads it. Version 2 is used only when there's a strip.
 
 Binary, not the profile JSON stored verbatim: the brain enforces this table, and builds the
 profile it sends from it, so what an instrument says and what it does can't drift apart; and

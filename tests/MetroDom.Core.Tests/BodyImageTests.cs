@@ -39,15 +39,13 @@ public class BodyImageTests
     }
 
     [Fact]
-    public void AccentBody_EncodesAsVersion2_ToTheBytesTheFirmwareTestCommitted()
+    public void AccentBody_EncodesToTheBytesTheFirmwareTestCommitted()
     {
-        // brain_test.cpp accent_RoundTripsAsVersion2_AndMatchesTheFixture checks the same file.
+        // brain_test.cpp accent_RoundTrips_AndMatchesTheFixture checks the same file.
         var hex = File.ReadAllText(BodyFile("m1-xylophone-accent.hex")).Trim();
         var record = BodyImage.Encode(M1Accent());
 
         Assert.Equal(hex, BodyImage.ToHex(record));
-        Assert.Equal(2, record[3]);
-        Assert.Equal(1, BodyImage.Encode(M1())[3]);
         Assert.True(BodyImage.TryDecode(record, out var back, out var error), error);
         Assert.Equal(new AccentStrip(9, 20, 80), back.Accent);
         Assert.Equal(new AccentLed(6, 3, 0x0080FF), back.Notes[2].Led);

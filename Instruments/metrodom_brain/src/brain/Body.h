@@ -5,7 +5,8 @@
 // (src/MetroDom.Core/Bodies/BodyImage.cs) must produce exactly what this parser accepts:
 // both test suites check the bench fixture (bench-body.hex).
 //
-// Layout, little-endian, version 1, or 2 with accent LEDs (docs/references/body-record.md):
+// Layout, little-endian (docs/references/body-record.md). The format byte stays 1 until the
+// owner calls production: until then the layout changes in place, with no old-layout support.
 //   0  3  "MDB"            magic
 //   3  1  1                format version
 //   4  2  length           whole record including the CRC
@@ -24,8 +25,8 @@
 //                          (a GPIO output can't be 4, 5 or 6: the backplane's I2C and /OE)
 //   .  idLength            id: a-z, 0-9, '-'
 //   .  nameLength          name: printable ASCII
-// Version 2 only (a body with accent LEDs; one without is always written as version 1):
-//   .  1  ledCount         1-kMaxLeds, on GPIO kPinLeds
+//   .  1  ledCount         accent LEDs on GPIO kPinLeds, 0-kMaxLeds (0 = none, and the rest of
+//                          this block all zero)
 //   .  1  brightness       1-kCeilingLedPercent
 //   .  2  flashMs          10-1000
 //   .  count x 5           per actuator, in order: ledFirst, ledCount (0 = none), R, G, B
@@ -50,7 +51,6 @@ constexpr size_t kBodyMaxBytes = kBodyHeaderBytes + kMaxActuators * kBodyActuato
                                  kBodyLedHeaderBytes + kMaxActuators * kBodyLedBytes + 2;
 static_assert(kBodyMaxBytes == kMaxBodyBytes, "Brain.h's buffer must hold the largest record");
 constexpr uint8_t kBodyVersion = 1;
-constexpr uint8_t kBodyVersionLeds = 2;
 
 // Brain pins the backplane uses, so a GPIO body can't (hardware/modules/body-backplane).
 // The accent strip's data pin is reserved only on a body that has accent LEDs.
@@ -88,7 +88,7 @@ struct Body {
   uint16_t maxOnMs = 45;
   uint16_t dutyWindowMs = 1000;
   uint16_t watchdogMs = 500;
-  uint8_t ledCount = 0;            // 0 = no accent LEDs (a version 1 record)
+  uint8_t ledCount = 0;            // 0 = no accent LEDs
   uint8_t ledBrightnessPercent = 0;
   uint16_t flashMs = 0;
   uint8_t count = 0;
