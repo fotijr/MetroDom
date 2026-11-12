@@ -8,7 +8,11 @@ namespace MetroDom.Conductor.Cli;
 internal static class PortPicker
 {
     public static IMidiOutputPort Output(string? query, string option = "--output") =>
-        MidiDevices.OpenOutput(query ?? Pick(MidiDevices.OutputNames, "output", "instrument", option));
+        MidiDevices.OpenOutput(FindOutput(query, option));
+
+    /// <summary>The output <paramref name="query"/> names (prompting when null), not yet opened.</summary>
+    public static MidiPortInfo FindOutput(string? query, string option = "--output") =>
+        MidiDevices.FindOutput(query ?? Pick(MidiDevices.OutputNames, "output", "instrument", option));
 
     public static IMidiInputPort Input(string? query, string option = "--input") =>
         MidiDevices.OpenInput(query ?? Pick(MidiDevices.InputNames, "input", "controller", option));

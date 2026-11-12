@@ -25,7 +25,7 @@ connectors, voltages and mounting pattern. Fix those early and modules become sw
 | Actuate | `striker-servo` | Servo arm + mallet for slower, quieter or velocity-shaped strikes | Hand percussion, cymbal |
 | Actuate | `presser-solenoid` | Same solenoid, pusher tip instead of mallet | Keyboard keys, buttons |
 | Actuate | `damper-solenoid` | Same solenoid, felt pad that mutes a bar or string | Vibraphone, strings |
-| Frame | `frame-2020` | 2020 aluminium extrusion + printed adapter plates on a 20 mm grid | Every instrument |
+| Frame | `frame-2020` | 2020 aluminum extrusion + printed adapter plates on a 20 mm grid | Every instrument |
 | Transport | `case-road` | Road case, connector panel, transport locks ([ADR 0010](0010-road-ready-instruments.md)) | Long-term, if instruments travel |
 | Transport | `rig-head` | 19" rack: Conductor, power strip, hub, master kill | Long-term, if instruments travel |
 | Control | `trigger-piezo` | Clip-on piezo drum triggers → MIDI, for following a human drummer ([ADR 0012](0012-humans-in-the-band.md)) | Owner's drum set. Shares the piezo approach with `latency-jig` |

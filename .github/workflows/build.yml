@@ -6,6 +6,13 @@ on:
   pull_request:
 
 jobs:
+  firmware:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Brain firmware host tests
+        run: make -C Instruments/metrodom_brain/test
+
   dotnet:
     strategy:
       fail-fast: false

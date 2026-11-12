@@ -6,6 +6,10 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <EmbeddedResource Include="Api\openapi.json" LogicalName="MetroDom.Conductor.Api.openapi.json" />
+    <EmbeddedResource Include="Api\events.schema.json" LogicalName="MetroDom.Conductor.Api.events.schema.json" />
+    <EmbeddedResource Include="Api\web\*" LogicalName="MetroDom.Conductor.Api.web.%(Filename)%(Extension)" />
     <InternalsVisibleTo Include="MetroDom.Conductor.Tests" />
     <ProjectReference Include="..\MetroDom.Core\MetroDom.Core.csproj" />
     <PackageReference Include="Melanchall.DryWetMidi" />

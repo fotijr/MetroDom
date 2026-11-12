@@ -18,11 +18,16 @@ instruments automatically ([ADR 0007](../docs/design-docs/0007-instrument-discov
    including **measured** per-note latency.
 4. Ship a bench-test sketch and a README with wiring, power supply and measured latency.
 
+## Generic brain firmware
+[metrodom_brain/](metrodom_brain/): the one firmware for every brain. USB-MIDI, fixed strike
+pulses, duty and interval limits, panic, watchdog, Identity Reply and profile over SysEx.
+First cut: host-tested, compiled-in body config, direct GPIO.
+
 ## Current instruments (legacy serial protocol)
 | Folder | Actuation | Protocol |
 | --- | --- | --- |
 | [xylophone_solenoid/](xylophone_solenoid/) | 3 solenoids via MOSFETs, pins 9–11 | [legacy ASCII](../docs/references/legacy-serial-protocol.md) |
 | [xylophone_servo/](xylophone_servo/) | Spin servo (pin 9) + strike servo (pin 10) | [legacy ASCII](../docs/references/legacy-serial-protocol.md) |
 
-Both predate ADR 0001 and are tracked for porting in
+Both predate ADR 0001 and are ported onto the brain firmware in
 [exec plan 0001](../docs/exec-plans/active/0001-foundation-reboot.md).

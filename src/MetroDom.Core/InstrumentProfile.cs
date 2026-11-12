@@ -15,6 +15,9 @@ public sealed record InstrumentProfile(string Name, TimeSpan Latency)
     /// <summary>The only notes the instrument can play. <c>null</c> means any note.</summary>
     public IReadOnlySet<int>? Notes { get; init; }
 
+    /// <summary>The channel (0-15) the instrument listens on by default, from <c>midi.channel</c>. <c>null</c> means it didn't say.</summary>
+    public int? Channel { get; init; }
+
     /// <summary>Fastest repeat of the same note. Faster repeats are refused by the firmware.</summary>
     public TimeSpan MinInterval { get; init; }
 

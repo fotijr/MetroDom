@@ -8,7 +8,7 @@ One paragraph: what job this module does and which instruments use it.
 | `act-2p` | input | |
 
 ## Block / wiring diagram
-Mermaid for topology. A labelled photo for real wiring once one is built.
+Mermaid for topology. A labeled photo for real wiring once one is built.
 
 ## Parts
 See `bom.csv` (part ids resolve in `hardware/parts/catalog.csv`). Printed parts: `cad:<file>` rows
@@ -23,7 +23,7 @@ Numbered steps. Photos beat prose.
 | | |
 
 ## Known limits & safety
-Max current, max repeat rate, thermal notes, failure behaviour.
+Max current, max repeat rate, thermal notes, failure behavior.
 
 ## Revision history
 - A: first version.

@@ -55,7 +55,12 @@ public class ArrangerTests
         song.Chunks.Add(mixed);
 
         Assert.Equal(
-            [new SongPart(0, 0, "Lead", 2, 60, 72), new SongPart(1, 9, "Kit", 1, 36, 36), new SongPart(2, 2, "Track 3", 1, 40, 40), new SongPart(2, 3, "Track 3", 1, 41, 41)],
+            [
+                new SongPart(0, 0, "Lead", 2, 60, 72) { Role = Roles.Melody, RoleSource = RoleSource.TrackName },
+                new SongPart(1, 9, "Kit", 1, 36, 36) { Role = Roles.Drums, RoleSource = RoleSource.Channel10 },
+                new SongPart(2, 2, "Track 3", 1, 40, 40),
+                new SongPart(2, 3, "Track 3", 1, 41, 41),
+            ],
             Arranger.Parts(song));
     }
 

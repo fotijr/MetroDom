@@ -1,0 +1,251 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "MetroDom Control API",
+    "version": "0.1.0",
+    "summary": "The one front door for apps that control a MetroDom band (ADR 0003).",
+    "description": "HTTP + JSON on the local network. Every path except this spec needs `Authorization: Bearer <token>`: the token the Conductor shows when it starts (or METRODOM_API_TOKEN). v0 serves a running `metrodom play` set and every token has the operator role. Safety lives below the API: no request can bypass the safety governor. See docs/references/control-api.md.",
+    "license": { "name": "MIT", "identifier": "MIT" }
+  },
+  "servers": [{ "url": "http://127.0.0.1:7890/api/v0", "description": "Default when started with --api 7890" }],
+  "security": [{ "token": [] }],
+  "paths": {
+    "/openapi.json": {
+      "get": {
+        "operationId": "getSpec",
+        "summary": "This document.",
+        "security": [],
+        "responses": { "200": { "description": "The OpenAPI document.", "content": { "application/json": {} } } }
+      }
+    },
+    "/state": {
+      "get": {
+        "operationId": "getState",
+        "summary": "What the band is doing now.",
+        "responses": {
+          "200": { "description": "Current state.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/State" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/stream": {
+      "get": {
+        "operationId": "stream",
+        "summary": "Live state over a WebSocket (subprotocol metrodom.v0). Events: events.schema.json, served at /events.schema.json.",
+        "description": "Authenticate with the Authorization header, or (browsers can't set headers on a WebSocket) by also offering the subprotocol `token.<token>`. At most 16 streams at once.",
+        "responses": {
+          "101": { "description": "Switched to a WebSocket; JSON text frames follow." },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "503": { "description": "Too many streams open.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/events.schema.json": {
+      "get": {
+        "operationId": "getEventSchema",
+        "summary": "JSON Schema of the stream's events.",
+        "security": [],
+        "responses": { "200": { "description": "The schema.", "content": { "application/json": {} } } }
+      }
+    },
+    "/queue": {
+      "get": {
+        "operationId": "getQueue",
+        "summary": "The setlist and which song is playing or up next.",
+        "responses": {
+          "200": { "description": "The queue.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Queue" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/instruments": {
+      "get": {
+        "operationId": "getInstruments",
+        "summary": "The band's instruments: channels, latency, notes, connection.",
+        "responses": {
+          "200": {
+            "description": "Instruments in output order.",
+            "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Instrument" } } } }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/transport/start": {
+      "post": {
+        "operationId": "start",
+        "summary": "Start the song that is up next.",
+        "responses": {
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "409": { "$ref": "#/components/responses/Conflict" }
+        }
+      }
+    },
+    "/transport/stop": {
+      "post": {
+        "operationId": "stop",
+        "summary": "Stop the song playing (the band then waits, or plays on through the setlist without a start control).",
+        "responses": {
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "409": { "$ref": "#/components/responses/Conflict" }
+        }
+      }
+    },
+    "/transport/next": {
+      "post": {
+        "operationId": "next",
+        "summary": "Go to the next song now (skips it while waiting).",
+        "responses": {
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/tempo": {
+      "post": {
+        "operationId": "setTempo",
+        "summary": "Set the tempo now, or for the next song while waiting.",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TempoRequest" } } }
+        },
+        "responses": {
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/tap": {
+      "post": {
+        "operationId": "tap",
+        "summary": "One tap of tap tempo (shares the history with keys and pedals).",
+        "responses": {
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/sections/vamp": {
+      "post": {
+        "operationId": "toggleVamp",
+        "summary": "Vamp on (repeat the current section) or off.",
+        "responses": {
+          "200": { "$ref": "#/components/responses/Message" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "409": { "$ref": "#/components/responses/Conflict" }
+        }
+      }
+    },
+    "/sections/outro": {
+      "post": {
+        "operationId": "jumpToOutro",
+        "summary": "Go to the outro when the current section ends.",
+        "responses": {
+          "200": { "$ref": "#/components/responses/Message" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "409": { "$ref": "#/components/responses/Conflict" }
+        }
+      }
+    },
+    "/panic": {
+      "post": {
+        "operationId": "panic",
+        "summary": "Stop every actuator now. Always accepted; the band then waits for start.",
+        "responses": {
+          "200": { "$ref": "#/components/responses/Message" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "token": { "type": "http", "scheme": "bearer", "description": "Shown by the Conductor at start, or METRODOM_API_TOKEN." }
+    },
+    "responses": {
+      "Accepted": { "description": "Taken; the band acts on it now.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Message" } } } },
+      "Message": { "description": "Done, with what will happen.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Message" } } } },
+      "BadRequest": { "description": "The request is malformed or out of range.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+      "Unauthorized": { "description": "Missing or wrong bearer token.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+      "Conflict": { "description": "Not possible in the current state (e.g. stop while waiting).", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+    },
+    "schemas": {
+      "Message": {
+        "type": "object",
+        "required": ["message"],
+        "properties": { "message": { "type": "string" } }
+      },
+      "Error": {
+        "type": "object",
+        "required": ["error"],
+        "properties": { "error": { "type": "string" } }
+      },
+      "TempoRequest": {
+        "type": "object",
+        "required": ["bpm"],
+        "properties": { "bpm": { "type": "number", "minimum": 30, "maximum": 300 } }
+      },
+      "Song": {
+        "type": "object",
+        "required": ["index", "title"],
+        "properties": { "index": { "type": "integer", "minimum": 0 }, "title": { "type": "string" } }
+      },
+      "Queue": {
+        "type": "object",
+        "required": ["current", "songs"],
+        "properties": {
+          "current": { "type": "integer", "minimum": -1, "description": "Index of the song playing or up next; -1 before the set." },
+          "songs": { "type": "array", "items": { "$ref": "#/components/schemas/Song" } }
+        }
+      },
+      "State": {
+        "type": "object",
+        "required": ["state", "song", "tempo", "section", "following"],
+        "properties": {
+          "state": { "type": "string", "enum": ["waiting", "playing"] },
+          "song": { "oneOf": [{ "$ref": "#/components/schemas/Song" }, { "type": "null" }] },
+          "positionSeconds": { "type": ["number", "null"], "description": "Song moment being heard, while playing." },
+          "durationSeconds": { "type": ["number", "null"], "description": "Song length at file tempo, while playing." },
+          "tempo": {
+            "type": "object",
+            "properties": {
+              "bpm": { "type": ["number", "null"], "description": "Tempo now, while playing." },
+              "speed": { "type": ["number", "null"], "description": "× the file's tempo, while playing." },
+              "pendingBpm": { "type": ["number", "null"], "description": "Tempo set while waiting, for the next song." },
+              "source": { "type": ["string", "null"], "description": "What last set it: tapped, pedal, API, MIDI Clock, nudged." }
+            }
+          },
+          "section": { "type": ["string", "null"], "description": "e.g. \"Chorus (2/3) · vamping\"." },
+          "following": {
+            "oneOf": [
+              { "type": "null" },
+              {
+                "type": "object",
+                "required": ["state"],
+                "properties": {
+                  "state": { "type": "string", "enum": ["listening", "locked", "holding"] },
+                  "bpm": { "type": ["number", "null"] }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "Instrument": {
+        "type": "object",
+        "required": ["name", "channels", "latencyMs", "connected"],
+        "properties": {
+          "name": { "type": "string" },
+          "channels": { "type": "array", "items": { "type": "integer", "minimum": 1, "maximum": 16 } },
+          "latencyMs": { "type": "number", "description": "Largest latency of any note (what the scheduler plans with)." },
+          "notes": { "type": ["array", "null"], "items": { "type": "integer", "minimum": 0, "maximum": 127 }, "description": "Playable notes, or null for any." },
+          "connected": { "type": "boolean" }
+        }
+      }
+    }
+  }
+}

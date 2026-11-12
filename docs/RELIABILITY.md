@@ -21,6 +21,11 @@ but is polled (1 ms full-speed frames).
    - Duty-cycle / thermal limit per actuator. Refuse or thin notes when exceeded.
    - Watchdog: no host traffic or USB disconnect for N ms means all actuators off.
    - All-off on boot and on reset.
+   - Built in the generic brain ([metrodom_brain](../Instruments/metrodom_brain/README.md), host-tested, not
+     yet flashed): fixed pulse capped at `maxOnMs`, per-actuator minimum interval and a leaky-bucket
+     duty budget (refuse, never queue), polyphony cap, panic on CC 120/123 on any channel and System
+     Reset, all off when USB unmounts, hardware watchdog restart with all off at boot. The legacy
+     sketches have none of this (TD-03).
 2. **Conductor safety governor** (`SafetyGovernor`, one in front of every output in `play` and `route`)
    - Panic (CC 120/123 + MetroDom SysEx all-off) to every instrument, bypassing queues. Built:
      CC 120/123. Not yet: MetroDom SysEx all-off.
@@ -29,12 +34,23 @@ but is polled (1 ms full-speed frames).
      back), `--max-velocity N` (louder notes turned down, never dropped), `--quiet 23:00-07:00[@VEL]`
      (local time, may cross midnight; no new notes, or capped at VEL).
    - Rejects notes outside an instrument's declared range or minimum inter-note interval. Built:
-     notes from `-o PORT.../NOTES`; min interval waits for profile files.
+     notes and min interval from the profile the instrument sends (or `-o PORT.../NOTES`).
    - Only new notes are ever held back or changed. Note Off, panic and every other message pass,
      so the governor can never leave an actuator on. Held-back counts show in the status panel
      and are printed when the run ends.
 3. **Lights**
    - Flashing capped at 3 per second unless the venue policy enables strobe (photosensitive epilepsy).
+     Built for reactive lights: a fixture starts at most 3 pulses a second, over an idle glow
+     that is never dark. Cues (lights track, pad) change the look at most 3 times a second (a
+     faster cue waits), and the master slews at most full range per third of a second. The
+     policy's `lights` section may lower that rate, or raise it (up to 10) only with `strobe`
+     on; `strobe` channels are 0 otherwise and always in quiet hours.
+   - Panic → steady safe look, sent at once from the panic path after the actuators are silent.
+     The end of a set also shows the safe look before the sACN stream terminates. The master
+     fader doesn't dim it. Built in `LightShow` (`play --lights`).
+   - No robot plays a cue: under `--lights` the rig's channel (16) is taken from every instrument.
+   - Brightness cap and quiet hours from the policy (`lights.maxBrightness`, `lights.quietHours`),
+     never below 10%, so the safe look stays visible. Built in `LightLimits`.
    - LEDs on their own fused 5 V supply with software brightness caps.
 4. **Humans near robots**
    - Actuators within a player's reach are guarded. A robot never plays the drum or string a human is playing.

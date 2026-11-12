@@ -42,6 +42,9 @@ internal sealed class MessageLog
     private readonly Queue<string> _messages = new();
     private readonly Lock _gate = new();
 
+    /// <summary>Raised after a message is added (unstamped), on the adding thread. Keep it cheap.</summary>
+    public event Action<string>? Added;
+
     public void Add(string message)
     {
         var stamped = $"{DateTime.Now:HH:mm:ss}  {message}";
@@ -53,6 +56,8 @@ internal sealed class MessageLog
                 _messages.Dequeue();
             }
         }
+
+        Added?.Invoke(message);
     }
 
     public IReadOnlyList<string> Snapshot()
@@ -80,11 +85,15 @@ internal static class LiveStatus
     /// <param name="session">Stops the view when it stops.</param>
     /// <param name="render">Builds the panel, called every refresh.</param>
     /// <param name="onKey">Keys pressed in the terminal (interactive only), on the UI thread.</param>
-    public static void Run(Session session, Func<IRenderable> render, Action<ConsoleKeyInfo>? onKey = null)
+    /// <param name="until">Also stops the view when set (a song ended), without stopping the session.</param>
+    public static void Run(Session session, Func<IRenderable> render, Action<ConsoleKeyInfo>? onKey = null, ManualResetEventSlim? until = null)
     {
         if (!Ui.IsInteractive)
         {
-            session.WaitForStop();
+            while (!session.WaitForStop(Refresh) && until is not { IsSet: true })
+            {
+            }
+
             return;
         }
 
@@ -96,7 +105,7 @@ internal static class LiveStatus
                 .Overflow(VerticalOverflow.Ellipsis)
                 .Start(ctx =>
                 {
-                    while (!session.WaitForStop(Refresh))
+                    while (!session.WaitForStop(Refresh) && until is not { IsSet: true })
                     {
                         while (onKey is not null && Console.KeyAvailable)
                         {
@@ -128,9 +137,9 @@ internal static class LiveStatus
             var output = session.Outputs[i];
             var held = session.Governors[i].TotalBlocked;
             var blocked = held == 0 ? "" : string.Create(CultureInfo.InvariantCulture, $"  [yellow]{held} held back[/]");
-            var routing = session.Outputs.Count == 1 && output.Latency == TimeSpan.Zero
+            var routing = session.Outputs.Count == 1 && output.Profile.MaxLatency == TimeSpan.Zero
                 ? ""
-                : string.Create(CultureInfo.InvariantCulture, $"[grey]ch {ChannelList.Format(output.Channels)} · {output.Latency.TotalMilliseconds:0.#} ms[/]  ");
+                : string.Create(CultureInfo.InvariantCulture, $"[grey]ch {ChannelList.Format(output.Channels)} · {output.Profile.MaxLatency.TotalMilliseconds:0.#} ms[/]  ");
             rows.Add(new Markup($"[grey]Output[/]  {Markup.Escape(output.Port.Name)}  {routing}{Connection(output.IsConnected)}{blocked}"));
         }
 

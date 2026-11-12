@@ -40,6 +40,23 @@ public class CliTests
     public void UsageErrors_ExitWith2(params string[] args) =>
         Assert.Equal(MetroDomApp.UsageError, MetroDomApp.Create().Run(args, TestContext.Current.CancellationToken));
 
+    /// <summary>Help text is Spectre markup: a stray "[=X]" in a description crashes --help.</summary>
+    [Theory]
+    [InlineData("inspect")]
+    [InlineData("devices")]
+    [InlineData("play")]
+    [InlineData("route")]
+    [InlineData("arrange")]
+    [InlineData("roles")]
+    [InlineData("beats")]
+    [InlineData("simulate")]
+    [InlineData("virtual")]
+    [InlineData("demo-song")]
+    [InlineData("panic")]
+    [InlineData("lights")]
+    public void Help_RendersForEveryCommand(string command) =>
+        Assert.Equal(0, MetroDomApp.Create().Run([command, "--help"], TestContext.Current.CancellationToken));
+
     [Fact]
     public void Play_InvalidMute_ExitsWith2BeforeOpeningAnyDevice()
     {

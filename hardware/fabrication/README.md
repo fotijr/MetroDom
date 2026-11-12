@@ -19,7 +19,7 @@ Modules declare which processes they need in `module.toml` (`fabrication = ["3d-
 3. When parts come back, mark them `done` and add printed parts to `stock.csv` like bought parts.
 4. Print **one test copy** of anything new before batching ten of them. Fit is rarely right first time.
 
-`status`: `queued` · `batched` · `done` · `cancelled`.
+`status`: `queued` · `batched` · `done` · `canceled`.
 
 ## Design rules (so any provider can make it)
 - **Fit the smallest printer we can reach.** Until the library's specs are filled in, keep

@@ -21,7 +21,7 @@ internal sealed record InstrumentSpec(string Name, IReadOnlyList<int> Channels, 
         new("drums", [9], TimeSpan.FromMilliseconds(35)),
     ];
 
-    public InstrumentProfile ToProfile() => new(Name, Latency) { Notes = Notes };
+    public InstrumentProfile ToProfile() => new(Name, Latency) { Notes = Notes, Channel = Channels[0] };
 
     /// <summary>Parses every spec, or returns the first error.</summary>
     public static bool TryParseAll(IEnumerable<string>? raw, out IReadOnlyList<InstrumentSpec> specs, out string? error)

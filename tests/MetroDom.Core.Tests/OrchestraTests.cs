@@ -29,6 +29,21 @@ public class OrchestraTests
     }
 
     [Fact]
+    public void Unassign_StopsThatChannelOnly()
+    {
+        var output = new FakeOutput();
+        var orchestra = new Orchestra();
+        orchestra.AssignAll(output);
+
+        Assert.True(orchestra.Unassign(15, output));
+        Assert.False(orchestra.Unassign(15, output));
+        orchestra.Route(NoteOn(15));
+        orchestra.Route(NoteOn(0));
+
+        Assert.Single(output.Sent);
+    }
+
+    [Fact]
     public void Route_IgnoresNonChannelEvents()
     {
         var output = new FakeOutput();

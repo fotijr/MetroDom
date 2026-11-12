@@ -46,10 +46,17 @@ public sealed record ScheduledSend(TimeSpan DueAt, TimeSpan SongTime, IMidiOutpu
 /// lookahead.
 /// </para>
 /// <para>
+/// Songs can jump (ADR 0012: vamp, jump to the outro): <see cref="ArmJump"/> says "when the song
+/// reaches <c>from</c>, continue at <c>to</c>". Internally events sit on a <em>play time</em> axis
+/// that only moves forward; each jump starts a new segment that maps play time back to song time.
+/// A jump is committed just before the song clock reaches it, so it can be disarmed until then,
+/// and nothing already sent is ever taken back. Notes still sounding at a jump get a Note Off there.
+/// </para>
+/// <para>
 /// Driven by polling: call <see cref="Pump"/> whenever the clock reaches <see cref="NextDue"/>.
 /// With a <see cref="VirtualClock"/> that makes the scheduler deterministic and instant to test.
 /// Routing (mutes, failing outputs) goes through the <see cref="Orchestra"/>; assign channels
-/// before <see cref="Start"/>. Thread-safe: one thread pumps, others may change speed or stop.
+/// before <see cref="Start"/>. Thread-safe: one thread pumps, others may change speed, arm jumps or stop.
 /// </para>
 /// </remarks>
 public sealed class LatencyScheduler
@@ -57,16 +64,23 @@ public sealed class LatencyScheduler
     /// <summary>Slowest and fastest allowed speed (× the file's tempo).</summary>
     public const double MinSpeed = 0.25, MaxSpeed = 4;
 
+    /// <summary>How far ahead of the song clock (in song time) an armed jump is committed.</summary>
+    private static readonly TimeSpan CommitMargin = TimeSpan.FromMilliseconds(50);
+
     private readonly Lock _gate = new();
     private readonly Orchestra _orchestra;
     private readonly IClock _clock;
     private readonly IReadOnlyDictionary<IMidiOutput, InstrumentProfile> _profiles;
     private readonly bool _compensate;
+    private readonly List<(TimeSpan PlayStart, TimeSpan Offset)> _segments = [(TimeSpan.Zero, TimeSpan.Zero)];
+    private Entry[] _plan = [];
     private Entry[] _entries = [];
     private int _next;
+    private int _sequence;
     private TimeSpan _anchorClock;
-    private TimeSpan _anchorSong;
+    private TimeSpan _anchorPlay;
     private double _speed = 1;
+    private Jump? _jump;
 
     /// <param name="orchestra">Channel → instrument routing.</param>
     /// <param name="clock">Time source.</param>
@@ -90,8 +104,16 @@ public sealed class LatencyScheduler
     /// <summary>Raised after an output accepted an event, on the pumping thread. Keep it cheap.</summary>
     public event Action<ScheduledSend>? Sent;
 
+    /// <summary>Raised when an armed jump is committed (from, to in song time), on the pumping thread.</summary>
+    public event Action<TimeSpan, TimeSpan>? Jumped;
+
     /// <summary>How far the band runs behind the song clock. Zero without compensation.</summary>
     public TimeSpan Lookahead { get; private set; }
+
+    /// <summary>The <see cref="Lookahead"/> the next <see cref="Start"/> will use, from the current routing.</summary>
+    public TimeSpan PlannedLookahead => _compensate
+        ? _orchestra.Outputs.Select(o => _profiles.TryGetValue(o, out var p) ? p.MaxLatency : TimeSpan.Zero).DefaultIfEmpty().Max()
+        : TimeSpan.Zero;
 
     /// <summary>Song time of the last event: the song's length at the file's tempo.</summary>
     public TimeSpan Duration { get; private set; }
@@ -111,14 +133,32 @@ public sealed class LatencyScheduler
         }
     }
 
-    /// <summary>Clock time of the next send, or null when the song is done.</summary>
+    /// <summary>The armed jump (song times), or null.</summary>
+    public (TimeSpan From, TimeSpan To, bool Repeat)? PendingJump
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _jump is { } j ? (j.From, j.To, j.Repeat) : null;
+            }
+        }
+    }
+
+    /// <summary>Clock time of the next send (or of committing an armed jump), or null when the song is done.</summary>
     public TimeSpan? NextDue
     {
         get
         {
             lock (_gate)
             {
-                return _next < _entries.Length ? DueAt(_entries[_next]) : null;
+                TimeSpan? due = _next < _entries.Length ? DueAt(_entries[_next]) : null;
+                if (JumpPoint() is { } point && (due is null || ClockAt(point - CommitMargin) < due))
+                {
+                    due = ClockAt(point - CommitMargin);
+                }
+
+                return due;
             }
         }
     }
@@ -141,18 +181,18 @@ public sealed class LatencyScheduler
         {
             lock (_gate)
             {
-                var heard = SongClock(_clock.Now) - (Lookahead * _speed);
+                var heard = SongTimeAt(PlayClock(_clock.Now) - (Lookahead * _speed));
                 return heard < TimeSpan.Zero ? TimeSpan.Zero : heard > Duration ? Duration : heard;
             }
         }
     }
 
-    /// <summary>Clock time at which the song moment <paramref name="songTime"/> should be heard, at the current speed.</summary>
+    /// <summary>Clock time at which the song moment <paramref name="songTime"/> should be heard, at the current speed, in the current pass.</summary>
     public TimeSpan SoundTime(TimeSpan songTime)
     {
         lock (_gate)
         {
-            return ClockAt(songTime) + Lookahead;
+            return ClockAt(songTime + _segments[^1].Offset) + Lookahead;
         }
     }
 
@@ -168,19 +208,21 @@ public sealed class LatencyScheduler
         lock (_gate)
         {
             _anchorClock = _clock.Now + preroll;
-            _anchorSong = TimeSpan.Zero;
+            _anchorPlay = TimeSpan.Zero;
             _speed = speed;
-            Lookahead = _compensate
-                ? _orchestra.Outputs.Select(o => _profiles.TryGetValue(o, out var p) ? p.MaxLatency : TimeSpan.Zero).DefaultIfEmpty().Max()
-                : TimeSpan.Zero;
+            _jump = null;
+            _segments.Clear();
+            _segments.Add((TimeSpan.Zero, TimeSpan.Zero));
+            Lookahead = PlannedLookahead;
 
-            var sequence = 0;
-            _entries = song
+            _sequence = 0;
+            _plan = song
                 .Where(e => e.Event is ChannelEvent)
                 .SelectMany(e => _orchestra.OutputsFor(((ChannelEvent)e.Event).Channel)
-                    .Select(output => new Entry(e.At, output, e.Event, Latency(output, e.Event), sequence++)))
+                    .Select(output => new Entry(e.At, e.At, output, e.Event, Latency(output, e.Event), _sequence++)))
                 .ToArray();
-            Duration = _entries.Length == 0 ? TimeSpan.Zero : _entries.Max(e => e.SongTime);
+            _entries = [.. _plan];
+            Duration = _plan.Length == 0 ? TimeSpan.Zero : _plan.Max(e => e.SongTime);
             _next = 0;
             Sort();
         }
@@ -196,10 +238,45 @@ public sealed class LatencyScheduler
         lock (_gate)
         {
             var now = _clock.Now;
-            _anchorSong = SongClock(now);
+            _anchorPlay = PlayClock(now);
             _anchorClock = now;
             _speed = speed;
             Sort();
+        }
+    }
+
+    /// <summary>
+    /// Arms a jump: when the song (in its current pass) reaches <paramref name="from"/>, it continues
+    /// at <paramref name="to"/>. With <paramref name="repeat"/> it stays armed, so every pass jumps
+    /// again (a vamp, until <see cref="Disarm"/>). Replaces any armed jump. Returns false when the
+    /// song clock is already past <paramref name="from"/> in this pass (too late to jump cleanly).
+    /// </summary>
+    public bool ArmJump(TimeSpan from, TimeSpan to, bool repeat = false)
+    {
+        lock (_gate)
+        {
+            if (from < TimeSpan.Zero || to < TimeSpan.Zero || from > Duration || to > Duration || (repeat && to >= from))
+            {
+                throw new ArgumentOutOfRangeException(nameof(from), "Jump points must lie in the song, and a repeating jump must go back.");
+            }
+
+            var point = from + _segments[^1].Offset;
+            if (point < _segments[^1].PlayStart || point <= PlayClock(_clock.Now))
+            {
+                return false;
+            }
+
+            _jump = new Jump(from, to, repeat);
+            return true;
+        }
+    }
+
+    /// <summary>Cancels the armed jump, if it hasn't been committed yet. The song carries on as written.</summary>
+    public void Disarm()
+    {
+        lock (_gate)
+        {
+            _jump = null;
         }
     }
 
@@ -209,6 +286,7 @@ public sealed class LatencyScheduler
         lock (_gate)
         {
             var now = _clock.Now;
+            CommitJump(now);
             var sent = 0;
             while (_next < _entries.Length && DueAt(_entries[_next]) <= now)
             {
@@ -232,6 +310,7 @@ public sealed class LatencyScheduler
         lock (_gate)
         {
             _next = _entries.Length;
+            _jump = null;
         }
 
         _orchestra.Panic();
@@ -245,13 +324,91 @@ public sealed class LatencyScheduler
         }
     }
 
-    /// <summary>Song time on the song clock (which runs <see cref="Lookahead"/> ahead of what's heard).</summary>
-    private TimeSpan SongClock(TimeSpan clockTime) => _anchorSong + ((clockTime - _anchorClock) * _speed);
+    /// <summary>Play time on the song clock (which runs <see cref="Lookahead"/> ahead of what's heard).</summary>
+    private TimeSpan PlayClock(TimeSpan clockTime) => _anchorPlay + ((clockTime - _anchorClock) * _speed);
 
-    /// <summary>Clock time at which the song clock reaches <paramref name="songTime"/>.</summary>
-    private TimeSpan ClockAt(TimeSpan songTime) => _anchorClock + ((songTime - _anchorSong) / _speed);
+    /// <summary>Clock time at which the song clock reaches play time <paramref name="playTime"/>.</summary>
+    private TimeSpan ClockAt(TimeSpan playTime) => _anchorClock + ((playTime - _anchorPlay) / _speed);
 
-    private TimeSpan DueAt(Entry entry) => ClockAt(entry.SongTime) + Lookahead - entry.Latency;
+    /// <summary>Song time for a play time: the latest segment that had started by then.</summary>
+    private TimeSpan SongTimeAt(TimeSpan playTime)
+    {
+        for (var i = _segments.Count - 1; i > 0; i--)
+        {
+            if (_segments[i].PlayStart <= playTime)
+            {
+                return playTime - _segments[i].Offset;
+            }
+        }
+
+        return playTime - _segments[0].Offset;
+    }
+
+    /// <summary>Play time of the armed jump in the current pass, or null.</summary>
+    private TimeSpan? JumpPoint() => _jump is { } jump ? jump.From + _segments[^1].Offset : null;
+
+    private void CommitJump(TimeSpan now)
+    {
+        if (_jump is not { } jump || JumpPoint() is not { } point)
+        {
+            return;
+        }
+
+        var playClock = PlayClock(now);
+        if (point < playClock)
+        {
+            _jump = null; // Pumped too late to jump without taking back sent events: carry on as written.
+            return;
+        }
+
+        if (playClock + CommitMargin < point)
+        {
+            return;
+        }
+
+        // Nothing at or after the jump point has been sent: every due time is at or after its play time.
+        var offset = point - jump.To;
+        var kept = _entries[_next..].Where(e => e.PlayTime < point).ToList();
+        var releases = Sounding(_entries[.._next].Concat(kept), point)
+            .Select(e => e with
+            {
+                PlayTime = point,
+                Event = new NoteOffEvent(((NoteEvent)e.Event).NoteNumber, Melanchall.DryWetMidi.Common.SevenBitNumber.MinValue) { Channel = ((NoteEvent)e.Event).Channel },
+                Sequence = _sequence++,
+            });
+        var rest = _plan.Where(e => e.SongTime >= jump.To).Select(e => e with { PlayTime = e.SongTime + offset, Sequence = _sequence++ });
+        _entries = [.. _entries[.._next], .. kept, .. releases, .. rest];
+        _segments.Add((point, offset));
+        if (!jump.Repeat)
+        {
+            _jump = null;
+        }
+
+        Sort();
+        Jumped?.Invoke(jump.From, jump.To);
+    }
+
+    /// <summary>Note Ons (per output, channel, note) still held at <paramref name="point"/>, so a jump can release them.</summary>
+    private static List<Entry> Sounding(IEnumerable<Entry> before, TimeSpan point)
+    {
+        var on = new Dictionary<(IMidiOutput, int, int), Entry>();
+        foreach (var e in before.Where(e => e.PlayTime < point).OrderBy(e => e.PlayTime).ThenBy(e => e.Sequence))
+        {
+            switch (e.Event)
+            {
+                case NoteOnEvent n when n.Velocity > 0:
+                    on[(e.Output, n.Channel, n.NoteNumber)] = e;
+                    break;
+                case NoteEvent n:
+                    on.Remove((e.Output, n.Channel, n.NoteNumber));
+                    break;
+            }
+        }
+
+        return [.. on.Values];
+    }
+
+    private TimeSpan DueAt(Entry entry) => ClockAt(entry.PlayTime) + Lookahead - entry.Latency;
 
     /// <summary>Orders what's left by due time. Speed changes can reorder instruments with different latencies.</summary>
     private void Sort() =>
@@ -276,5 +433,7 @@ public sealed class LatencyScheduler
         };
     }
 
-    private readonly record struct Entry(TimeSpan SongTime, IMidiOutput Output, MidiEvent Event, TimeSpan Latency, int Sequence);
+    private readonly record struct Entry(TimeSpan SongTime, TimeSpan PlayTime, IMidiOutput Output, MidiEvent Event, TimeSpan Latency, int Sequence);
+
+    private readonly record struct Jump(TimeSpan From, TimeSpan To, bool Repeat);
 }

@@ -28,6 +28,9 @@ public sealed record DeviceIdentity(string ManufacturerId, int Family, int Model
     /// <summary>MetroDom model 0: a software instrument (<c>metrodom virtual</c>), not hardware.</summary>
     public const int VirtualModel = 0;
 
+    /// <summary>MetroDom model 1: a Pico running the generic brain firmware (<c>Instruments/metrodom_brain</c>).</summary>
+    public const int BrainModel = 1;
+
     private const byte UniversalNonRealTime = 0x7E;
     private const byte GeneralInformation = 0x06;
     private const byte IdentityRequestId = 0x01;
@@ -114,7 +117,12 @@ public sealed record DeviceIdentity(string ManufacturerId, int Family, int Model
     {
         if (IsMetroDom)
         {
-            var model = Model == VirtualModel ? "virtual instrument" : $"instrument model {Model}";
+            var model = Model switch
+            {
+                VirtualModel => "virtual instrument",
+                BrainModel => "brain",
+                _ => $"instrument model {Model}",
+            };
             return $"MetroDom {model} v{Version}";
         }
 

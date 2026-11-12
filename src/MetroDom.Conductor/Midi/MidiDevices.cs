@@ -15,12 +15,17 @@ internal static class MidiDevices
     public static IReadOnlyList<string> InputNames() => Backend.Value.Inputs().Select(p => p.DisplayName).ToArray();
 
     /// <summary>Opens an output by index, exact name, or unique part of a name (e.g. ALSA "20:0").</summary>
-    public static IMidiOutputPort OpenOutput(string query)
+    public static IMidiOutputPort OpenOutput(string query) => OpenOutput(FindOutput(query));
+
+    /// <summary>Finds an output by index, exact name, or unique part of a name, without opening it.</summary>
+    public static MidiPortInfo FindOutput(string query)
     {
         var ports = Backend.Value.Outputs();
-        var port = ports[Resolve(query, ports.Select(p => p.DisplayName).ToArray(), "output")];
-        return new ResilientOutput(Backend.Value, port, Log);
+        return ports[Resolve(query, ports.Select(p => p.DisplayName).ToArray(), "output")];
     }
+
+    /// <summary>Opens an output that keeps itself alive across unplug/replug.</summary>
+    public static IMidiOutputPort OpenOutput(MidiPortInfo port) => new ResilientOutput(Backend.Value, port, Log);
 
     /// <summary>Opens an input by index, exact name, or unique part of a name (e.g. ALSA "20:0").</summary>
     public static IMidiInputPort OpenInput(string query)

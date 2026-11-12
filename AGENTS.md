@@ -40,6 +40,7 @@ tests/                 ← xUnit v3 tests
 Instruments/           ← Arduino firmware + per-instrument hardware notes
 hardware/              ← parts catalog, inventory, shared modules, build records (ADR 0008)
 docs/                  ← knowledge base (Markdown). docs/index.html etc. is the legacy GitHub Pages site.
+policies/              ← shipped policy profiles (live-band.json)
 scripts/check_docs.py  ← knowledge-base linter (run before committing doc changes)
 scripts/check_hardware.py ← hardware records linter (run before committing hardware changes)
 ```
@@ -58,6 +59,7 @@ python3 scripts/check_docs.py          # knowledge-base lint (links, orphans, AG
 python3 scripts/check_hardware.py      # parts/BOM/module/build consistency (--buildable: stock report)
 dotnet build && dotnet test                      # .NET 10 SDK, any OS (Linux/macOS/Windows)
 dotnet run --project src/MetroDom.Conductor -- inspect song.mid
+make -C Instruments/metrodom_brain/test          # brain firmware host tests (any C++17 compiler)
 ```
 
 CI: GitHub Actions (`.github/workflows/`): `docs` (lint) and `build` (Linux, macOS, Windows).
@@ -75,3 +77,5 @@ New Conductor code is modern C# on .NET LTS ([ADR 0002](docs/design-docs/0002-he
    it, the quality score, and the tech-debt tracker. Run `scripts/check_docs.py`.
 5. **Plans live in the repo.** Non-trivial work gets an exec plan in `docs/exec-plans/active/`.
 6. **Keep this file short.** Add a row to a table above, not a paragraph. Details go in `docs/`.
+7. **US English everywhere**: code, docs, comments, JSON fields, CLI text (color, behavior, center).
+   Library names stay as they are (Spectre's `grey`).

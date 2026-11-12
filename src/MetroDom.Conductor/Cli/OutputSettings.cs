@@ -11,8 +11,16 @@ namespace MetroDom.Conductor.Cli;
 internal class OutputSettings : CommandSettings
 {
     [CommandOption("-o|--output <PORT>")]
-    [Description("Output port: index, name, or unique part of a name from [bold]metrodom devices[/] (on Linux the ALSA address works too, e.g. 20:0). Repeat for several instruments, optionally as [bold]PORT=CHANNELS@LATENCY_MS/NOTES[/] (e.g. -o \"xylo=1@10/C4-C6\" -o \"drums=10@35/36,38\"; notes are what [bold]--arrange[/] may use). Without channels a port gets every channel. Prompted for when omitted in a terminal.")]
+    [Description("Output port: index, name, or unique part of a name from [bold]metrodom devices[/] (on Linux the ALSA address works too, e.g. 20:0). Repeat for several instruments, optionally as [bold]PORT=CHANNELS@LATENCY_MS/NOTES[/] (e.g. -o \"xylo=1@10/C4-C6\" -o \"drums=10@35/36,38\"; notes are what [bold]--arrange[/] may use). Without channels a port gets every channel. When omitted, the band is what discovery finds (assigned devices and MetroDom instruments), else prompted for in a terminal.")]
     public string[]? Outputs { get; init; }
+
+    [CommandOption("--no-identify")]
+    [Description("Don't ask outputs for their profile. By default an output given without [bold]@LATENCY_MS[/] or [bold]/NOTES[/] is asked who it is, and a MetroDom instrument's profile fills in what's missing (ADR 0007).")]
+    public bool NoIdentify { get; init; }
+
+    [CommandOption("--assignments <FILE>")]
+    [Description("Where remembered assignments live (see [bold]metrodom devices --assign[/]). Default: $METRODOM_ASSIGNMENTS, else metrodom/assignments.json in your app data folder. Without [bold]-o[/], the band is every assigned device plus every MetroDom instrument found.")]
+    public string? Assignments { get; init; }
 
     [CommandOption("-m|--mute <CHANNELS>")]
     [Description("Channels to mute, 1-16, comma separated, ranges allowed (e.g. 10 for drums, 1-9).")]
@@ -82,10 +90,14 @@ internal class OutputSettings : CommandSettings
 /// <summary>
 /// One <c>--output</c>: <c>PORT[=CHANNELS][@LATENCY_MS][/NOTES]</c>. <c>"MetroDom drums=10@35/36,38"</c>
 /// sends channel 10 to the port matching "MetroDom drums", 35 ms early, and tells the arranger it
-/// can play notes 36 and 38. A plain port gets every channel and every note.
+/// can play notes 36 and 38. A plain port gets every channel; its latency and notes come from the
+/// instrument's profile if it sends one (<see cref="WantsProfile"/>), else none and every note.
 /// </summary>
-internal sealed partial record OutputSpec(string Port, IReadOnlyList<int> Channels, TimeSpan Latency, IReadOnlySet<int>? Notes = null)
+internal sealed partial record OutputSpec(string Port, IReadOnlyList<int> Channels, TimeSpan? Latency = null, IReadOnlySet<int>? Notes = null)
 {
+    /// <summary>Whether a profile from the instrument would add anything the command line didn't say.</summary>
+    public bool WantsProfile => Latency is null || Notes is null;
+
     public static bool TryParse(string raw, out OutputSpec spec, out string? error)
     {
         spec = null!;
@@ -130,7 +142,7 @@ internal sealed partial record OutputSpec(string Port, IReadOnlyList<int> Channe
             return false;
         }
 
-        spec = new OutputSpec(match.Groups["port"].Value.Trim(), channels, TimeSpan.FromMilliseconds(latency), notes);
+        spec = new OutputSpec(match.Groups["port"].Value.Trim(), channels, match.Groups["lat"].Success ? TimeSpan.FromMilliseconds(latency) : null, notes);
         error = null;
         return true;
     }

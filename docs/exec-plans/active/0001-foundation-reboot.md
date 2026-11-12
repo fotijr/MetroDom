@@ -1,6 +1,6 @@
 # 0001: Foundation reboot
 
-Status: Active · Last updated: 2026-11-10
+Status: Active · Last updated: 2026-11-11
 
 ## Goal
 Go from the 2017 prototype to the smallest version of the target
@@ -21,11 +21,13 @@ That is the first milestone of the [live band spec](../../product-specs/live-ban
 - [ ] Owner reviews and accepts/edits ADRs 0001–0005
 - [x] Replace Travis with GitHub Actions
 - [x] Migrate to .NET 10 SDK-style projects, cross-platform. Retire WinForms for the `metrodom` CLI
-- [ ] Confirm `build` workflow runs green on GitHub
+- [x] Confirm `build` workflow runs green on GitHub (Linux, macOS, Windows on the `feat/virtual-midi` PR, 2026-11-11)
 
 ### Phase 1: Instruments speak MIDI
 - [ ] Accept brain/body split ([ADR 0006](../../design-docs/0006-swappable-instrument-brains.md)). Define body connector + EEPROM layout
 - [ ] Generic brain firmware (Pico, Arduino C++): USB-MIDI, Note On → fixed strike pulse, watchdog, all-off
+  - Logic built and host-tested: [metrodom_brain](../../../Instruments/metrodom_brain/README.md) (also Identity Reply
+    and profile over SysEx). Left: compile and flash on a Pico (plan 0002 H1), then tick this (TD-29)
 - [ ] Port solenoid xylophone to a body (PCA9685/MOSFET + ID EEPROM). Hardware side: [exec plan 0002](0002-hardware-bootstrap.md)
 - [ ] SysEx Identity Reply + [instrument profile](../../references/instrument-profile.md) read from body EEPROM
 - [ ] Bench-test with a stock DAW/keyboard (no MetroDom software)
@@ -42,23 +44,25 @@ That is the first milestone of the [live band spec](../../product-specs/live-ban
 - [x] Adapters: unplug goes silent, replug reconnects with a panic first. One failing output can't block others
 - [ ] Measure ALSA latency on a Pi
 - [x] Discovery steps 1-2 per [ADR 0007](../../design-docs/0007-instrument-discovery.md): list ports, Identity Request, MetroDom vs general MIDI (`devices --identify`, [midi-identity](../../references/midi-identity.md))
-- [ ] Discovery steps 3-4: profile fetch, identify on hot-plug, remember assignments (TD-23)
+- [x] Discovery step 3: profile fetch over MetroDom SysEx, shown by `devices --identify` ([profile exchange](../../references/midi-profile-exchange.md))
+- [x] Discovery step 4a: `play`/`route` use the profile an instrument sends for whatever `-o` leaves out (`--no-identify` to skip)
+- [x] Discovery step 4b: identify on hot-plug, remember assignments, auto-add instruments (TD-23)
 - [x] Safety governor + panic, tested (`SafetyGovernor` in front of every output; `--max-velocity`, `--max-rate`, `--quiet`). Limits: TD-22
 - [x] Tap tempo (terminal keys) and `--tempo`
-- [ ] Tap from a MIDI input (foot pedal) / MIDI Clock in
+- [x] Tap from a MIDI input (foot pedal) / MIDI Clock in (`play --tap PORT [--tap-on TRIGGER]`, `--clock-in PORT`)
 
 ### Phase 2b: Play-along ([ADR 0012](../../design-docs/0012-humans-in-the-band.md))
-- [ ] Track roles (track names, GM drums channel, saved per-song mapping)
-- [ ] Seats: a human takes a role, arranger mutes it (generalize `--mute`)
-- [ ] Count-in on a chosen instrument. SMF marker sections. Vamp / jump to outro
-- [ ] Foot controller mapping in the live-band policy (start/stop, next, tap, vamp, panic)
-- [ ] Tempo tracker with beat prediction, tested with recorded human timings + fake clock
+- [x] Track roles (track names, GM drums channel, saved per-song mapping): `metrodom roles`, [song roles](../../references/song-roles.md)
+- [x] Seats: a human takes a role, arranger mutes it (generalize `--mute`): `--seat ROLE[=PLAYER]` on `play`/`simulate`/`arrange`
+- [x] Count-in on a chosen instrument. SMF marker sections. Vamp / jump to outro (`--count-in`, `--click`, V / O keys)
+- [x] Foot controller mapping in the live-band policy (start/stop, next, tap, vamp, panic): `play --control`, `policies/live-band.json`, setlists
+- [x] Tempo tracker with beat prediction, tested with recorded human timings + fake clock: `BeatTracker`, `BeatFollower`, `play --follow`, `beats --record`, `simulate --follow` ([beat following](../../references/beat-following.md)). Real drum recordings wait for the triggers
 - [ ] Human-leads input from drum triggers (`trigger-piezo`)
 
 ### Phase 3: Control API v0
-- [ ] OpenAPI spec: transport, queue, instruments, panic
-- [ ] WebSocket state stream
-- [ ] Minimal web UI served by the Conductor
+- [x] OpenAPI spec: transport, queue, instruments, panic: `play --api`, `src/MetroDom.Conductor/Api/openapi.json` ([control API](../../references/control-api.md))
+- [x] WebSocket state stream: `GET /api/v0/stream`, events in `src/MetroDom.Conductor/Api/events.schema.json`
+- [x] Minimal web UI served by the Conductor: the remote at `/` with pairing link, live state and panic ([control API](../../references/control-api.md#web-remote))
 
 ## Decisions log
 - 2026-11-10: Adopted harness-engineering style repo knowledge base. Architecture written as
@@ -115,6 +119,139 @@ That is the first milestone of the [live band spec](../../product-specs/live-ban
   on `devices --identify` (ADR 0007: ask once per port, not repeatedly). Virtual ports became
   duplex so `virtual` can answer. Measured on macOS: two virtual instruments identified, the
   whole command 0.4 s.
+
+- 2026-11-11: Discovery step 3. Profile Request `F0 7D 4D 44 01 F7`; the reply is the profile
+  JSON in numbered chunks of ≤ 128 ASCII bytes (`02 <index> <count> <text>`). Draft, needs owner
+  review. JSON over SysEx rather than a binary layout: the same file an instrument folder holds,
+  readable in a SysEx dump, and firmware can store it verbatim in the body EEPROM. MetroDom SysEx
+  goes only to ports that identified as MetroDom, since `7D` is shared. The profile round runs
+  after the identity round, all ports at once, so a scan stays ≤ 2 × 250 ms. One `MinInterval`
+  per instrument for now: the largest per-note value. Measured on macOS: two virtual instruments
+  identified and described in 0.19 s.
+
+- 2026-11-11: Discovery step 4a. `-o` latency became optional so "not given" differs from `@0`.
+  Outputs missing `@LATENCY` or `/NOTES` are identified once at start (only those ports); the
+  sent profile fills the gaps and the command line wins field by field. `@LATENCY` replaces the
+  per-note latencies too, since a person who types one number means it for the whole instrument.
+  This is also the first way to give the governor a minimum interval. Cost: up to 2 × 250 ms at
+  start when a named port has an input that doesn't answer; `--no-identify` or a fully described
+  `-o` avoids it.
+
+- 2026-11-11: MIDI tap and clock in. Picked over discovery step 4b, whose remembered
+  assignments need roles from the registry/Control API. Taps share the keyboard's `TapTempo`, so
+  pedal and Space mix. `--tap-on any` (default) takes Note On or a controller's press (crossing
+  64), never its release or channel mode messages, so a sustain pedal works out of the box.
+  Clock in averages one beat of ticks and ignores changes under 0.5 BPM: ±1 ms USB jitter swings
+  a one-beat average by ~0.3 BPM, which shouldn't re-time the band. It follows tempo only; phase
+  lock belongs with the M5 tempo tracker. Stop or silence holds tempo (ADR 0012: losing the beat
+  holds, never lurches). Measured: 0.600 / 0.400 / 0.800 s strike spacing at file tempo, clock
+  150 and pedal 75 BPM (file 100 BPM).
+
+- 2026-11-11: Track roles. Order: saved mapping, channel 10, track name, GM program, else
+  `other`. Names beat programs because people type names and many files leave every track on
+  program 1. Detection produces a fixed list of ten roles; a saved mapping may use any one word
+  (draft answer to ADR 0012's vocabulary question). The mapping is `song.roles.json` beside the
+  song, keyed by name, `#TRACK` or `#TRACK:CHANNEL`, so it survives the file being re-exported
+  with the same track layout and stays readable in a diff. Roles live on `SongPart` so seats can
+  mute by role without another pass over the file.
+
+- 2026-11-11: Seats. A seat removes its role's notes from a copy of the song before arranging or
+  routing, rather than living in the arranger: one mechanism for both `play` paths, and the
+  arranger can't hand a human's part to a robot. Per part, not per channel, so a shared channel
+  keeps its other parts; `--mute` stays for whole channels. Only notes are removed (tempo,
+  markers, controllers stay). The idle instrument stays in the band, so lookahead doesn't jump
+  when someone sits in. Seats are flags until session/policy profiles exist (ADR 0005).
+
+- 2026-11-11: Count-in, sections, vamp. Count-in strikes are ordinary timeline events prepended
+  to the song, so they get compensation, tap tempo and the governor for free; default click is
+  the woodblock (GM 76 on channel 10), per M2. Sections are SMF markers. Jumps live in the
+  scheduler as a forward-only play-time axis with segments mapping back to song time; a jump is
+  armed and committed 50 ms before the song clock reaches it. That keeps two promises: nothing
+  sent is taken back (every send is due at or after its play time, so the tail after the jump
+  point is still unsent), and a vamp can be released right up to the boundary. Vamp and outro act
+  at section ends so the band never cuts off mid-phrase. Limits: TD-24.
+
+- 2026-11-11: Foot controller. The policy profile (ADR 0005) starts here with only `controls`, as
+  `metrodom.policy/0`; a built-in copy of `policies/live-band.json` means it works with no file.
+  Controls reuse the tap trigger syntax, so a pedal press fires once. "Next" needs songs to go to,
+  so `play` takes a setlist; one session spans the set and inputs route to whichever song plays
+  (`LiveControl`). With start/stop mapped, songs wait for the pedal, and taps while waiting set the
+  next song's tempo (count off with your foot). Panic silences on the input thread first, then
+  waits to restart the same song, since quitting mid-gig is worse than holding. Keys mirror every
+  control. Measured with scripted pedals: start, next, panic, start all landed as expected.
+  Limits: TD-25.
+
+- 2026-11-11: Beat tracker and follower (human leads). Two layers so each can be tested alone:
+  the tracker turns hits into predicted beats (an alpha-beta style filter: 50% phase, 20% tempo
+  per beat, tempo capped at 4% per beat), and the follower turns predicted beats into scheduler
+  speed (player tempo plus a phase correction capped at ±8%), measured on the first beat still
+  movable outside the lookahead. Speed, not jumps, so nothing sent is taken back and the band
+  never lurches. Locking picks beat / half / double time nearest the song's tempo, since a drummer
+  on eighths is the common case. Holding keeps extrapolating the grid, so a drummer returning on
+  the beat is counted at once; one returning off it relocks after 4 hits. With `--follow`, songs
+  wait for a count-in: the drummer starts the band, as in a real band. "Recorded human timings"
+  are a seeded model (Gaussian jitter, ramps, fills, breaks) plus a hit-file format and recorder
+  (`beats --record`), because real recordings need the M5 triggers; the same file replays in
+  `simulate --follow`. Measured: 0 ms on a steady player, median ≤ 15 ms at 12 ms σ jitter, and
+  live on CoreMIDI ports median 16.9 ms. A steady ramp lags ~18 ms (first-order tempo loop),
+  accepted for now. Limits: TD-26.
+
+- 2026-11-11: Control API v0. It lives inside `play --api` rather than a new `serve` command:
+  the set loop, `LiveControl` and session already are the transport, queue and instruments, so
+  the API is one more input next to keys and pedals, and can't bypass the governor or panic path.
+  A daemon that owns sessions comes when the queue gets a library. ASP.NET Core minimal APIs (a
+  shared framework, no new packages). The spec is a hand-written, checked-in `openapi.json`
+  embedded in the binary and served, and a test makes routes and spec equal both ways, so the
+  contract can't drift. Pairing draft: a bearer token from `METRODOM_API_TOKEN` or random and
+  shown on the box, loopback unless a host is named. Every token is an operator until roles and
+  sessions exist. Found while testing: the ASP.NET host swallowed SIGTERM, so `play` ignored
+  `systemd stop`. Now the host ignores signals and `Session` treats SIGTERM like Ctrl+C (panic,
+  exit). Limits: TD-27.
+
+- 2026-11-11: WebSocket state stream. Each connection polls the `/state` snapshot every 100 ms and
+  sends only changes, rather than the band pushing events: the scheduler and input threads never
+  touch a socket, and a slow phone can't stall the music. Position gets its own 250 ms event so
+  `state` only fires on real changes. Messages (the status panel's lines) are pushed through a
+  bounded per-stream queue that drops the oldest. The event contract is a JSON Schema beside the
+  OpenAPI file (ADR 0003). Browsers can't send headers on a WebSocket, so the token may also come
+  as a `token.<token>` subprotocol, which keeps it out of URLs and logs. Capped at 16 streams.
+  The close handshake needed care: canceling a pending server read aborts the socket, so the
+  server sends or answers Close and waits up to 1 s before aborting.
+
+- 2026-11-11: Web remote. Plain HTML/CSS/JS embedded in the binary, no framework and no build
+  step: one page doesn't justify a JS toolchain in a .NET repo, and the Pi serves it with nothing
+  extra. It is a thin client (ADR 0003): state from `/stream`, intents to the HTTP routes, no logic
+  of its own beyond nudging ±2%. Pairing puts the token in the URL fragment (never sent to a
+  server, so it can't land in logs or a referrer), then local storage. A QR code of the same link
+  is the obvious next step for phones. Strict CSP with no inline code, text-only DOM updates
+  because song titles come from files. Found in the browser: a fragment-only link doesn't reload an
+  open page, so the page listens for `hashchange`; a refused token is now dropped from storage;
+  replies and stream messages were shown twice.
+
+- 2026-11-11: Discovery step 4b. The band is automatic only when `-o` is absent: naming outputs
+  still means exactly those, so scripts and the bar-band setup behave as before. Assignments are a
+  per-user JSON file (Core parses it, the Conductor stores it) written by `devices --assign` in the
+  `-o` syntax, because the registry and Control API that would own roles don't exist yet; moving
+  them there later keeps the format. Key = identity without version + port name, falling back to
+  port name: firmware updates keep roles, and USB serials aren't reachable through CoreMIDI or
+  DryWetMIDI. Auto-added MetroDom instruments get one channel (profile's `midi.channel`, now
+  parsed, else first free) and assignments claim channels first. General devices are only offered:
+  guessing what a stranger's synth should play is how a bar gets a surprise. Hot-plugged devices
+  join between songs, never mid-song, because the scheduler's lookahead is fixed per song and a
+  slower instrument joining mid-song would play late. Hot-plug is a 1 s port listing (the same
+  cadence as reconnect) and asks each new port once. Found in passing: `--help` crashed on
+  `virtual`, `arrange`, `simulate` and `play` (unescaped `[=X]` markup); fixed, with a test over
+  every command. Headless `play` now prints the live panel's messages as plain lines.
+- 2026-11-11: Brain firmware first cut. Every decision is in a platform-free C++ core
+  (`src/brain/`) with host tests run by `make` in CI, and the sketch only moves bytes and pins:
+  there's no Pico toolchain here yet, and a laptop test with sanitizers catches more than a bench
+  ever would. Omni by default, because each instrument is its own USB port and a stock DAW sends
+  on channel 1. Over-limit notes are refused, not queued: a late strike is a wrong note, and the
+  Conductor already plans around the limits the profile states. Duty is a leaky bucket (a burst,
+  then the duty rate), not a sliding window, because it needs two numbers per actuator. The
+  profile is built from the config the brain enforces, and a committed bench profile is checked
+  by both the C++ and the .NET tests, so firmware and Conductor can't drift apart. Identity model
+  1 = brain: the body it drives is in its profile, so a model per instrument isn't needed yet.
 
 ## Open questions
 - Target box model (ADR 0002).

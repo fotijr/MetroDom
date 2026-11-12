@@ -7,7 +7,8 @@ namespace MetroDom.Core.Simulation;
 /// <summary>
 /// A built-in two-piece song for trying the band without a MIDI file: a xylophone line on
 /// channel 1 over a GM drum groove on channel 10 (kick, snare, woodblock), 4 bars at 100 BPM.
-/// Melody and drums land together on every beat, which is what an alignment test needs.
+/// Melody and drums land together on every beat, which is what an alignment test needs. Markers
+/// split it into Verse (bars 1-2), Chorus (bar 3) and Outro (bar 4), to try vamp and jump.
 /// </summary>
 public static class DemoSong
 {
@@ -22,6 +23,13 @@ public static class DemoSong
     public static MidiFile Create()
     {
         var melody = new TrackChunk(new SequenceTrackNameEvent("Xylophone"));
+        using (var events = melody.ManageTimedEvents())
+        {
+            events.Objects.Add(new TimedEvent(new MarkerEvent("Verse"), 0));
+            events.Objects.Add(new TimedEvent(new MarkerEvent("Chorus"), 8 * Ppq));
+            events.Objects.Add(new TimedEvent(new MarkerEvent("Outro"), 12 * Ppq));
+        }
+
         int[] line = [60, 64, 67, 72, 71, 67, 64, 62, 60, 64, 67, 69, 67, 64, 62, 60];
         using (var notes = melody.ManageNotes())
         {

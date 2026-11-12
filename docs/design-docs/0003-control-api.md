@@ -25,5 +25,5 @@ backends, or letting apps talk to instruments, would fork the system and bypass 
 - Safety lives below the API, so no client can bypass it.
 
 ## Open questions
-- Pairing/auth flow for the rental customer (QR code on the box? see [SECURITY.md](../SECURITY.md)).
+- Pairing/auth flow for the rental customer (QR code on the box? see [SECURITY.md](../SECURITY.md)). v0 draft: one bearer token shown on the Conductor or set by env ([control API](../references/control-api.md)); a QR code can carry it later.
 - Web app (PWA) first vs native apps. A PWA served by the Conductor avoids app stores.

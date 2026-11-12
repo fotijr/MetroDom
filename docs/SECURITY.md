@@ -14,7 +14,7 @@ The active policy profile ([ADR 0005](design-docs/0005-deployment-modes-are-poli
 maps roles to permissions. The Conductor enforces it. Apps only hide buttons.
 
 ## Rules
-- **Authenticate every Control API session.** Owner/operator sessions come from explicit pairing
+- **Authenticate every Control API session.** v0: a bearer token, loopback by default ([control API](references/control-api.md)). Owner/operator sessions come from explicit pairing
   (e.g. QR code with a one-time token shown on the box), never "anyone on the Wi-Fi".
 - **Guests are untrusted input.** Validate and rate-limit everything: request floods, vote
   stuffing, oversized payloads, offensive free text (avoid free text where possible).

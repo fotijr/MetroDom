@@ -18,8 +18,14 @@ internal sealed class ArrangeCommand : Command<ArrangeCommand.Settings>
         public string? Path { get; init; }
 
         [CommandOption("-i|--instrument <SPEC>")]
-        [Description("An instrument, NAME[=CHANNELS]@LATENCY_MS[/NOTES], repeatable (e.g. [bold]-i xylo=1@10/C4-C6 -i drums=10@35/36,38,76[/]). It plays on its first channel; channel 10 means drums. Default: xylo and drums, any notes.")]
+        [Description("An instrument, NAME[[=CHANNELS]]@LATENCY_MS[[/NOTES]], repeatable (e.g. [bold]-i xylo=1@10/C4-C6 -i drums=10@35/36,38,76[/]). It plays on its first channel; channel 10 means drums. Default: xylo and drums, any notes.")]
         public string[]? Instruments { get; init; }
+
+        [CommandOption("-s|--seat <ROLE>")]
+        [Description(SeatList.Help)]
+        public string[]? Seat { get; init; }
+
+        public IReadOnlyList<Core.Arranging.Seat> Seats => SeatList.TryParse(Seat, out var seats, out _) ? seats : [];
 
         [CommandOption("--no-fold")]
         [Description("Drop notes that don't fit instead of moving them by octaves.")]
@@ -35,6 +41,11 @@ internal sealed class ArrangeCommand : Command<ArrangeCommand.Settings>
                 return ValidationResult.Error($"file not found: {Path}");
             }
 
+            if (!SeatList.TryParse(Seat, out _, out var seatError))
+            {
+                return ValidationResult.Error($"--seat: {seatError}");
+            }
+
             return InstrumentSpec.TryParseAll(Instruments, out _, out var error)
                 ? ValidationResult.Success()
                 : ValidationResult.Error($"--instrument: {error}");
@@ -43,11 +54,12 @@ internal sealed class ArrangeCommand : Command<ArrangeCommand.Settings>
 
     public override int Execute(CommandContext context, Settings settings, CancellationToken cancellationToken)
     {
-        var midiFile = settings.Path is null ? DemoSong.Create() : MidiFile.Read(settings.Path);
-        var band = settings.Band.Select(s => s.ToBandMember()).ToArray();
-        var arrangement = Arranger.Arrange(midiFile, band, new ArrangerOptions { FoldOctaves = !settings.NoFold });
-
         AnsiConsole.MarkupLine($"[grey]Song[/]  [bold]{Markup.Escape(settings.Path is null ? "built-in demo" : System.IO.Path.GetFileName(settings.Path))}[/]");
+        var roles = SongRoles.Load(settings.Path);
+        var midiFile = SeatList.Apply(settings.Path is null ? DemoSong.Create() : MidiFile.Read(settings.Path), settings.Seats, roles);
+        var band = settings.Band.Select(s => s.ToBandMember()).ToArray();
+        var arrangement = Arranger.Arrange(midiFile, band, new ArrangerOptions { FoldOctaves = !settings.NoFold, Roles = roles });
+
         ArrangementView.Write(arrangement, band);
         return 0;
     }

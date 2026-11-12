@@ -51,6 +51,17 @@ public sealed class Orchestra
         }
     }
 
+    /// <summary>Stops sending <paramref name="channel"/> (0–15) to <paramref name="output"/>. Returns whether it was assigned.</summary>
+    public bool Unassign(int channel, IMidiOutput output)
+    {
+        ArgumentNullException.ThrowIfNull(output);
+        ValidateChannel(channel);
+        lock (_gate)
+        {
+            return _routes[channel].Remove(output);
+        }
+    }
+
     /// <summary>Sends every channel to <paramref name="output"/>.</summary>
     public void AssignAll(IMidiOutput output)
     {

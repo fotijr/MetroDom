@@ -31,7 +31,7 @@ internal static class ArrangementView
             AddCount(fit, a.Thinned, "thinned", "yellow");
             table.AddRow(
                 instrument,
-                $"{Markup.Escape(a.Part.Name)} [grey]ch {a.Part.Channel + 1} {NoteList.Name(a.Part.LowestNote)}–{NoteList.Name(a.Part.HighestNote)}[/]{transpose}",
+                $"{Markup.Escape(a.Part.Name)} [grey]({Markup.Escape(a.Part.Role)}) ch {a.Part.Channel + 1} {NoteList.Name(a.Part.LowestNote)}–{NoteList.Name(a.Part.HighestNote)}[/]{transpose}",
                 string.Join(" [grey]·[/] ", fit));
         }
 
@@ -39,7 +39,7 @@ internal static class ArrangementView
         if (arrangement.Unassigned.Count > 0)
         {
             AnsiConsole.MarkupLine("[grey]Not played:[/] " + string.Join(", ", arrangement.Unassigned.Select(p =>
-                string.Create(inv, $"{Markup.Escape(p.Name)} [grey](ch {p.Channel + 1}, {p.NoteCount} notes)[/]"))));
+                string.Create(inv, $"{Markup.Escape(p.Name)} [grey]({Markup.Escape(p.Role)}, ch {p.Channel + 1}, {p.NoteCount} notes)[/]"))));
         }
     }
 
