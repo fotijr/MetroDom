@@ -57,7 +57,7 @@ Conductor side, and one image fixture that both sides must agree on byte for byt
   (no PWM): the pulse is timed by the brain. Body Write sends hex in order and is verified by
   reading the EEPROM back; write protection is the EEPROM's WP jumper, because USB MIDI has no
   login. The brain restarts after a write so boot stays the one place a body is applied.
-  Firmware version 0.2.0. `metrodom virtual` accepts Body Write so the command can be tried
+  `metrodom virtual` accepts Body Write so the command can be tried
   without hardware: checked on macOS, the virtual xylophone answered as the M1 body.
 - 2026-11-12: Owner decisions. (1) The binary body record is accepted. (2) The PCA9685's `/OE`
   goes to brain GPIO 6 with a 10 kΩ pull-up: outputs are enabled only while the firmware holds it
@@ -73,5 +73,8 @@ Conductor side, and one image fixture that both sides must agree on byte for byt
   write button), never automatic. Checked on macOS: write the M1 body to the virtual xylophone,
   `calibrate` (11 ms), `body write --calibrated`, and `devices --identify` showed 11 ms from the
   instrument; a second run wrote nothing.
+
+- 2026-11-12: The firmware version stays 0.1 (owner) until a brain runs on real hardware; there
+  is no older firmware in the field to tell apart.
 
 ## Open questions

@@ -34,7 +34,7 @@ internal static class BodyFile
         var (answered, record) = BodyWriter.Read(backend, port, BodyWriter.DefaultTimeout);
         if (!answered)
         {
-            throw new UsageException($"{port.Name} didn't answer the Body Read. Its firmware may be older than 0.2.");
+            throw new UsageException($"{port.Name} didn't answer the Body Read. Is it running the MetroDom brain firmware?");
         }
 
         if (record is null)
@@ -221,7 +221,7 @@ internal sealed class BodyWriteCommand : Command<BodyWriteCommand.Settings>
         var reply = BodyWriter.Write(backend, port, record, BodyWriter.DefaultTimeout);
         if (reply is null)
         {
-            Ui.Fail($"{port.Name} didn't answer the Body Write. Its firmware may be older than 0.2 (no Body Write), or the reply got lost.");
+            Ui.Fail($"{port.Name} didn't answer the Body Write. Is it running the MetroDom brain firmware? Or the reply got lost.");
             return 1;
         }
 

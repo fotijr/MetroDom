@@ -40,11 +40,11 @@ public class BrainFirmwareTests
     public void IdentityReply_IsAMetroDomInstrument_Model1()
     {
         // As the firmware sends it (brain_test.cpp identityRequest_GetsMetroDomsReply), without F0.
-        var reply = new NormalSysExEvent([0x7E, 0x7F, 0x06, 0x02, 0x7D, 0x4D, 0x44, 0x01, 0x00, 0, 2, 0, 0, 0xF7]);
+        var reply = new NormalSysExEvent([0x7E, 0x7F, 0x06, 0x02, 0x7D, 0x4D, 0x44, 0x01, 0x00, 0, 1, 0, 0, 0xF7]);
 
         Assert.True(DeviceIdentity.TryParseReply(reply, out var identity));
         Assert.True(identity.IsMetroDom);
         Assert.Equal(DeviceIdentity.BrainModel, identity.Model);
-        Assert.Equal("MetroDom brain v0.2.0.0", identity.Describe());
+        Assert.Equal("MetroDom brain v0.1.0.0", identity.Describe());
     }
 }

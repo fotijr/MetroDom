@@ -110,7 +110,7 @@ the body back (Body Read) and checks it booted from exactly the bytes written.
 | refused: *reason* | The record failed the brain's checks (same reasons as above) |
 | didn't keep it | The write button wasn't held, the EEPROM is missing, or the read-back differed. The old body keeps playing |
 | can't store | This brain has no body store |
-| no answer | Firmware older than 0.2 |
+| no answer | The port isn't running the MetroDom brain firmware, or the reply got lost |
 
 **Write protection is a button you hold.** USB MIDI has no login, so anything plugged into the
 brain could send a Body Write. The body's EEPROM `WP` pin is pulled high (protected), and a

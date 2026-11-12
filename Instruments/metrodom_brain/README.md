@@ -5,7 +5,8 @@ A Pico running it is a class-compliant USB-MIDI device: a stock DAW or keyboard 
 no MetroDom software, and `metrodom devices --identify` sees a **MetroDom brain** and reads its
 profile.
 
-Status: **version 0.2, host-tested, not yet flashed.** The logic runs in `make -C test` on a
+Status: **version 0.1, host-tested, not yet flashed.** It stays 0.1 until a brain runs on real
+hardware. The logic runs in `make -C test` on a
 laptop. The sketch has only been compiled against stub headers, because this machine has no
 Pico toolchain yet; the first real build is plan 0002 H1 ("Pico blinks an LED"). Limits: TD-29
 in the [tech-debt tracker](../../docs/exec-plans/tech-debt-tracker.md).

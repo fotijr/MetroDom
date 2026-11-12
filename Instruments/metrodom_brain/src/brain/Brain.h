@@ -56,7 +56,7 @@ struct BrainConfig {
   uint16_t dutyWindowMs = 1000;   // burst size: maxDutyPercent of this window
   uint16_t watchdogMs = 500;      // hardware watchdog: a hung loop restarts the brain (all off at boot)
   uint16_t model = 1;             // identity model: 1 = generic brain
-  uint8_t version[4] = {0, 2, 0, 0};
+  uint8_t version[4] = {0, 1, 0, 0};  // stays 0.1 until a brain runs on real hardware
 };
 
 // Pins (or a driver). set() must be fast, and returns false if the output may not have changed.
