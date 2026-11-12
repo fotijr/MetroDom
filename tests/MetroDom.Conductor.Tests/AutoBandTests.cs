@@ -222,6 +222,27 @@ public class AutoBandTests
     }
 
     [Fact]
+    public void Session_ReservedChannel_ReachesNoInstrument_NowOrLater()
+    {
+        var first = new RecordingPort("MetroDom xylo");
+        using var session = new Session([new SessionOutput(first, [0, 15], Xylo)], []) { Book = new AssignmentBook() };
+
+        Assert.Equal(["MetroDom xylo"], session.Reserve(15));
+        session.Arrived(Port("MetroDom drums", DrumsId, Drums with { Channel = 15 }));
+        var opened = new List<RecordingPort>();
+        session.AdmitPending(info =>
+        {
+            var port = new RecordingPort(info.Name);
+            opened.Add(port);
+            return port;
+        });
+
+        session.Orchestra.Route(new NoteOnEvent((SevenBitNumber)36, (SevenBitNumber)90) { Channel = (FourBitNumber)15 });
+        Assert.Empty(first.Sent);
+        Assert.All(opened, p => Assert.Empty(p.Sent));
+    }
+
+    [Fact]
     public void Session_DeviceThatLeavesBeforeItsSong_DoesntJoin()
     {
         using var session = new Session([new SessionOutput(new RecordingPort("xylo"), [0], Xylo)], []) { Book = new AssignmentBook() };

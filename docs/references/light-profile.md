@@ -3,14 +3,15 @@
 Status: **Draft**. The lighting counterpart of the [instrument profile](instrument-profile.md)
 ([ADR 0011](../design-docs/0011-visuals-are-part-of-the-band.md) §2). New to lighting? Read
 [lighting essentials](lighting-essentials.md) first. Code: `src/MetroDom.Core/Lighting/`
-(profile, rendering, E1.31 packets), `src/MetroDom.Conductor/Lighting/SacnOutput.cs` (sender),
-`metrodom lights`. Limits: TD-28 in the [tech-debt tracker](../exec-plans/tech-debt-tracker.md).
+(profile, rendering, E1.31 packets, reactive mode, cues), `src/MetroDom.Conductor/Lighting/`
+(sender, the show in `play`), `metrodom lights`. Limits: TD-28 in the [tech-debt tracker](../exec-plans/tech-debt-tracker.md).
 
 ```bash
 metrodom lights rig.json                         # check it, print the patch and scenes
 metrodom lights rig.json --scene 36              # hold a scene until Ctrl+C
 metrodom lights rig.json --safe --to 192.168.1.40   # the safe look, unicast to one WLED
 metrodom play set.mid -o "MetroDom xylo=1-9,11-16" -o "MetroDom drums=10" --lights rig.json
+metrodom play set.mid --lights rig.json --lights-pad "Launchpad"   # live scenes from a pad grid
 ```
 
 ## Format (`metrodom.light-profile/0`)
@@ -19,7 +20,7 @@ metrodom play set.mid -o "MetroDom xylo=1-9,11-16" -o "MetroDom drums=10" --ligh
 {
   "schema": "metrodom.light-profile/0",
   "name": "Home rig",
-  "midi": { "channel": 16 },
+  "midi": { "channel": 16, "cues": "hold" },
   "controls": { "masterCc": 7 },
   "latencyMs": 30,
   "output": { "protocol": "sacn", "priority": 100 },
@@ -41,6 +42,7 @@ metrodom play set.mid -o "MetroDom xylo=1-9,11-16" -o "MetroDom drums=10" --ligh
 | --- | --- | --- |
 | `name` | Shown in tables and as the sACN source name | required |
 | `midi.channel` | MIDI channel the rig listens on, 1-16 | 16 |
+| `midi.cues` | `hold`: a scene lasts as long as its note. `latch`: until another scene note, the same note again goes back to reactive | `hold` |
 | `controls.masterCc` | Controller for the master dimmer, 0-119 | 7 |
 | `latencyMs` | Command → visible change, measured like an instrument's | 0 |
 | `output.destination` | One IP or host for unicast (e.g. a WLED); leave out for multicast | multicast |
@@ -63,8 +65,7 @@ metrodom play set.mid -o "MetroDom xylo=1-9,11-16" -o "MetroDom drums=10" --ligh
 - Checked when read: unique ids, scene notes and fixtures that exist, values 0-255, no fixture
   running past 512 or overlapping another in its universe.
 - Defaults follow ADR 0011: lights on channel 16, notes 36-51 for a 4×4 pad grid, CC 7 master.
-- Not used yet: `controls.masterCc` and notes on `midi.channel` (live pad scenes and a lights
-  track come next, plan 0003 V2). `lights --master` sets the master by hand.
+- `lights --master` sets the master by hand; in `play` the master CC does (below).
 
 ## Reactive lights (`play --lights`)
 
@@ -81,9 +82,11 @@ Every song gets a show with no authoring (ADR 0011 §3.1). Code:
   full color with the level on the dimmer; one without (a strip) gets its color scaled.
   Idle fixtures glow in the color of the first channel they follow. Channel 16 (the lights
   channel) never pulses: it is for cues.
-- **On time:** the light changes when the note is heard (scheduler send time + that
-  instrument's latency for that note) minus the rig's `latencyMs`, so light and sound land
-  together (ADR 0004). Frames go out every 20 ms (50 per second).
+- **On time:** the rig is one more output of the band. The orchestra sends it every channel,
+  and the scheduler sends to it early by `latencyMs`, as it does for each instrument's latency,
+  so light and sound land together (ADR 0004). A rig slower than every instrument makes the band
+  wait for it, like a slow instrument does: `play` shows it in the lookahead. Frames go out every 20 ms
+  (50 per second).
 - **Flash cap:** a fixture starts at most 3 pulses a second; notes inside that window leave it
   alone (they don't restart the pulse or change its color). At 100 BPM eighth notes (300 ms)
   that means every other note. The glow is never dark, so a pulse is never dark-to-full.
@@ -95,6 +98,39 @@ Every song gets a show with no authoring (ADR 0011 §3.1). Code:
   and amber, each pulsed with its own instrument (every other eighth note, never more than 2 a
   second), and a panic through the Control API showed the safe look about 70 ms later and
   nothing after it.
+
+## Cues: scenes and the master (`play --lights`)
+
+Live and authored shows (ADR 0011 §3.2, §3.3) override reactive mode. Code:
+`src/MetroDom.Core/Lighting/LightCues.cs`.
+
+- **Lights track:** events on `midi.channel` (16) in the song are the rig's. Notes recall
+  scenes, the master CC dims. They go through the scheduler like any part, so they follow the
+  human tempo, vamps and jumps, and land with the sound. `--arrange` leaves the lights track as
+  written (it is never handed to a robot).
+- **Pad grid** (`--lights-pad PORT`): every note and controller from that input is a cue, on
+  whatever channel the pad sends, effective at once. The default scene notes 36-51 are a 4×4
+  grid on most controllers. It needs a port of its own (not `--control` or `--tap`'s).
+- **Channel 16 belongs to the lights.** With `--lights` no instrument gets the rig's channel,
+  even one assigned 1-16 or plugged in mid-set, so no robot plays a cue note. `play` says
+  which outputs lost it.
+- **Scene notes:** a note with a scene recalls it, other notes are ignored. In `hold` mode the
+  scene lasts until its Note Off: the last held scene wins, and releasing everything returns to
+  reactive. In `latch` mode a scene stays until another scene note; the same note again
+  returns to reactive. All Notes Off / All Sound Off release held scenes.
+- **Master** (`controls.masterCc`, 0-127 → 0-255): scales scenes and reactive lights alike.
+  It stays where it was left across songs (the operator's fader is the truth). The safe look
+  ignores it, so panic is never dark because a fader was down.
+- **A new song starts in reactive** with no scene up, and panic clears cues.
+- **Flash cap:** the look changes at most 3 times a second. A cue that comes sooner waits for
+  the gap and the newest wins, so a fast lights track or pad mashing can't flash. The master
+  moves at most full range per third of a second, so a toggled fader can't strobe; a fade
+  slower than that is followed exactly.
+- Measured on macOS with virtual instruments, the example rig and a lights track (scene at
+  beat 2, release at beat 6, a second scene at beat 8, a master fade over beats 10-12, back up
+  at beat 13). Every change arrived on its beat, give or take one 20 ms frame. The fade
+  ramped smoothly to black and back, and the xylophone (assigned 1-16) never got a cue note.
+  `--lights-pad` is unit-tested only.
 
 ## Safety
 

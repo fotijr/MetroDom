@@ -63,6 +63,27 @@ public class TempoInputTests
         }
     }
 
+    [Fact]
+    public void Play_LightsPad_NeedsLights_AndItsOwnPort()
+    {
+        var path = Path.GetTempFileName();
+        var rig = Path.GetTempFileName();
+        File.WriteAllText(rig, """{"schema":"metrodom.light-profile/0","name":"rig","fixtures":[{"id":"par","address":1,"channels":["dimmer"]}]}""");
+        try
+        {
+            PlayCommand.Settings Settings(string? lights, string? tap) =>
+                new() { Paths = [path], Outputs = ["0"], Lights = lights, LightsPad = "1", Tap = tap };
+            Assert.True(Settings(rig, null).Validate().Successful);
+            Assert.Contains("own", Settings(rig, "1").Validate().Message, StringComparison.Ordinal);
+            Assert.Contains("needs --lights", Settings(null, null).Validate().Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            File.Delete(path);
+            File.Delete(rig);
+        }
+    }
+
     private sealed class FakeInput : IMidiInputPort
     {
         public event Action<MidiEvent>? EventReceived;

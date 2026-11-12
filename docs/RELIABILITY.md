@@ -36,10 +36,13 @@ but is polled (1 ms full-speed frames).
 3. **Lights**
    - Flashing capped at 3 per second unless the venue policy enables strobe (photosensitive epilepsy).
      Built for reactive lights: a fixture starts at most 3 pulses a second, over an idle glow
-     that is never dark, and `strobe` channels are always 0 (no policy can enable them yet).
+     that is never dark. Cues (lights track, pad) change the look at most 3 times a second (a
+     faster cue waits), and the master slews at most full range per third of a second. `strobe`
+     channels are always 0 (no policy can enable them yet).
    - Panic → steady safe look, sent at once from the panic path after the actuators are silent.
-     The end of a set also shows the safe look before the sACN stream terminates. Built in
-     `LightShow` (`play --lights`).
+     The end of a set also shows the safe look before the sACN stream terminates. The master
+     fader doesn't dim it. Built in `LightShow` (`play --lights`).
+   - No robot plays a cue: under `--lights` the rig's channel (16) is taken from every instrument.
    - LEDs on their own fused 5 V supply with software brightness caps.
 4. **Humans near robots**
    - Actuators within a player's reach are guarded. A robot never plays the drum or string a human is playing.

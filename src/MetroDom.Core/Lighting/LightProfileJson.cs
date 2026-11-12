@@ -97,12 +97,14 @@ public static class LightProfileJson
         }
 
         var channel = root["midi"]?["channel"]?.GetValue<int>() ?? LightProfile.DefaultChannel + 1;
+        var cues = root["midi"]?["cues"]?.GetValue<string>() ?? "hold";
         var masterCc = root["controls"]?["masterCc"]?.GetValue<int>() ?? LightProfile.DefaultMasterCc;
         var latency = root["latencyMs"]?.GetValue<double>() ?? 0;
         var destination = root["output"]?["destination"]?.GetValue<string>();
         var priority = root["output"]?["priority"]?.GetValue<int>() ?? LightOutput.DefaultPriority;
         var protocol = root["output"]?["protocol"]?.GetValue<string>() ?? "sacn";
         error = channel is < 1 or > 16 ? "\"midi.channel\" must be 1-16."
+            : cues is not ("hold" or "latch") ? $"\"midi.cues\" '{cues}' must be hold or latch."
             : masterCc is < 0 or > 119 ? "\"controls.masterCc\" must be 0-119."
             : latency is < 0 or > 10_000 ? "\"latencyMs\" must be 0-10000."
             : priority is < 0 or > 200 ? "\"output.priority\" must be 0-200."
@@ -117,6 +119,7 @@ public static class LightProfileJson
         profile = new LightProfile(name, fixtures)
         {
             Channel = channel - 1,
+            Cues = cues == "latch" ? CueMode.Latch : CueMode.Hold,
             MasterCc = masterCc,
             Latency = TimeSpan.FromMilliseconds(latency),
             Scenes = scenes,

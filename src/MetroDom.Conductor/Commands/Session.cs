@@ -55,6 +55,7 @@ internal sealed class Session : IDisposable
     private readonly List<SessionOutput> _outputs = [];
     private readonly List<SafetyGovernor> _governors = [];
     private readonly List<PlannedOutput> _pending = [];
+    private readonly HashSet<int> _reserved = [];
     private readonly SafetyLimits _limits;
     private readonly IClock _clock;
     private DeviceWatcher? _watcher;
@@ -179,6 +180,23 @@ internal sealed class Session : IDisposable
     public bool WaitForStop(TimeSpan timeout) => _stop.Wait(timeout);
 
     /// <summary>
+    /// Takes <paramref name="channel"/> (0-15) away from every instrument, now and for devices that
+    /// join later: the lights' channel under <c>play --lights</c>, so no robot plays a cue note.
+    /// Returns the outputs that had it.
+    /// </summary>
+    public IReadOnlyList<string> Reserve(int channel)
+    {
+        List<SafetyGovernor> band;
+        lock (_gate)
+        {
+            _reserved.Add(channel);
+            band = [.. _governors];
+        }
+
+        return [.. band.Where(g => Orchestra.Unassign(channel, g)).Select(g => g.Name)];
+    }
+
+    /// <summary>
     /// Watches for devices plugged in during the set (ADR 0007 step 4): an assigned device or a
     /// MetroDom instrument is queued to join at the next song (<see cref="AdmitPending"/>), never
     /// mid-song; anything else is announced as available. Only for a band put together from
@@ -288,13 +306,15 @@ internal sealed class Session : IDisposable
     private void Add(SessionOutput output)
     {
         var governor = new SafetyGovernor(output.Port, output.Profile, _limits, _clock);
+        int[] channels;
         lock (_gate)
         {
             _outputs.Add(output);
             _governors.Add(governor);
+            channels = [.. output.Channels.Where(c => !_reserved.Contains(c))];
         }
 
-        foreach (var channel in output.Channels)
+        foreach (var channel in channels)
         {
             Orchestra.Assign(channel, governor);
         }

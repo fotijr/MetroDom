@@ -6,6 +6,7 @@ using MetroDom.Conductor.Api;
 using MetroDom.Conductor.Cli;
 using MetroDom.Conductor.Lighting;
 using MetroDom.Conductor.Midi;
+using MetroDom.Core;
 using MetroDom.Core.Arranging;
 using MetroDom.Core.Lighting;
 using MetroDom.Core.Policy;
@@ -103,6 +104,10 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
         [Description("Light profile (metrodom.light-profile/0) to drive over sACN: reactive lights, each instrument's fixtures pulse in its color with its notes, timed to land with the sound. Panic and the end of the set show the rig's safe look. Check a rig first with [bold]metrodom lights[/].")]
         public string? Lights { get; init; }
 
+        [CommandOption("--lights-pad <PORT>")]
+        [Description("MIDI input for live light cues: its notes recall the rig's scenes and its master CC dims, on any channel, overriding reactive lights (a 4×4 pad grid sends notes 36-51). Needs [bold]--lights[/].")]
+        public string? LightsPad { get; init; }
+
         public LightProfile? LightProfile =>
             Lights is not null && File.Exists(Lights) && LightProfileJson.TryParse(File.ReadAllText(Lights), out var rig, out _) ? rig : null;
 
@@ -151,6 +156,16 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
                 {
                     return ValidationResult.Error($"--policy: {policyError}");
                 }
+            }
+
+            if (LightsPad is not null && Lights is null)
+            {
+                return ValidationResult.Error("--lights-pad needs --lights <RIG>.");
+            }
+
+            if (LightsPad is not null && (LightsPad == Control || LightsPad == Tap || LightsPad == ClockIn || LightsPad == Follow))
+            {
+                return ValidationResult.Error("--lights-pad needs a port of its own.");
             }
 
             if (Control is not null && (Control == Tap || Control == ClockIn || Control == Follow))
@@ -258,9 +273,10 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
             live.UseSetlist([.. songs.Select((_, i) => SongTitle(songs, i))]);
             using var api = StartApi(settings, live, session);
             using var lights = StartLights(settings, session, live);
+            using var padInput = lights is null || settings.LightsPad is null ? null : PadInput(settings.LightsPad, lights);
             if (lights is not null)
             {
-                inputs += $" · lights {lights.Profile.Name}";
+                inputs += $" · lights {lights.Profile.Name}" + (padInput is null ? "" : $" (cues from {padInput.Name})");
             }
 
             session.WatchForDevices(MidiDevices.Backend.Value);
@@ -349,9 +365,19 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
         }
 
         var output = new SacnOutput(new UdpSacnSocket(), rig.Output, $"MetroDom {rig.Name}", log: session.Messages.Add, start: false);
-        var band = session.Outputs.Select(o => (IReadOnlyList<int>)[.. o.Channels]).ToList();
+        var band = session.Outputs.Select(o => (IReadOnlyList<int>)[.. o.Channels.Where(c => c != rig.Channel)]).ToList();
         var show = new LightShow(rig, output, live.Clock, band);
+
+        // The rig is one more output: every channel for reactive pulses, its own channel for cues,
+        // which no instrument gets any more (a robot must never play a cue note).
+        var lost = session.Reserve(rig.Channel);
+        session.Orchestra.AssignAll(show);
         session.Panicked += show.Safe;
+        if (lost.Count > 0)
+        {
+            Ui.Note($"Channel {rig.Channel + 1} is for lights now: {string.Join(", ", lost)} won't get it.");
+        }
+
         var where = string.Join(", ", rig.Universes.Select(u => $"universe {u} → {output.DestinationFor(u)}"));
         var follows = string.Join(", ", show.Reactive.Following.Select(f => $"{f.Key} {(f.Value is null ? "all" : "ch " + ChannelList.Format(f.Value))}"));
         Ui.Note($"Lights: {rig.Name} on {where} (sACN). Reactive: {follows}.");
@@ -410,22 +436,40 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
         var startSpeed = startBpm is { } bpm ? Clamp(bpm / fileBpm) : 1;
 
         var clock = live.Clock;
-        var scheduler = new LatencyScheduler(session.Orchestra, clock, session.Profiles);
-        scheduler.Sent += s => session.Activity.Record(s.Event);
+        var profiles = session.Profiles;
         if (lights is not null)
         {
-            var profiles = session.Profiles; // fixed for the song, like the scheduler's
-            scheduler.Sent += s => lights.Played(s, profiles.GetValueOrDefault(s.Output));
+            // Sent early by the rig's latency like any instrument, so light lands with sound.
+            profiles = new Dictionary<IMidiOutput, InstrumentProfile>(profiles) { [lights] = lights.Timing };
             lights.Resume();
         }
+
+        var scheduler = new LatencyScheduler(session.Orchestra, clock, profiles);
+        scheduler.Sent += s =>
+        {
+            if (!ReferenceEquals(s.Output, lights))
+            {
+                session.Activity.Record(s.Event);
+            }
+        };
 
         var timeline = SongTimeline.From(midiFile);
         if (settings.Arrange)
         {
             var band = session.Outputs.Select(o => new BandMember(o.Profile, o.Channels[0])).ToArray();
-            var arrangement = Arranger.Arrange(midiFile, band, new ArrangerOptions { Roles = roles });
+            var cueChannel = lights?.Profile.Channel;
+            bool IsCue(MidiEvent e) => e is ChannelEvent c && c.Channel == cueChannel;
+            var forBand = midiFile;
+            if (cueChannel is not null)
+            {
+                // The lights track is the rig's, not a part to hand to a robot: keep it as written.
+                forBand = midiFile.Clone();
+                forBand.RemoveTimedEvents(e => IsCue(e.Event));
+            }
+
+            var arrangement = Arranger.Arrange(forBand, band, new ArrangerOptions { Roles = roles });
             ArrangementView.Write(arrangement, band);
-            timeline = arrangement.Timeline;
+            timeline = [.. arrangement.Timeline.Concat(timeline.Where(e => IsCue(e.Event))).OrderBy(e => e.At)];
         }
 
         var (beat, beatsPerBar) = CountIn.Meter(midiFile);
@@ -612,6 +656,15 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
     {
         var input = PortPicker.Input(settings.Tap, "--tap");
         Listen(input, settings.Trigger, () => tapped("pedal"));
+        input.Start();
+        return input;
+    }
+
+    /// <summary>Opens <c>--lights-pad</c>: every note and controller is a light cue.</summary>
+    internal static IMidiInputPort PadInput(string port, LightShow lights)
+    {
+        var input = PortPicker.Input(port, "--lights-pad");
+        input.EventReceived += lights.Cue;
         input.Start();
         return input;
     }

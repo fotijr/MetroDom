@@ -12,6 +12,7 @@ public sealed class LightShowTests : IDisposable
     private const string Rig = """
         {"schema":"metrodom.light-profile/0","name":"rig","latencyMs":20,
          "fixtures":[{"id":"par","address":1,"channels":["dimmer","red","green","blue"]}],
+         "scenes":[{"note":36,"set":{"*":{"dimmer":200,"blue":255}}}],
          "safeLook":{"*":{"dimmer":90,"red":200}}}
         """;
 
@@ -31,29 +32,50 @@ public sealed class LightShowTests : IDisposable
 
     private byte Dimmer() => _socket.Last![0];
 
-    private static ScheduledSend Send(TimeSpan dueAt, int velocity = 127) =>
-        new(dueAt, TimeSpan.Zero, new NullOutput(), new NoteOnEvent((SevenBitNumber)60, (SevenBitNumber)velocity));
+    private static NoteOnEvent On(int note, int velocity = 127, int channel = 0) =>
+        new((SevenBitNumber)note, (SevenBitNumber)velocity) { Channel = (FourBitNumber)channel };
+
+    private static ControlChangeEvent Cc(int number, int value) =>
+        new((SevenBitNumber)number, (SevenBitNumber)value) { Channel = (FourBitNumber)15 };
 
     [Fact]
-    public void Pulse_LandsWhenTheNoteIsHeard_LessTheRigsLatency()
+    public void AsASchedulerOutput_LightLandsWithTheSound()
     {
-        // Sent at 100 ms to a 35 ms instrument: heard at 135 ms. The rig takes 20 ms: light changes at 115 ms.
-        _show.Played(Send(100 * Ms), new InstrumentProfile("drums", 35 * Ms));
+        // A 35 ms instrument and the 20 ms rig: the band runs 35 ms behind, the drum is sent at 0,
+        // the light at 15 ms, and both land at 35 ms. A lights-track cue is timed the same way.
+        var orchestra = new Orchestra();
+        var drums = new Recorder();
+        orchestra.Assign(0, drums);
+        orchestra.AssignAll(_show);
+        var profiles = new Dictionary<IMidiOutput, InstrumentProfile> { [drums] = new("drums", 35 * Ms), [_show] = _show.Timing };
+        var scheduler = new LatencyScheduler(orchestra, _clock, profiles);
+        scheduler.Start([new(TimeSpan.Zero, On(60)), new(500 * Ms, On(36, channel: 15))]);
 
-        _clock.AdvanceTo(114 * Ms);
+        scheduler.Pump();
+        Assert.Single(drums.Events);
+        _clock.AdvanceTo(14 * Ms);
+        scheduler.Pump();
         _show.Frame();
         Assert.Equal(40, Dimmer());
 
-        _clock.AdvanceTo(115 * Ms);
+        _clock.AdvanceTo(15 * Ms);
+        scheduler.Pump();
         _show.Frame();
         Assert.Equal(255, Dimmer());
+
+        _clock.AdvanceTo(515 * Ms);
+        scheduler.Pump();
+        _show.Frame();
+        Assert.Equal(200, Dimmer());
+        Assert.Equal(255, _socket.Last![3]);
+        Assert.Single(drums.Events); // the cue never reached the drums
     }
 
     [Fact]
     public void NoteOffs_AndZeroVelocity_DontPulse()
     {
-        _show.Played(Send(TimeSpan.Zero, velocity: 0), null);
-        _show.Played(new ScheduledSend(TimeSpan.Zero, TimeSpan.Zero, new NullOutput(), new NoteOffEvent((SevenBitNumber)60, (SevenBitNumber)0)), null);
+        _show.Send(On(60, velocity: 0));
+        _show.Send(new NoteOffEvent((SevenBitNumber)60, (SevenBitNumber)0));
 
         _show.Frame();
 
@@ -61,9 +83,40 @@ public sealed class LightShowTests : IDisposable
     }
 
     [Fact]
+    public void Scene_OverridesReactive_AndMasterDimsIt()
+    {
+        _show.Send(On(36, channel: 15));
+        _show.Send(On(60)); // a pulse under the scene doesn't show
+        _show.Frame();
+        Assert.Equal(200, Dimmer());
+
+        _show.Send(Cc(7, 0)); // master down: slews, never a jump
+        _clock.AdvanceTo(LightCues.MinChangeGap);
+        _show.Frame();
+        Assert.Equal(0, Dimmer());
+
+        _show.Send(new NoteOffEvent((SevenBitNumber)36, (SevenBitNumber)0) { Channel = (FourBitNumber)15 });
+        _show.Send(Cc(7, 127));
+        _clock.AdvanceTo(2 * LightCues.MinChangeGap);
+        _show.Frame();
+        Assert.Equal(40, Dimmer()); // back to the reactive glow
+    }
+
+    [Fact]
+    public void PadCue_OnAnyChannel_RecallsTheScene()
+    {
+        _show.Cue(On(36, channel: 9)); // a pad grid sending on channel 10
+
+        _show.Frame();
+
+        Assert.Equal(200, Dimmer());
+    }
+
+    [Fact]
     public void Panic_ShowsTheSafeLookAtOnce_UntilTheNextSong()
     {
-        _show.Played(Send(20 * Ms), null); // light due at 20 ms - 20 ms rig latency = 0
+        _show.Send(On(60));
+        _show.Send(Cc(7, 0));
         _show.Frame();
         Assert.Equal(255, Dimmer());
 
@@ -72,12 +125,15 @@ public sealed class LightShowTests : IDisposable
         Assert.Equal(90, Dimmer()); // sent by Safe itself, not on the next tick
         Assert.Equal(200, _socket.Last![1]);
 
-        _show.Played(Send(10 * Ms), null); // anything still in flight doesn't flash
-        _clock.AdvanceTo(10 * Ms);
+        _show.Send(On(60)); // anything still in flight doesn't flash
+        _show.Send(On(36, channel: 15));
+        _clock.AdvanceTo(LightCues.MinChangeGap);
         _show.Frame();
-        Assert.Equal(90, Dimmer());
+        Assert.Equal(90, Dimmer()); // and the master doesn't dim the safe look
 
         _show.Resume();
+        _show.Send(Cc(7, 127));
+        _clock.AdvanceTo(2 * LightCues.MinChangeGap);
         _show.Frame();
         Assert.Equal(40, Dimmer());
     }
@@ -112,12 +168,12 @@ public sealed class LightShowTests : IDisposable
         }
     }
 
-    private sealed class NullOutput : IMidiOutput
+    private sealed class Recorder : IMidiOutput
     {
-        public string Name => "null";
+        public List<MidiEvent> Events { get; } = [];
 
-        public void Send(MidiEvent midiEvent)
-        {
-        }
+        public string Name => "recorder";
+
+        public void Send(MidiEvent midiEvent) => Events.Add(midiEvent);
     }
 }

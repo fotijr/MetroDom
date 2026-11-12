@@ -1,3 +1,4 @@
+using Melanchall.DryWetMidi.Common;
 using Melanchall.DryWetMidi.Core;
 using MetroDom.Core;
 using MetroDom.Core.Lighting;
@@ -6,12 +7,15 @@ using MetroDom.Core.Timing;
 namespace MetroDom.Conductor.Lighting;
 
 /// <summary>
-/// The rig during a set (<c>play --lights</c>): reactive lights from the notes the band plays,
-/// timed to land with the sound, and the safe look on panic and at the end (ADR 0011 §3, §5).
+/// The rig during a set (<c>play --lights</c>), as one more output of the band (ADR 0011 §2):
+/// the orchestra sends it every channel, and the scheduler sends early by the rig's latency
+/// (<see cref="Timing"/>) like any instrument, so whatever arrives here is due on stage now.
+/// Notes on the band's channels become reactive pulses; the lights channel carries cues (scenes,
+/// master) that override reactive mode. The safe look on panic and at the end (ADR 0011 §3, §5).
 /// Renders a frame every <see cref="Tick"/> and hands it to the sACN output. Never blocks music:
-/// the scheduler only queues a note here.
+/// a send only records the event.
 /// </summary>
-internal sealed class LightShow : IDisposable
+internal sealed class LightShow : IMidiOutput, IDisposable
 {
     /// <summary>Frame period: 50 frames per second, about DMX's own refresh.</summary>
     public static readonly TimeSpan Tick = TimeSpan.FromMilliseconds(20);
@@ -20,6 +24,7 @@ internal sealed class LightShow : IDisposable
     private readonly SacnOutput _output;
     private readonly IClock _clock;
     private readonly ReactiveLights _reactive;
+    private readonly LightCues _cues;
     private readonly ITimer? _timer;
     private readonly Lock _gate = new();
     private bool _safe;
@@ -37,6 +42,7 @@ internal sealed class LightShow : IDisposable
         _output = output;
         _clock = clock;
         _reactive = new ReactiveLights(profile, band);
+        _cues = new LightCues(profile);
         if (start)
         {
             _timer = (time ?? TimeProvider.System).CreateTimer(_ => Frame(), null, TimeSpan.Zero, Tick);
@@ -45,7 +51,14 @@ internal sealed class LightShow : IDisposable
 
     public LightProfile Profile => _profile;
 
+    public string Name => $"lights {_profile.Name}";
+
+    /// <summary>The rig's latency as the scheduler sees it, so light is sent early and lands with sound.</summary>
+    public InstrumentProfile Timing => new(Name, _profile.Latency);
+
     public ReactiveLights Reactive => _reactive;
+
+    public LightCues Cues => _cues;
 
     /// <summary>Whether the safe look is up (after panic, until the next song).</summary>
     public bool IsSafe
@@ -60,20 +73,41 @@ internal sealed class LightShow : IDisposable
     }
 
     /// <summary>
-    /// A send from the scheduler. A Note On becomes a pulse when it will be <em>heard</em>
-    /// (<see cref="ScheduledSend.DueAt"/> plus the instrument's latency for that note), less the
-    /// rig's own latency, so light and sound arrive together (ADR 0004).
+    /// An event from the orchestra, due on stage now: a cue on the lights channel, a pulse for a
+    /// Note On on any other. Panic's All Notes Off releases held scenes but isn't the safe look
+    /// (that's <see cref="Safe"/>, after the band is silent).
     /// </summary>
-    public void Played(ScheduledSend send, InstrumentProfile? instrument)
+    public void Send(MidiEvent midiEvent)
     {
-        ArgumentNullException.ThrowIfNull(send);
-        if (send.Event is not NoteOnEvent note || note.Velocity == 0)
+        ArgumentNullException.ThrowIfNull(midiEvent);
+        if (midiEvent is not ChannelEvent channelEvent)
         {
             return;
         }
 
-        var heard = send.DueAt + (instrument?.LatencyFor(note.NoteNumber) ?? TimeSpan.Zero);
-        _reactive.Note(note.Channel, note.Velocity, heard - _profile.Latency);
+        var now = _clock.Now;
+        if (channelEvent.Channel == _profile.Channel)
+        {
+            _cues.Receive(midiEvent, now);
+        }
+        else if (midiEvent is NoteOnEvent note && note.Velocity > 0)
+        {
+            _reactive.Note(note.Channel, note.Velocity, now);
+        }
+    }
+
+    /// <summary>
+    /// A live cue from the operator's pad (<c>play --lights-pad</c>), on whatever channel the pad
+    /// sends: treated as if it came on the lights channel, effective at once.
+    /// </summary>
+    public void Cue(MidiEvent midiEvent)
+    {
+        ArgumentNullException.ThrowIfNull(midiEvent);
+        if (midiEvent.Clone() is ChannelEvent cue)
+        {
+            cue.Channel = (FourBitNumber)_profile.Channel;
+            _cues.Receive(cue, _clock.Now);
+        }
     }
 
     /// <summary>Panic: steady safe look now, nothing pending. Stays until <see cref="Resume"/>.</summary>
@@ -83,18 +117,20 @@ internal sealed class LightShow : IDisposable
         {
             _safe = true;
             _reactive.Clear();
+            _cues.Clear();
         }
 
         Frame();
     }
 
-    /// <summary>A song starts: back to reactive, from the idle glow.</summary>
+    /// <summary>A song starts: back to reactive, from the idle glow, no scene up.</summary>
     public void Resume()
     {
         lock (_gate)
         {
             _safe = false;
             _reactive.Clear();
+            _cues.Clear();
         }
     }
 
@@ -108,8 +144,13 @@ internal sealed class LightShow : IDisposable
                 return;
             }
 
-            var look = _safe ? _profile.SafeLook : _reactive.Look(_clock.Now);
-            _output.Show(LightRenderer.Render(_profile, look));
+            // The safe look ignores the master: nobody trips in the dark because a fader was down.
+            var now = _clock.Now;
+            var reactive = _reactive.Look(now);
+            var (scene, master) = _cues.At(now);
+            _output.Show(_safe
+                ? LightRenderer.Render(_profile, _profile.SafeLook)
+                : LightRenderer.Render(_profile, scene?.Look ?? reactive, master));
             _output.Pump();
         }
     }

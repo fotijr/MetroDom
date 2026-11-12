@@ -37,8 +37,8 @@ phase is fun on its own and doesn't wait for the next one.
 - [x] Light profile format, written up next to the [instrument profile](../../references/instrument-profile.md) (shape sketched in ADR 0011 §2): [light profile](../../references/light-profile.md)
 - [x] sACN output adapter in the Conductor (UDP, unit-tested with a fake socket): `SacnOutput`, `metrodom lights`
 - [x] Reactive mode: color per instrument, pulse on notes, intensity from velocity: `play --lights` ([reactive lights](../../references/light-profile.md#reactive-lights-play---lights))
-- [ ] Channel 16 lights track and pad scenes override reactive mode
-- [x] Scheduler aligns light changes with measured instrument latency (light lands at sound time minus rig latency; a rig slower than its instrument is late by the difference, TD-28)
+- [x] Channel 16 lights track and pad scenes override reactive mode: lights track in the song, `play --lights-pad`, master CC ([cues](../../references/light-profile.md#cues-scenes-and-the-master-play---lights))
+- [x] Scheduler aligns light changes with measured instrument latency: the rig is a scheduler output, sent early by its own latency
 - [ ] Strobe cap (≤ 3 flashes/s), brightness cap, quiet hours from the policy profile, unit-tested
 - [x] Panic → safe look (steady, no flashing), tested
 
@@ -89,6 +89,15 @@ phase is fun on its own and doesn't wait for the next one.
   can never delay silencing the band.
 - 2026-11-11: US English across the repo (AGENTS.md rule 7): the light profile field
   `reactive.colours` is now `reactive.colors`. Schema stays `/0` (nothing shipped yet).
+- 2026-11-11: The rig is one more output of the band, not a listener on the scheduler: the
+  orchestra sends it every channel (reactive pulses) and its own channel (cues), and the
+  scheduler sends early by the rig's latency. A lights track then follows tempo, vamps and jumps
+  for free, and a rig slower than an instrument no longer lands late; the band waits for it
+  instead. Under `--lights` channel 16 is taken from every instrument, so a robot can't play a cue.
+  Scenes default to `hold` (note length = scene length, natural for a DAW track); `latch` is
+  there for pads. Cues are capped at 3 look changes a second (a fast cue waits, the newest
+  wins) and the master slews at most full range per third of a second. That caps flashing
+  without making fades jumpy. The master survives song changes; scenes don't.
 
 ## Open questions
 - Budget for V3 fixtures.

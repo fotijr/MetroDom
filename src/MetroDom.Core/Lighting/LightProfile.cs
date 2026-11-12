@@ -43,6 +43,9 @@ public sealed record LightProfile(string Name, IReadOnlyList<Fixture> Fixtures)
     /// <summary>MIDI channel (0-15) the rig listens on.</summary>
     public int Channel { get; init; } = DefaultChannel;
 
+    /// <summary>Whether a scene lasts as long as its note or until the next one.</summary>
+    public CueMode Cues { get; init; } = CueMode.Hold;
+
     /// <summary>Controller number (0-119) for the master dimmer.</summary>
     public int MasterCc { get; init; } = DefaultMasterCc;
 
