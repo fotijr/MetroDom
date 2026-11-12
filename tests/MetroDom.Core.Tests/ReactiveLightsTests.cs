@@ -20,12 +20,12 @@ public class ReactiveLightsTests
     }
 
     [Fact]
-    public void Pulse_PeaksWithVelocity_InTheChannelsColour_AndFadesToTheGlow()
+    public void Pulse_PeaksWithVelocity_InTheChannelsColor_AndFadesToTheGlow()
     {
         var lights = new ReactiveLights(Rig(), [[0]]);
 
         Assert.Equal(40, lights.Look(TimeSpan.Zero).ValueFor("a", "dimmer")); // idle glow, never dark
-        Assert.Equal(0x2F, lights.Look(TimeSpan.Zero).ValueFor("a", "red")); // already in channel 1's colour
+        Assert.Equal(0x2F, lights.Look(TimeSpan.Zero).ValueFor("a", "red")); // already in channel 1's color
 
         lights.Note(0, 127, 100 * Ms);
         Assert.Equal(255, lights.Look(100 * Ms).ValueFor("a", "dimmer"));
@@ -112,9 +112,9 @@ public class ReactiveLightsTests
     }
 
     [Fact]
-    public void FixtureWithoutDimmer_GetsItsColourScaled()
+    public void FixtureWithoutDimmer_GetsItsColorScaled()
     {
-        var lights = new ReactiveLights(Rig(""","reactive":{"colours":{"1":"#ff8000"},"baseLevel":51}"""), [[0]]);
+        var lights = new ReactiveLights(Rig(""","reactive":{"colors":{"1":"#ff8000"},"baseLevel":51}"""), [[0]]);
 
         Assert.Equal(51, lights.Look(TimeSpan.Zero).ValueFor("strip", "red"));
         Assert.Equal(26, lights.Look(TimeSpan.Zero).ValueFor("strip", "green"));
@@ -140,8 +140,8 @@ public class ReactiveLightsTests
     [Theory]
     [InlineData(""","reactive":[]""", "must be an object")]
     [InlineData(""","reactive":{"baseLevel":300}""", "baseLevel must be 0-255")]
-    [InlineData(""","reactive":{"colours":{"17":"#ffffff"}}""", "channel 1-16")]
-    [InlineData(""","reactive":{"colours":{"1":"red"}}""", "#ffb000")]
+    [InlineData(""","reactive":{"colors":{"17":"#ffffff"}}""", "channel 1-16")]
+    [InlineData(""","reactive":{"colors":{"1":"red"}}""", "#ffb000")]
     [InlineData(""","reactive":{"follow":{"nope":[1]}}""", "'nope' must be a fixture")]
     [InlineData(""","reactive":{"follow":{"a":[0]}}""", "channels 1-16")]
     public void Parse_RejectsBadReactiveSettings(string extra, string reason)

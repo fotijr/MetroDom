@@ -11,7 +11,7 @@ hardware/
   parts/catalog.csv      every part we use: what it is, where to buy, datasheet
   inventory/stock.csv    what's physically on the shelf, how many, which bin
   modules/<id>/          reusable assemblies: module.toml, bom.csv, README.md, cad/
-  builds/<serial>.md     one record per physical unit built (labelled MD-…-NNN)
+  builds/<serial>.md     one record per physical unit built (labeled MD-…-NNN)
   inventory/equipment.csv  tools and machines we own: not consumed by builds
   inventory/musical-instruments.csv  the real instruments robots play, with fit and difficulty
   fabrication/           who can make what (library printer, online…) + batched job queue

@@ -2,7 +2,7 @@ using System.Globalization;
 
 namespace MetroDom.Core.Lighting;
 
-/// <summary>A colour, 0-255 per primary.</summary>
+/// <summary>A color, 0-255 per primary.</summary>
 public readonly record struct Rgb(byte R, byte G, byte B)
 {
     /// <summary>Parses <c>#rrggbb</c>.</summary>
@@ -23,14 +23,14 @@ public readonly record struct Rgb(byte R, byte G, byte B)
 }
 
 /// <summary>
-/// How reactive lights look (ADR 0011 §3.1): an idle glow, a pulse per note that fades, a colour
+/// How reactive lights look (ADR 0011 §3.1): an idle glow, a pulse per note that fades, a color
 /// per MIDI channel, and which channels each fixture follows.
 /// </summary>
 public sealed record ReactiveSettings
 {
     /// <summary>
-    /// One colour per MIDI channel (0-15): distinct hues, drums (10) amber, so each instrument
-    /// is recognisable.
+    /// One color per MIDI channel (0-15): distinct hues, drums (10) amber, so each instrument
+    /// is recognizable.
     /// </summary>
     public static readonly IReadOnlyList<Rgb> DefaultPalette =
     [
@@ -52,7 +52,7 @@ public sealed record ReactiveSettings
         new(0xFF, 0xFF, 0xFF), // 16 lights channel (not pulsed)
     ];
 
-    /// <summary>Colour of a fixture that follows every channel.</summary>
+    /// <summary>Color of a fixture that follows every channel.</summary>
     public static readonly Rgb Neutral = new(0xFF, 0xC8, 0x96);
 
     /// <summary>Glow between notes, 0-255. Never dark, so pulses aren't dark-to-bright flashes.</summary>
@@ -61,8 +61,8 @@ public sealed record ReactiveSettings
     /// <summary>How long a pulse takes to fade back to the glow.</summary>
     public TimeSpan Decay { get; init; } = TimeSpan.FromMilliseconds(300);
 
-    /// <summary>Colour per MIDI channel (0-15).</summary>
-    public IReadOnlyList<Rgb> Colours { get; init; } = DefaultPalette;
+    /// <summary>Color per MIDI channel (0-15).</summary>
+    public IReadOnlyList<Rgb> Colors { get; init; } = DefaultPalette;
 
     /// <summary>Fixture id → MIDI channels (0-15) it follows. Fixtures not listed are shared out across the band.</summary>
     public IReadOnlyDictionary<string, IReadOnlySet<int>> Follow { get; init; } = new Dictionary<string, IReadOnlySet<int>>();
@@ -71,7 +71,7 @@ public sealed record ReactiveSettings
 /// <summary>
 /// Reactive mode: turns the note stream into a look, so every song gets a light show for free.
 /// Each fixture follows some channels; a note on one of them starts a pulse whose peak follows
-/// velocity and which fades back to the idle glow, in that channel's colour. Notes are given
+/// velocity and which fades back to the idle glow, in that channel's color. Notes are given
 /// with the time their light should change (sound time minus the rig's latency), which may be in
 /// the future. <b>Flash cap:</b> a fixture starts at most 3 pulses per second, and notes inside
 /// that window change nothing on it (ADR 0011 §5). Thread-safe.
@@ -103,7 +103,7 @@ public sealed class ReactiveLights
                 : members.Count > 0 ? members[next++ % members.Count].ToHashSet()
                 : null;
             follows = follows?.Where(c => c != profile.Channel).ToHashSet(); // the lights channel is for cues, not pulses
-            var idle = follows is { Count: > 0 } ? _settings.Colours[follows.Min()] : ReactiveSettings.Neutral;
+            var idle = follows is { Count: > 0 } ? _settings.Colors[follows.Min()] : ReactiveSettings.Neutral;
             return new FixtureState(f, follows, idle);
         })];
     }
@@ -159,7 +159,7 @@ public sealed class ReactiveLights
 
                         f.LastPulse = at;
                         f.Peak = Math.Clamp(velocity, 1, 127) / 127.0;
-                        f.Colour = _settings.Colours[channel];
+                        f.Color = _settings.Colors[channel];
                     }
                 }
             }
@@ -187,7 +187,7 @@ public sealed class ReactiveLights
         return left <= 0 ? glow : (byte)Math.Round(glow + ((255 - glow) * f.Peak * left));
     }
 
-    /// <summary>A fixture with a dimmer gets full colour and the level on the dimmer; one without gets the colour scaled.</summary>
+    /// <summary>A fixture with a dimmer gets full color and the level on the dimmer; one without gets the color scaled.</summary>
     private static Dictionary<string, byte> Roles(FixtureState f, byte level)
     {
         var hasDimmer = f.Fixture.Channels.Any(c => string.Equals(c, "dimmer", StringComparison.OrdinalIgnoreCase));
@@ -195,9 +195,9 @@ public sealed class ReactiveLights
         return new Dictionary<string, byte>(StringComparer.OrdinalIgnoreCase)
         {
             ["dimmer"] = level,
-            ["red"] = Scale(f.Colour.R),
-            ["green"] = Scale(f.Colour.G),
-            ["blue"] = Scale(f.Colour.B),
+            ["red"] = Scale(f.Color.R),
+            ["green"] = Scale(f.Color.G),
+            ["blue"] = Scale(f.Color.B),
         };
     }
 
@@ -209,7 +209,7 @@ public sealed class ReactiveLights
 
         public Rgb Idle { get; } = idle;
 
-        public Rgb Colour { get; set; } = idle;
+        public Rgb Color { get; set; } = idle;
 
         public TimeSpan? LastPulse { get; set; }
 
@@ -217,7 +217,7 @@ public sealed class ReactiveLights
 
         public void Reset()
         {
-            Colour = Idle;
+            Color = Idle;
             LastPulse = null;
             Peak = 0;
         }

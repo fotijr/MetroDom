@@ -33,7 +33,7 @@ HW = ROOT / "hardware"
 SLUG = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 STATUSES = {"planned", "prototype", "proven", "deprecated"}
 EQUIPMENT_ROLES = {"shop", "show", "both"}
-QUEUE_STATUSES = {"queued", "batched", "done", "cancelled"}
+QUEUE_STATUSES = {"queued", "batched", "done", "canceled"}
 MODULE_KEYS = ("id", "name", "revision", "status", "job", "interfaces")
 
 

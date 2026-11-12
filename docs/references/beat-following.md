@@ -60,7 +60,7 @@ comments and a header line are skipped. `beats --record` writes times relative t
 
 ## Measured
 
-Virtual clock (`BeatFollowerTests`, modelled player, 30 ms band latency):
+Virtual clock (`BeatFollowerTests`, modeled player, 30 ms band latency):
 
 | Player | Band − player |
 | --- | --- |

@@ -121,7 +121,7 @@ internal sealed class StateStream(LiveControl live, Session session)
             session.Messages.Added -= OnMessage;
             await Close(socket).ConfigureAwait(false);
 
-            // Give the client a moment to answer the close; cancelling a pending read aborts the socket.
+            // Give the client a moment to answer the close; canceling a pending read aborts the socket.
             if (await Task.WhenAny(reading, Task.Delay(TimeSpan.FromSeconds(1), CancellationToken.None)).ConfigureAwait(false) != reading)
             {
                 await abort.CancelAsync().ConfigureAwait(false);

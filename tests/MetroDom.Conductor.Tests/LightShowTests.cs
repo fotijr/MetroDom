@@ -90,7 +90,7 @@ public sealed class LightShowTests : IDisposable
         _show.Dispose();
 
         var live = _socket.Packets.Where(p => !p.Terminated).ToList();
-        Assert.Equal(90, live[^1].Data[0]); // receivers honour this one; terminated packets' data is ignored
+        Assert.Equal(90, live[^1].Data[0]); // receivers honor this one; terminated packets' data is ignored
         Assert.Equal(3, _socket.Packets.Count(p => p.Terminated));
         Assert.Equal(90, _socket.Packets[^1].Data[0]);
     }

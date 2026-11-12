@@ -208,17 +208,17 @@ public static class LightProfileJson
             return false;
         }
 
-        var colours = reactive.Colours.ToArray();
-        foreach (var (key, value) in obj["colours"] as JsonObject ?? [])
+        var colors = reactive.Colors.ToArray();
+        foreach (var (key, value) in obj["colors"] as JsonObject ?? [])
         {
             if (!int.TryParse(key, NumberStyles.None, CultureInfo.InvariantCulture, out var channel) || channel is < 1 or > 16
-                || !Rgb.TryParse(value?.GetValue<string>(), out var colour))
+                || !Rgb.TryParse(value?.GetValue<string>(), out var color))
             {
-                error = $"\"reactive.colours\": '{key}' needs a channel 1-16 and a colour like \"#ffb000\".";
+                error = $"\"reactive.colors\": '{key}' needs a channel 1-16 and a color like \"#ffb000\".";
                 return false;
             }
 
-            colours[channel - 1] = colour;
+            colors[channel - 1] = color;
         }
 
         var follow = new Dictionary<string, IReadOnlySet<int>>(StringComparer.Ordinal);
@@ -238,7 +238,7 @@ public static class LightProfileJson
         {
             BaseLevel = (byte)baseLevel,
             Decay = TimeSpan.FromMilliseconds(decay),
-            Colours = colours,
+            Colors = colors,
             Follow = follow,
         };
         return true;

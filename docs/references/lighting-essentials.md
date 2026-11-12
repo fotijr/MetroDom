@@ -41,11 +41,11 @@ of every channel, continuously, about 40 times a second.
 - **MIDI mapping:** most lighting software (QLC+ and others) maps incoming Note/CC to scenes,
   faders and buttons. Zero code; good first step.
 - **MIDI Show Control (MSC):** a SysEx command set (GO, STOP, cue number) in the MIDI spec, for
-  theatre consoles. Useful if we ever drive a real console.
+  theater consoles. Useful if we ever drive a real console.
 - **MIDI Clock / timecode** syncs chases and effects to tempo.
 
 ## Addressable LEDs (strips, rings, matrices you build)
-- **WS2812B / SK6812 ("NeoPixel"):** 5 V, one data wire, each LED individually coloured.
+- **WS2812B / SK6812 ("NeoPixel"):** 5 V, one data wire, each LED individually colored.
   Cheap, everywhere. Timing-sensitive data line.
 - **APA102 / SK9822 ("DotStar"):** data + clock wires. Faster refresh, more robust over distance.
 - Power is the hard part: up to ~60 mA per LED at full white (60 LEDs ≈ 3.6 A at 5 V). Inject

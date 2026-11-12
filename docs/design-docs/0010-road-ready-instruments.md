@@ -89,7 +89,7 @@ Instruments cable to the head case, not to each other.
   brain, [ADR 0006](0006-swappable-instrument-brains.md)). Affects the brain choice.
 - **Which vehicle?** Its cargo dimensions should confirm or change the 600 mm grid. Record it in
   [equipment.csv](../../hardware/inventory/equipment.csv) once known.
-- **Buy cases or build crates?** Plywood crates with aluminium edging are cheaper and good
+- **Buy cases or build crates?** Plywood crates with aluminum edging are cheaper and good
   beginner projects. Bought road cases are tougher.
 - **Venue power.** A whole rig should run from one ordinary outlet circuit. Budget the sum of
   power-supply ratings.

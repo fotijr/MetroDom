@@ -33,7 +33,7 @@ metrodom play set.mid -o "MetroDom xylo=1-9,11-16" -o "MetroDom drums=10" --ligh
     { "note": 37, "name": "Warm",      "set": { "*": { "dimmer": 200, "red": 255, "green": 120 }, "strip": { "red": 80, "green": 40 } } }
   ],
   "safeLook": { "*": { "dimmer": 140, "red": 160, "green": 140, "blue": 110 } },
-  "reactive": { "baseLevel": 40, "decayMs": 300, "colours": { "10": "#ffb000" }, "follow": { "right-par": [10] } }
+  "reactive": { "baseLevel": 40, "decayMs": 300, "colors": { "10": "#ffb000" }, "follow": { "right-par": [10] } }
 }
 ```
 
@@ -50,7 +50,7 @@ metrodom play set.mid -o "MetroDom xylo=1-9,11-16" -o "MetroDom drums=10" --ligh
 | `safeLook` | A look for panic and stopping | warm, dim, steady |
 | `reactive.baseLevel` | Idle glow between notes, 0-255 | 40 |
 | `reactive.decayMs` | How long a pulse fades | 300 |
-| `reactive.colours` | Channel (1-16) → `#rrggbb` | a 16-hue palette, drums (10) amber |
+| `reactive.colors` | Channel (1-16) → `#rrggbb` | a 16-hue palette, drums (10) amber |
 | `reactive.follow` | Fixture id → channels it pulses with | shared out across the band |
 
 - **Channel roles:** `dimmer`, `red`, `green`, `blue`, `white`, `amber`, `uv` are intensity (the
@@ -77,15 +77,15 @@ Every song gets a show with no authoring (ADR 0011 §3.1). Code:
   fixture 3 the xylophone again. With no band (never in `play`), a fixture follows everything.
   `play` prints the plan (`Reactive: left-par ch 1-9,11-15, right-par ch 10, …`).
 - **A pulse:** a Note On lifts the fixture from the glow to `glow + (255 − glow) × velocity/127`
-  in its channel's colour, fading back linearly over `decayMs`. A fixture with a `dimmer` gets
-  full colour with the level on the dimmer; one without (a strip) gets its colour scaled.
-  Idle fixtures glow in the colour of the first channel they follow. Channel 16 (the lights
+  in its channel's color, fading back linearly over `decayMs`. A fixture with a `dimmer` gets
+  full color with the level on the dimmer; one without (a strip) gets its color scaled.
+  Idle fixtures glow in the color of the first channel they follow. Channel 16 (the lights
   channel) never pulses: it is for cues.
 - **On time:** the light changes when the note is heard (scheduler send time + that
   instrument's latency for that note) minus the rig's `latencyMs`, so light and sound land
   together (ADR 0004). Frames go out every 20 ms (50 per second).
 - **Flash cap:** a fixture starts at most 3 pulses a second; notes inside that window leave it
-  alone (they don't restart the pulse or change its colour). At 100 BPM eighth notes (300 ms)
+  alone (they don't restart the pulse or change its color). At 100 BPM eighth notes (300 ms)
   that means every other note. The glow is never dark, so a pulse is never dark-to-full.
 - **Panic** (pedal, Esc, API): the safe look at once, steady, until the next song starts.
   Muted channels and seats don't pulse (muted notes never reach the scheduler's `Sent`).

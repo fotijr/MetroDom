@@ -76,3 +76,5 @@ New Conductor code is modern C# on .NET LTS ([ADR 0002](docs/design-docs/0002-he
    it, the quality score, and the tech-debt tracker. Run `scripts/check_docs.py`.
 5. **Plans live in the repo.** Non-trivial work gets an exec plan in `docs/exec-plans/active/`.
 6. **Keep this file short.** Add a row to a table above, not a paragraph. Details go in `docs/`.
+7. **US English everywhere**: code, docs, comments, JSON fields, CLI text (color, behavior, center).
+   Library names stay as they are (Spectre's `grey`).

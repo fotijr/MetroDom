@@ -34,7 +34,7 @@ The arranger then treats a lights part like any other part. Default MIDI channel
 
 ### 3. Three ways to make a light show, simplest first
 1. **Reactive (no authoring):** the Conductor turns the note stream into light: each instrument
-   has a colour, its fixtures pulse with its notes, intensity follows velocity and density.
+   has a color, its fixtures pulse with its notes, intensity follows velocity and density.
    Every song gets a show for free.
 2. **Live:** the operator's pad controller triggers scenes on channel 16 during the gig.
 3. **Authored:** a "Lights" track in the Standard MIDI File, written in any DAW. Notes are cues,
@@ -80,5 +80,5 @@ Reactive is the default and is overridden by live or authored cues.
 - ~~Light profile format: extend the instrument profile with a `kind: light` or separate schema?~~
   Separate schema, `metrodom.light-profile/0` ([light profile](../references/light-profile.md),
   plan 0003 decisions log 2026-11-11).
-- Exact reactive mapping (colour per instrument, decay times) needs to be tried in a real room.
+- Exact reactive mapping (color per instrument, decay times) needs to be tried in a real room.
 - How many fixtures and which ones for a bar-sized rig? Budget first, see exec plan 0003.

@@ -213,7 +213,7 @@ That is the first milestone of the [live band spec](../../product-specs/live-ban
   bounded per-stream queue that drops the oldest. The event contract is a JSON Schema beside the
   OpenAPI file (ADR 0003). Browsers can't send headers on a WebSocket, so the token may also come
   as a `token.<token>` subprotocol, which keeps it out of URLs and logs. Capped at 16 streams.
-  The close handshake needed care: cancelling a pending server read aborts the socket, so the
+  The close handshake needed care: canceling a pending server read aborts the socket, so the
   server sends or answers Close and waits up to 1 s before aborting.
 
 - 2026-11-11: Web remote. Plain HTML/CSS/JS embedded in the binary, no framework and no build

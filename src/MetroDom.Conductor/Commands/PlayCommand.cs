@@ -100,7 +100,7 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
         public ApiEndpoint? ApiAt => Api is not null && MetroDom.Conductor.Api.ApiEndpoint.TryParse(Api, out var endpoint, out _) ? endpoint : null;
 
         [CommandOption("--lights <RIG>")]
-        [Description("Light profile (metrodom.light-profile/0) to drive over sACN: reactive lights, each instrument's fixtures pulse in its colour with its notes, timed to land with the sound. Panic and the end of the set show the rig's safe look. Check a rig first with [bold]metrodom lights[/].")]
+        [Description("Light profile (metrodom.light-profile/0) to drive over sACN: reactive lights, each instrument's fixtures pulse in its color with its notes, timed to land with the sound. Panic and the end of the set show the rig's safe look. Check a rig first with [bold]metrodom lights[/].")]
         public string? Lights { get; init; }
 
         public LightProfile? LightProfile =>

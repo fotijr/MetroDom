@@ -37,7 +37,7 @@ public sealed record FollowResult(TimeSpan? LockedAt, IReadOnlyList<FollowedBeat
 }
 
 /// <summary>
-/// A band following a recorded (or modelled) player on a <see cref="VirtualClock"/>, through the
+/// A band following a recorded (or modeled) player on a <see cref="VirtualClock"/>, through the
 /// real tracker, follower and scheduler: the band plays a click on every beat of a beat grid, and
 /// the result says how close each click landed to the player's hits. The song starts aligned as
 /// soon as the tracker locks, like a drummer counting the band in. Instant and repeatable.

@@ -4,7 +4,7 @@ using MetroDom.Core.Timing;
 namespace MetroDom.Core.Tests;
 
 /// <summary>
-/// A modelled human player until real recordings exist (M5 triggers): beats with Gaussian timing
+/// A modeled human player until real recordings exist (M5 triggers): beats with Gaussian timing
 /// error, an optional tempo curve, and the things drummers do that a tracker must survive.
 /// </summary>
 internal static class Human
