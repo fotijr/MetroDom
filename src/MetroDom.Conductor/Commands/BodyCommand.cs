@@ -1,0 +1,159 @@
+using System.ComponentModel;
+using System.Diagnostics;
+using System.Globalization;
+using Melanchall.DryWetMidi.Common;
+using Melanchall.DryWetMidi.MusicTheory;
+using MetroDom.Conductor.Cli;
+using MetroDom.Conductor.Midi;
+using MetroDom.Core.Bodies;
+using Spectre.Console;
+using Spectre.Console.Cli;
+
+namespace MetroDom.Conductor.Commands;
+
+/// <summary>Shared by <c>body check</c> and <c>body write</c>: reading and showing a body file.</summary>
+internal static class BodyFile
+{
+    public static BodyDefinition Load(string path)
+    {
+        if (!File.Exists(path))
+        {
+            throw new UsageException($"no body file at {path}.");
+        }
+
+        return BodyImage.TryParseJson(File.ReadAllText(path), out var body, out var error)
+            ? body
+            : throw new UsageException($"{path}: {error}");
+    }
+
+    public static void Show(BodyDefinition body, byte[] record)
+    {
+        var driver = body.Driver == BodyDriver.Pca9685
+            ? string.Create(CultureInfo.InvariantCulture, $"PCA9685 at 0x{body.Address:X2}")
+            : "GPIO pins";
+        AnsiConsole.MarkupLine(string.Create(CultureInfo.InvariantCulture,
+            $"[bold]{Markup.Escape(body.Name)}[/] [grey]({Markup.Escape(body.Id)})[/] · {driver} · {(body.Channel is { } c ? $"channel {c + 1}" : "any channel")} · polyphony {body.Polyphony}"));
+        var table = new Table().Border(TableBorder.Rounded).BorderColor(Color.Grey)
+            .AddColumn("Note").AddColumn("Output").AddColumn("Pulse").AddColumn("Repeat ≥").AddColumn("Latency");
+        foreach (var a in body.Notes)
+        {
+            var pulse = a.MinPulseMs > 0 && a.MinPulseMs < a.PulseMs
+                ? string.Create(CultureInfo.InvariantCulture, $"{a.MinPulseMs}-{a.PulseMs} ms [grey](by velocity)[/]")
+                : string.Create(CultureInfo.InvariantCulture, $"{a.PulseMs} ms");
+            table.AddRow(
+                string.Create(CultureInfo.InvariantCulture, $"{Note.Get((SevenBitNumber)(byte)a.Note)} [grey]({a.Note})[/]"),
+                a.Output.ToString(CultureInfo.InvariantCulture),
+                pulse,
+                string.Create(CultureInfo.InvariantCulture, $"{a.MinIntervalMs} ms"),
+                a.LatencyMs > 0 ? string.Create(CultureInfo.InvariantCulture, $"{a.LatencyMs} ms") : "[grey]not measured[/]");
+        }
+
+        AnsiConsole.Write(table);
+        AnsiConsole.MarkupLine(string.Create(CultureInfo.InvariantCulture,
+            $"[grey]Safety: pulse ≤ {body.MaxOnMs} ms, duty ≤ {body.MaxDutyPercent}% of {body.DutyWindowMs} ms, watchdog {body.WatchdogMs} ms. Record: {record.Length} bytes, {BodyWrite.Chunks(record).Count} SysEx messages.[/]"));
+    }
+}
+
+/// <summary>Checks a body file the way a brain will, and shows what the instrument becomes.</summary>
+internal sealed class BodyCheckCommand : Command<BodyCheckCommand.Settings>
+{
+    public sealed class Settings : CommandSettings
+    {
+        [CommandArgument(0, "<FILE>")]
+        [Description("A [bold]metrodom.body/0[/] JSON file (see docs/references/body-record.md).")]
+        public string File { get; init; } = "";
+
+        [CommandOption("--hex <OUT>")]
+        [Description("Also write the record as hex, the bytes a brain stores (fixtures, or an EEPROM programmer).")]
+        public string? Hex { get; init; }
+    }
+
+    public override int Execute(CommandContext context, Settings settings, CancellationToken cancellationToken)
+    {
+        var body = BodyFile.Load(settings.File);
+        var record = BodyImage.Encode(body);
+        BodyFile.Show(body, record);
+        if (settings.Hex is { } path)
+        {
+            File.WriteAllText(path, BodyImage.ToHex(record) + "\n");
+            Ui.Success($"Wrote {path}.");
+        }
+
+        Ui.Success("A brain will accept this body.");
+        return 0;
+    }
+}
+
+/// <summary>
+/// Writes a body file into a brain's body EEPROM over MetroDom SysEx (ADR 0006 §3). The brain
+/// checks it, stores it, reads it back and restarts as that instrument.
+/// </summary>
+internal sealed class BodyWriteCommand : Command<BodyWriteCommand.Settings>
+{
+    /// <summary>How long to wait for a restarted brain to answer again.</summary>
+    private static readonly TimeSpan ComeBack = TimeSpan.FromSeconds(5);
+
+    public sealed class Settings : CommandSettings
+    {
+        [CommandArgument(0, "<PORT>")]
+        [Description("The brain's port: index, name, or unique part of a name from [bold]metrodom devices[/].")]
+        public string Port { get; init; } = "";
+
+        [CommandArgument(1, "<FILE>")]
+        [Description("A [bold]metrodom.body/0[/] JSON file. Checked here first; nothing is sent if it isn't valid.")]
+        public string File { get; init; } = "";
+    }
+
+    public override int Execute(CommandContext context, Settings settings, CancellationToken cancellationToken)
+    {
+        var body = BodyFile.Load(settings.File);
+        var record = BodyImage.Encode(body);
+        var backend = MidiDevices.Backend.Value;
+        var port = MidiDevices.FindOutput(settings.Port);
+
+        // MetroDom SysEx goes only to ports that said they are MetroDom (7D is shared).
+        var before = Identifier.Identify(backend, Identifier.DefaultTimeout, [port])[0];
+        if (before.Kind != PortKind.MetroDom)
+        {
+            throw new UsageException($"{port.Name} didn't identify as a MetroDom instrument, so it gets no Body Write. Check it with metrodom devices --identify.");
+        }
+
+        BodyFile.Show(body, record);
+        var was = before.Profile?.Name ?? "an instrument with no profile";
+        Ui.Note($"{port.Name} is {was} now; writing {body.Name}…");
+        var reply = BodyWriter.Write(backend, port, record, BodyWriter.DefaultTimeout);
+        if (reply is null)
+        {
+            Ui.Fail($"{port.Name} didn't answer the Body Write. Its firmware may be older than 0.2 (no Body Write), or the reply got lost.");
+            return 1;
+        }
+
+        if (reply.Status != BodyWriteStatus.Written)
+        {
+            Ui.Fail($"{port.Name}: {reply.Describe()}.");
+            return 1;
+        }
+
+        Ui.Success($"{port.Name}: {reply.Describe()}.");
+        var watch = Stopwatch.StartNew();
+        while (watch.Elapsed < ComeBack && !cancellationToken.IsCancellationRequested)
+        {
+            Thread.Sleep(250);
+            var output = backend.Outputs().FirstOrDefault(p => p.Name == port.Name || p.Name == body.Name);
+            if (output is null)
+            {
+                continue; // still restarting, or it came back under its new USB name
+            }
+
+            var now = Identifier.Identify(backend, Identifier.DefaultTimeout, [output])[0];
+            if (now.Profile?.Name == body.Name)
+            {
+                Ui.Success($"{output.Name} now answers as {body.Name} (notes {string.Join(",", now.Profile.Notes!.Order())}).");
+                return 0;
+            }
+        }
+
+        Ui.Warn($"The brain didn't answer as {body.Name} within {ComeBack.TotalSeconds:0} s. Check with metrodom devices --identify.");
+        return 0;
+    }
+}

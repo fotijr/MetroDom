@@ -1,0 +1,157 @@
+using Melanchall.DryWetMidi.Core;
+using MetroDom.Core.Bodies;
+
+namespace MetroDom.Core.Tests;
+
+public class BodyImageTests
+{
+    private static string BodyFile(string name)
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "AGENTS.md")))
+        {
+            dir = dir.Parent;
+        }
+
+        return Path.Combine(dir!.FullName, "Instruments", "metrodom_brain", "bodies", name);
+    }
+
+    private static BodyDefinition M1()
+    {
+        Assert.True(BodyImage.TryParseJson(File.ReadAllText(BodyFile("m1-xylophone.json")), out var body, out var error), error);
+        return body;
+    }
+
+    [Fact]
+    public void M1Body_EncodesToTheBytesTheFirmwareTestCommitted()
+    {
+        // brain_test.cpp body_MatchesTheCommittedFixture builds the same body in C++ and checks this file.
+        var hex = File.ReadAllText(BodyFile("m1-xylophone.hex")).Trim();
+
+        Assert.Equal(hex, BodyImage.ToHex(BodyImage.Encode(M1())));
+    }
+
+    [Fact]
+    public void Decode_GivesBackTheDefinition_AndIgnoresTheRestOfTheEeprom()
+    {
+        var record = BodyImage.Encode(M1());
+        byte[] eeprom = [.. record, .. Enumerable.Repeat((byte)0xFF, 200)];
+
+        Assert.True(BodyImage.TryDecode(eeprom, out var body, out var error), error);
+        Assert.Equal(record, BodyImage.Encode(body));
+        Assert.Equal(BodyDriver.Pca9685, body.Driver);
+        Assert.Equal(0x40, body.Address);
+        Assert.Equal(new BodyActuator(76, 2, 30, 12, 60, 0), body.Notes[2]);
+        Assert.Null(body.Channel);
+        Assert.True(body.Velocity);
+    }
+
+    [Fact]
+    public void Decode_SaysWhatsWrong()
+    {
+        var record = BodyImage.Encode(M1());
+        var flipped = (byte[])record.Clone();
+        flipped[25] ^= 1;
+
+        Assert.False(BodyImage.TryDecode(flipped, out _, out var error));
+        Assert.Equal("bad CRC.", error);
+        Assert.False(BodyImage.TryDecode(record.AsSpan(0, record.Length - 1), out _, out error));
+        Assert.Equal("bad length.", error);
+        Assert.False(BodyImage.TryDecode(new byte[64], out _, out error));
+        Assert.Equal("not a body record.", error);
+    }
+
+    public static TheoryData<string, string, string> Broken => new()
+    {
+        { "\"address\": \"0x40\"", "\"address\": \"0x20\"", "address must be 0x40-0x7F" },
+        { "\"maxOnMs\": 45", "\"maxOnMs\": 251", "maxOnMs\" must be 1-250" },
+        { "\"maxDutyPercent\": 30", "\"maxDutyPercent\": 51", "maxDutyPercent\" must be 1-50" },
+        { "\"watchdogMs\": 500", "\"watchdogMs\": 100", "watchdogMs\" must be 200-8000" },
+        { "\"note\": 76, \"output\": 2", "\"note\": 76, \"output\": 1", "output 1 must be 0-15 and used by one note only" },
+        { "\"note\": 72", "\"note\": 74", "note 74: notes must be 0-127 and each listed once" },
+        { "\"note\": 72, \"output\": 0, \"pulseMs\": 30, \"minPulseMs\": 12", "\"note\": 72, \"output\": 0, \"pulseMs\": 30, \"minPulseMs\": 31", "can't be more than \"pulseMs\"" },
+        { "\"minPulseMs\": 12, \"minIntervalMs\": 60 },\n    { \"note\": 74", "\"minPulseMs\": 12, \"minIntervalMs\": 20 },\n    { \"note\": 74", "at least \"pulseMs\"" },
+        { "\"id\": \"xylophone-m1\"", "\"id\": \"Xylo\"", "\"id\" must be" },
+        { "\"type\": \"pca9685\"", "\"type\": \"servo\"", "\"driver.type\"" },
+        { "\"schema\": \"metrodom.body/0\"", "\"schema\": \"metrodom.instrument-profile/0\"", "is not metrodom.body/0" },
+    };
+
+    [Theory]
+    [MemberData(nameof(Broken))]
+    public void Json_RefusesWhatTheFirmwareWouldRefuse(string find, string replace, string expected)
+    {
+        var json = File.ReadAllText(BodyFile("m1-xylophone.json")).ReplaceLineEndings("\n");
+        Assert.Contains(find, json, StringComparison.Ordinal);
+
+        Assert.False(BodyImage.TryParseJson(json.Replace(find, replace, StringComparison.Ordinal), out _, out var error));
+        Assert.Contains(expected, error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Json_AcceptsANumericAddress_AndDefaultsThePca9685s()
+    {
+        var json = File.ReadAllText(BodyFile("m1-xylophone.json"));
+
+        Assert.True(BodyImage.TryParseJson(json.Replace("\"address\": \"0x40\"", "\"address\": 65", StringComparison.Ordinal), out var body, out _));
+        Assert.Equal(0x41, body.Address);
+        Assert.True(BodyImage.TryParseJson(json.Replace(", \"address\": \"0x40\"", "", StringComparison.Ordinal), out body, out _));
+        Assert.Equal(0x40, body.Address);
+    }
+
+    [Fact]
+    public void Profile_IsWhatTheBrainWillSend()
+    {
+        var profile = M1().ToProfile();
+        var json = InstrumentProfileJson.Write(profile, "xylophone-m1");
+
+        Assert.True(InstrumentProfileJson.TryParse(json, out var back, out var error), error);
+        Assert.Equal("MetroDom xylophone", back.Name);
+        Assert.Equal([72, 74, 76], back.Notes!.Order());
+        Assert.Equal(2, back.Polyphony);
+        Assert.Equal(TimeSpan.FromMilliseconds(30), back.PulseFor(74));
+        Assert.Equal(TimeSpan.FromMilliseconds(60), back.MinInterval);
+        Assert.Equal(new ActuatorSafety(TimeSpan.FromMilliseconds(45), 30, TimeSpan.FromSeconds(1)), back.Safety);
+    }
+
+    [Fact]
+    public void BodyWrite_ChunksAreWhatTheBrainReads_AndTheReceiverStoresThem()
+    {
+        var record = BodyImage.Encode(M1());
+        var chunks = BodyWrite.Chunks(record);
+        Assert.Equal(2, chunks.Count);
+        Assert.Equal([0x7D, 0x4D, 0x44, 0x04, 0, 2, (byte)'4', (byte)'D'], chunks[0].Data.Take(8));
+        Assert.Equal(0xF7, chunks[1].Data[^1]);
+        Assert.All(chunks, c => Assert.All(c.Data, b => Assert.True(b <= 0x7F || b == 0xF7)));
+
+        var receiver = new BodyReceiver();
+        Assert.Null(receiver.Add(chunks[0], out _));
+        var reply = receiver.Add(chunks[1], out var written);
+        Assert.True(BodyWrite.TryParseReply(reply!, out var parsed));
+        Assert.Equal(BodyWriteStatus.Written, parsed.Status);
+        Assert.Equal(record, BodyImage.Encode(written!));
+        Assert.Contains("restarting as the new body", parsed.Describe(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BodyWrite_OutOfOrder_IsABadMessage()
+    {
+        var chunks = BodyWrite.Chunks(BodyImage.Encode(M1()));
+        var receiver = new BodyReceiver();
+
+        Assert.True(BodyWrite.TryParseReply(receiver.Add(chunks[1], out _)!, out var reply));
+        Assert.Equal(BodyWriteStatus.BadMessage, reply.Status);
+        Assert.Null(receiver.Add(new NoteOnEvent(), out _));
+    }
+
+    [Fact]
+    public void BodyWriteReply_SaysWhyInTheFirmwaresWords()
+    {
+        // As the firmware sends a CRC refusal (brain_test.cpp bodyWrite_RefusesBadRecords_AndKeepsPlaying).
+        var reply = new NormalSysExEvent([0x7D, 0x4D, 0x44, 0x05, 2, 5, 0xF7]);
+
+        Assert.True(BodyWrite.TryParseReply(reply, out var parsed));
+        Assert.Equal(BodyWriteStatus.Invalid, parsed.Status);
+        Assert.Equal("the brain refused the record: bad CRC; nothing was stored", parsed.Describe());
+        Assert.Contains("write-protect", new BodyWriteReply(BodyWriteStatus.Failed, 0).Describe(), StringComparison.Ordinal);
+    }
+}

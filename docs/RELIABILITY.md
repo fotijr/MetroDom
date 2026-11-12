@@ -24,7 +24,11 @@ but is polled (1 ms full-speed frames).
    - Built in the generic brain ([metrodom_brain](../Instruments/metrodom_brain/README.md), host-tested, not
      yet flashed): fixed pulse capped at `maxOnMs`, per-actuator minimum interval and a leaky-bucket
      duty budget (refuse, never queue), polyphony cap, panic on CC 120/123 on any channel and System
-     Reset, all off when USB unmounts, hardware watchdog restart with all off at boot. The legacy
+     Reset, all off when USB unmounts, hardware watchdog restart with all off at boot. Ceilings no
+     body can raise (250 ms pulse, 50% duty). An output that doesn't confirm "off" (a PCA9685 that
+     stopped answering) blocks every new strike and is retried each loop. A body EEPROM with a bad
+     record boots a silent brain, never the bench pin map. A Body Write turns everything off first
+     and nothing strikes until the restart ([body record](references/body-record.md)). The legacy
      sketches have none of this (TD-03).
 2. **Conductor safety governor** (`SafetyGovernor`, one in front of every output in `play` and `route`)
    - Panic (CC 120/123 + MetroDom SysEx all-off) to every instrument, bypassing queues. Built:

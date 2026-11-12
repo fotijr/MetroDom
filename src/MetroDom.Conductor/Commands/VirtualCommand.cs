@@ -7,6 +7,7 @@ using Melanchall.DryWetMidi.MusicTheory;
 using MetroDom.Conductor.Cli;
 using MetroDom.Conductor.Midi;
 using MetroDom.Core;
+using MetroDom.Core.Bodies;
 using MetroDom.Core.Discovery;
 using MetroDom.Core.Simulation;
 using MetroDom.Core.Timing;
@@ -159,6 +160,7 @@ internal sealed class VirtualCommand : Command<VirtualCommand.Settings>
     {
         var channels = spec.Channels.ToHashSet();
         var profileJson = InstrumentProfileJson.Write(declared);
+        var bodies = new BodyReceiver();
         TimeSpan? lastPanic = null;
         instrument.Struck += (_, s) => Print(console, s.ReceivedAt, spec.Name, string.Create(
             CultureInfo.InvariantCulture,
@@ -182,6 +184,28 @@ internal sealed class VirtualCommand : Command<VirtualCommand.Settings>
                 }
 
                 Print(console, clock.Now, spec.Name, "[grey]profile request: sent its profile[/]");
+                return;
+            }
+
+            if (BodyWrite.IsChunk(e))
+            {
+                // Like a brain: check the record and answer. It then describes itself as that body
+                // (it still plays as its -i spec), so `metrodom body write` can be tried end to end.
+                if (bodies.Add(e, out var written) is { } answer)
+                {
+                    if (written is not null)
+                    {
+                        profileJson = InstrumentProfileJson.Write(written.ToProfile(), written.Id);
+                        Print(console, clock.Now, spec.Name, $"[grey]body write: now describes itself as {Markup.Escape(written.Name)}[/]");
+                    }
+                    else
+                    {
+                        Print(console, clock.Now, spec.Name, "[yellow]body write: refused[/]");
+                    }
+
+                    port.Send(answer);
+                }
+
                 return;
             }
 

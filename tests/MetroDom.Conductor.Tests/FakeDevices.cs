@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using Melanchall.DryWetMidi.Core;
 using MetroDom.Conductor.Midi;
+using MetroDom.Core.Bodies;
 using MetroDom.Core.Discovery;
 
 namespace MetroDom.Conductor.Tests;
@@ -14,8 +15,11 @@ internal sealed class DeviceBackend : IMidiBackend
 
     public ConcurrentBag<FakeDevicePort> Opened { get; } = [];
 
-    public void Add(string name, DeviceIdentity? answer = null, bool echo = false, bool hasInput = true, bool failOpen = false, bool onThread = false, string? profile = null) =>
-        _devices.Add(new Device(new MidiPortInfo(name, name), answer, echo, hasInput, failOpen, onThread, profile));
+    public void Add(string name, DeviceIdentity? answer = null, bool echo = false, bool hasInput = true, bool failOpen = false, bool onThread = false, string? profile = null, BodyReceiver? bodies = null) =>
+        _devices.Add(new Device(new MidiPortInfo(name, name), answer, echo, hasInput, failOpen, onThread, profile) { Bodies = bodies });
+
+    /// <summary>Bodies written to each port through Body Write, as a brain would store them.</summary>
+    public ConcurrentDictionary<string, BodyDefinition> Bodies { get; } = new();
 
     public int RequestsTo(string name) => _requests.GetValueOrDefault(name);
 
@@ -32,6 +36,21 @@ internal sealed class DeviceBackend : IMidiBackend
         var device = Find(port);
         var output = new FakeDevicePort(port.Name, e =>
         {
+            if (device.Bodies is { } receiver && BodyWrite.IsChunk(e))
+            {
+                if (receiver.Add(e, out var written) is { } reply)
+                {
+                    if (written is not null)
+                    {
+                        Bodies[port.Name] = written;
+                    }
+
+                    OnOwnThread(() => device.Input?.Raise(reply));
+                }
+
+                return;
+            }
+
             if (ProfileExchange.IsRequest(e))
             {
                 _metroDomSysEx.AddOrUpdate(port.Name, 1, (_, n) => n + 1);
@@ -112,6 +131,8 @@ internal sealed class DeviceBackend : IMidiBackend
     private sealed record Device(MidiPortInfo Info, DeviceIdentity? Answer, bool Echo, bool HasInput, bool FailOpen, bool OnThread, string? Profile)
     {
         public FakeDevicePort? Input { get; set; }
+
+        public BodyReceiver? Bodies { get; init; }
     }
 }
 

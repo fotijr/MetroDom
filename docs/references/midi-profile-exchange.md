@@ -18,6 +18,8 @@ sends these **only to ports whose Identity Reply said MetroDom**.
 | Profile Request | `F0 7D 4D 44 01 F7` |
 | Profile Reply (one chunk) | `F0 7D 4D 44 02 <index> <count> <text…> F7` |
 | All Off (panic) | `F0 7D 4D 44 03 F7` |
+| Body Write (one chunk) | `F0 7D 4D 44 04 <index> <count> <hex…> F7` |
+| Body Write Reply | `F0 7D 4D 44 05 <status> <detail> F7` |
 
 - `<text>` is the profile JSON, ASCII only (non-ASCII is escaped as `\uXXXX`), so every byte is ≤ `7F`.
 - At most 128 text bytes per chunk, so any USB-MIDI SysEx buffer copes. `<index>` counts from 0,
@@ -27,7 +29,13 @@ sends these **only to ports whose Identity Reply said MetroDom**.
   doesn't latch: the next Note On plays. The Conductor's panic sends it first, then CC 120/123,
   so a MetroDom instrument is silent after one message instead of up to 32. Instruments ignore
   MetroDom sub-IDs they don't know.
-- Free sub-IDs after `03` are for later MetroDom messages.
+- **Body Write** carries a [body record](body-record.md) as upper-case hex, at most 128
+  characters (64 bytes) per chunk, sent in order from `<index>` 0; chunk 0 starts over. After the
+  last chunk the brain answers once: `<status>` 0 written (it restarts), 1 bad message, 2 refused
+  (`<detail>` = the firmware's `BodyError` number), 3 the EEPROM didn't keep it, 4 no body store.
+  A bad chunk is answered at once. Owner-only by procedure: `metrodom body write` is a local
+  command, and the body's write-protect jumper must be fitted.
+- Free sub-IDs after `05` are for later MetroDom messages.
 
 ## What `metrodom devices --identify` does
 
@@ -61,5 +69,5 @@ Measured on macOS: two virtual instruments identified and described, whole comma
 - Profiles are fetched by `devices --identify` and by `play`/`route` at start, not on hot-plug.
   `arrange` and `simulate` take virtual `-i` specs, not ports, so they don't ask.
 - No remembered assignments or auto-adding instruments that weren't named with `-o` (step 4, TD-23).
-- Firmware reading the profile from the body EEPROM. The [brain firmware](../../Instruments/metrodom_brain/README.md) serves one built from its compiled-in config (host-tested, not yet flashed).
+- The [brain firmware](../../Instruments/metrodom_brain/README.md) builds its profile from the body record in the body's EEPROM, or from its compiled-in bench config (host-tested, not yet flashed).
 - MIDI-CI Property Exchange.

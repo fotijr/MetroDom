@@ -38,6 +38,10 @@ guests only view, request and vote, only the owner hands out tokens.
 - **No live MIDI from the network for guests.** Live note input is operator-only.
 - **Song files are untrusted.** Enforce size, track and event-count limits when parsing SMF.
 - **Firmware updates are owner-only** and should be signed once there's a fleet (rental).
+- **Body writes are owner-only by hardware.** USB MIDI has no login, so a Body Write
+  ([body record](references/body-record.md)) needs the body's EEPROM write jumper fitted, and
+  the Control API has no route for it. Whatever a body says, the firmware's ceilings (pulse,
+  duty) still hold.
 - **LAN-only by default.** Remote access goes through the optional cloud relay with its own
   auth, never by port-forwarding the Conductor.
 - **Privacy:** don't collect guest personal data for the jukebox. Device-scoped anonymous IDs are

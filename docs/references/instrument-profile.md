@@ -33,7 +33,9 @@ Fields:
 - `notes[]`: the only notes the instrument can play. Latency (command → audible onset) is
   measured, not guessed. `minIntervalMs` is the fastest repeat of that note.
 - `polyphony`: max actuators on at once (power-supply / actuator limit). Optional, at least 1.
-- `pulseMs` (optional, per note): how long that actuator is on per strike.
+- `pulseMs` (optional, per note): how long that actuator is on per strike (at velocity 127).
+- `minPulseMs` (optional, per note): the strike at velocity 1, when the pulse scales with
+  velocity; `velocity.supported` is then `true`. The Conductor counts `pulseMs` (the longest).
 - `safety`: limits the **firmware enforces itself**. The Conductor uses them to avoid sending
   notes that would be refused. If present, `maxOnMs` (> 0) and `maxDutyPercent` (1-100) are
   required; `dutyWindowMs` (default 1000) sizes the burst: each actuator may spend

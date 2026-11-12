@@ -5,20 +5,25 @@ A Pico running it is a class-compliant USB-MIDI device: a stock DAW or keyboard 
 no MetroDom software, and `metrodom devices --identify` sees a **MetroDom brain** and reads its
 profile.
 
-Status: **first cut, host-tested, not yet flashed.** The logic runs in `make -C test` on a
+Status: **version 0.2, host-tested, not yet flashed.** The logic runs in `make -C test` on a
 laptop. The sketch has only been compiled against stub headers, because this machine has no
 Pico toolchain yet; the first real build is plan 0002 H1 ("Pico blinks an LED"). Limits: TD-29
 in the [tech-debt tracker](../../docs/exec-plans/tech-debt-tracker.md).
+
+At boot the brain reads the body's ID EEPROM and becomes that instrument
+([body record](../../docs/references/body-record.md)). No EEPROM: the bench body in `config.h`.
+An EEPROM with a bad record: a silent brain whose profile name says why.
 
 ## What it does
 
 | MIDI in | What happens |
 | --- | --- |
-| Note On (velocity > 0), a note in the table, any channel | A fixed pulse on that output: `pulseMs`, never more than `maxOnMs` |
-| Note Off, Note On velocity 0 | Nothing (the pulse is already fixed) |
+| Note On (velocity > 0), a note in the table, any channel | A pulse on that output: `pulseMs`, or scaled by velocity between `minPulseMs` and `pulseMs` when the body gives both; never more than `maxOnMs` |
+| Note Off, Note On velocity 0 | Nothing (the pulse length is decided at the Note On) |
 | CC 120 / CC 123 on **any** channel, System Reset, MetroDom All Off `F0 7D 4D 44 03 F7` | Every output off now (panic) |
 | Identity Request `F0 7E 7F 06 01 F7` | `F0 7E 7F 06 02 7D 4D 44 01 00 <version> F7`: MetroDom, model 1 = brain ([midi-identity](../../docs/references/midi-identity.md)) |
 | Profile Request `F0 7D 4D 44 01 F7` | Its [instrument profile](../../docs/references/instrument-profile.md) in 128-byte chunks ([profile exchange](../../docs/references/midi-profile-exchange.md)) |
+| Body Write `F0 7D 4D 44 04 …` | Checks the record, turns everything off, writes the EEPROM, reads it back, answers `05`, restarts as that body |
 
 A note is **refused** (never queued) when:
 - its actuator is still striking, or struck less than `minIntervalMs` ago;
@@ -26,7 +31,12 @@ A note is **refused** (never queued) when:
   (30% = 300 ms of on-time), draining at `maxDutyPercent`. A burst is fine, sustained hammering
   is thinned to the duty cycle;
 - `polyphony` actuators are already on;
+- an output didn't confirm it turned off (a PCA9685 that stopped answering): nothing strikes until
+  it does, and the off is retried every loop;
+- a new body has just been written (the brain is about to restart);
 - USB isn't connected.
+
+Ceilings no body can raise: a pulse over 250 ms or a duty over 50%. Raising them is a firmware change.
 
 Always off: at boot (before USB starts), on panic, when USB is unplugged, and when the loop
 hangs: the hardware watchdog (`watchdogMs`) restarts the brain, and boot turns everything off.
@@ -41,9 +51,12 @@ Conductor's reader.
 
 | File | What |
 | --- | --- |
-| `config.h` | The body: notes, GPIO pins, pulse, limits. Edit this for your wiring |
-| `metrodom_brain.ino` | Arduino layer only: TinyUSB MIDI, GPIO, watchdog, USB mount state |
+| `config.h` | The bench body, used when no EEPROM answers: notes, GPIO pins, pulse, limits |
+| `bodies/` | Body files (`metrodom.body/0`) for real instruments, and the M1 fixture both test suites check |
+| `metrodom_brain.ino` | Arduino layer only: TinyUSB MIDI, Wire, GPIO, watchdog, USB mount state, choosing the body |
 | `src/brain/Brain.{h,cpp}` | Every decision, platform-free |
+| `src/brain/Body.{h,cpp}` | The body record: parse, check, encode, CRC |
+| `src/brain/Devices.{h,cpp}` | PCA9685 and 24LC32 over an I²C interface (Wire on the Pico, a fake in tests) |
 | `test/` | Host tests (`make -C test`, any C++17 compiler; runs in CI) |
 
 ## M0 bench wiring (default `config.h`)
@@ -70,8 +83,19 @@ Current-limit the bench supply. Never power the coil from the Pico.
 4. Check: `metrodom devices --identify` lists "Bench solenoid" as a MetroDom brain with its
    profile; a DAW on any channel plays note 60.
 
+## A real body (M1)
+
+Wire the [body-backplane](../../hardware/modules/body-backplane/README.md) (EEPROM at `0x50`,
+PCA9685 at `0x40`, Qwiic on GPIO 4/5), fit the EEPROM's write jumper, then:
+
+```bash
+metrodom body write "MetroDom brain" Instruments/metrodom_brain/bodies/m1-xylophone.json
+```
+
+The brain restarts as "MetroDom xylophone". Remove the jumper.
+
 ## Not yet (TD-29)
 
-Body EEPROM (the config is compiled in), PCA9685 / MCP23017 drivers, velocity → pulse length,
-a USB product string per body, rewriting the profile over SysEx,
-measured latency in the table.
+Never flashed or run against a real EEPROM or PCA9685. No MCP23017 driver or servo outputs.
+Measured latency isn't written into the body by `calibrate` yet. No silence timeout (USB unmount
+is the only host-loss signal).

@@ -73,6 +73,16 @@ internal static class MetroDomApp
                 .WithDescription("Check a light profile and show its patch, or hold a scene on the rig over sACN (DMX over the network).")
                 .WithExample("lights", "rig.json")
                 .WithExample("lights", "rig.json", "--scene", "36");
+            config.AddBranch("body", body =>
+            {
+                body.SetDescription("Check a body file, or write it into a brain's body EEPROM so the brain becomes that instrument.");
+                body.AddCommand<BodyCheckCommand>("check")
+                    .WithDescription("Check a body file the way a brain will, and show what the instrument becomes.")
+                    .WithExample("body", "check", "Instruments/metrodom_brain/bodies/m1-xylophone.json");
+                body.AddCommand<BodyWriteCommand>("write")
+                    .WithDescription("Write a body file into a MetroDom brain over MIDI. The brain checks it, stores it, reads it back and restarts as that instrument.")
+                    .WithExample("body", "write", "\"MetroDom brain\"", "Instruments/metrodom_brain/bodies/m1-xylophone.json");
+            });
             config.AddCommand<PanicCommand>("panic")
                 .WithDescription("All sound and notes off on every channel of an output.")
                 .WithExample("panic", "--output", "0");

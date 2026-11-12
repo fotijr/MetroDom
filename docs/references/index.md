@@ -7,7 +7,8 @@ Protocol and format facts agents need while coding. Keep each file factual and t
 | [midi-essentials.md](midi-essentials.md) | Writing anything that sends/parses MIDI or SMF |
 | [instrument-profile.md](instrument-profile.md) | Building an instrument or the Conductor registry |
 | [midi-identity.md](midi-identity.md) | Identity Request/Reply bytes, MetroDom's identity, `devices --identify` |
-| [midi-profile-exchange.md](midi-profile-exchange.md) | MetroDom SysEx profile request/reply, discovery step 3 |
+| [midi-profile-exchange.md](midi-profile-exchange.md) | MetroDom SysEx profile request/reply, discovery step 3, Body Write |
+| [body-record.md](body-record.md) | The body's ID EEPROM: `metrodom.body/0` files, the byte layout, `metrodom body check/write`, what a brain boots as |
 | [auto-band.md](auto-band.md) | `play` without `-o`, hot-plug, `devices --assign/--forget`, `metrodom.assignments/0` (discovery step 4) |
 | [control-api.md](control-api.md) | Control API v0: tokens and roles, routes, queue and library, the web remote, the `openapi.json` contract |
 | [conductor-service.md](conductor-service.md) | `metrodom serve`: library, editable queue, `state.json`, mDNS, restart behavior |

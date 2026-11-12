@@ -24,6 +24,7 @@ This file is a **map, not a manual**. Read the doc that matches your task, then 
 | Handle auth, roles, untrusted crowd input       | [docs/SECURITY.md](docs/SECURITY.md)                        |
 | Look up MIDI / protocol details                 | [docs/references/index.md](docs/references/index.md)        |
 | Build or modify an instrument (firmware)        | [Instruments/README.md](Instruments/README.md)              |
+| Describe a body (ID EEPROM, `metrodom body`)    | [body-record.md](docs/references/body-record.md)            |
 | Parts, inventory, hardware modules, builds      | [hardware/README.md](hardware/README.md)                    |
 | Plan lights, LED strips, matrix displays        | [ADR 0011](docs/design-docs/0011-visuals-are-part-of-the-band.md) |
 | Prototype without hardware (virtual band)      | [docs/references/virtual-band.md](docs/references/virtual-band.md) |

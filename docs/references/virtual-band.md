@@ -161,3 +161,6 @@ metrodom play song.mid -o "MetroDom xylo" --follow "pads" # count the band in wi
 - Latency comes from the command line, not profile files or SysEx discovery. Virtual instruments
   do answer MIDI Identity Requests as MetroDom model 0 ([midi-identity](midi-identity.md)), so
   `metrodom devices --identify` finds them and reads their profile ([profile exchange](midi-profile-exchange.md)).
+  They accept a Body Write like a brain (`metrodom body write "MetroDom xylo" FILE`) and from then
+  on describe themselves as that body, though they still play as their `-i` spec
+  ([body record](body-record.md)).

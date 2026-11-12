@@ -32,7 +32,8 @@ Split every instrument into a **brain** and a **body**:
    [instrument profile](../references/instrument-profile.md) plus its channel map
    (MIDI note → driver channel, pulse length, duty limits). Any brain plugged into any body
    boots, reads the EEPROM, and becomes that instrument. The EEPROM can be rewritten over MIDI
-   SysEx from the Conductor (owner role only).
+   SysEx from the Conductor (owner role only). Draft format and command:
+   [body record](../references/body-record.md) (a binary table the brain builds its profile from).
 4. **One firmware for all brains.** Instrument differences are data (the profile), not code.
    Special actuators get a driver module in the shared firmware, enabled by the profile.
 5. **Safety stays in the brain firmware** (watchdog, max on-time, duty limits from the profile)

@@ -30,3 +30,4 @@ Order and milestones across plans: [ROADMAP.md](ROADMAP.md).
 - [0002: Hardware bootstrap](exec-plans/active/0002-hardware-bootstrap.md)
 - [0003: Visuals](exec-plans/active/0003-visuals.md)
 - [0004: Software runs ahead](exec-plans/active/0004-software-runs-ahead.md)
+- [0005: The brain for M1](exec-plans/active/0005-brain-for-m1.md)
