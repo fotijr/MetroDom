@@ -33,7 +33,8 @@ internal sealed class StateStream(LiveControl live, Session session)
     /// <summary>Streams open now.</summary>
     public int Open => Volatile.Read(ref _open);
 
-    public async Task<IResult> Accept(HttpContext context, CancellationToken stopping)
+    /// <param name="stillValid">Checked every poll: once the caller's token is revoked or expires, the stream closes.</param>
+    public async Task<IResult> Accept(HttpContext context, Func<bool> stillValid, CancellationToken stopping)
     {
         if (!context.WebSockets.IsWebSocketRequest)
         {
@@ -57,7 +58,7 @@ internal sealed class StateStream(LiveControl live, Session session)
         {
             using var socket = await context.WebSockets.AcceptWebSocketAsync(named.Length > 0 ? Subprotocol : null).ConfigureAwait(false);
             using var done = CancellationTokenSource.CreateLinkedTokenSource(stopping, context.RequestAborted);
-            await Run(socket, done).ConfigureAwait(false);
+            await Run(socket, done, stillValid).ConfigureAwait(false);
         }
         finally
         {
@@ -67,7 +68,7 @@ internal sealed class StateStream(LiveControl live, Session session)
         return Results.Empty;
     }
 
-    private async Task Run(WebSocket socket, CancellationTokenSource done)
+    private async Task Run(WebSocket socket, CancellationTokenSource done, Func<bool> stillValid)
     {
         var messages = Channel.CreateBounded<string>(new BoundedChannelOptions(64) { FullMode = BoundedChannelFullMode.DropOldest });
         void OnMessage(string text) => messages.Writer.TryWrite(text);
@@ -83,6 +84,12 @@ internal sealed class StateStream(LiveControl live, Session session)
             var lastPosition = DateTime.MinValue;
             while (!done.IsCancellationRequested && socket.State == WebSocketState.Open)
             {
+                if (!stillValid())
+                {
+                    await socket.CloseOutputAsync(WebSocketCloseStatus.PolicyViolation, "Your token expired or was revoked.", done.Token).ConfigureAwait(false);
+                    break;
+                }
+
                 var snapshot = live.Snapshot();
                 var state = JsonSerializer.Serialize(ControlApi.State(snapshot with { Position = null }), Json);
                 if (state != lastState)

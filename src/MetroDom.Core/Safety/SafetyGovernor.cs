@@ -22,6 +22,42 @@ public sealed record SafetyLimits
 
     /// <summary>A daily window with its own velocity cap, or silence.</summary>
     public QuietHours? Quiet { get; init; }
+
+    /// <summary>
+    /// These limits with a night's overrides on top (the command line over the policy): a lower
+    /// velocity or rate wins, so an override can only tighten them; quiet hours, if given,
+    /// replace the window.
+    /// </summary>
+    public SafetyLimits Overridden(int? maxVelocity, int? maxNotesPerSecond, QuietHours? quiet) => new()
+    {
+        MaxVelocity = Lower(MaxVelocity, maxVelocity),
+        MaxNotesPerSecond = Lower(MaxNotesPerSecond, maxNotesPerSecond),
+        Quiet = quiet ?? Quiet,
+    };
+
+    /// <summary>"velocity ≤ 100 · ≤ 16 notes/s · quiet 22:00-08:00 silent", or "none".</summary>
+    public string Describe()
+    {
+        var parts = new List<string>();
+        if (MaxVelocity is { } velocity)
+        {
+            parts.Add(string.Create(CultureInfo.InvariantCulture, $"velocity ≤ {velocity}"));
+        }
+
+        if (MaxNotesPerSecond is { } rate)
+        {
+            parts.Add(string.Create(CultureInfo.InvariantCulture, $"≤ {rate} notes/s per instrument"));
+        }
+
+        if (Quiet is { } quiet)
+        {
+            parts.Add($"quiet {quiet}");
+        }
+
+        return parts.Count == 0 ? "none" : string.Join(" · ", parts);
+    }
+
+    private static int? Lower(int? a, int? b) => a is null ? b : b is null ? a : Math.Min(a.Value, b.Value);
 }
 
 /// <summary>

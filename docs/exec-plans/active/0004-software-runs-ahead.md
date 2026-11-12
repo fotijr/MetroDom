@@ -26,8 +26,10 @@ each phase closes its tech-debt rows and raises its row in [QUALITY_SCORE.md](..
       and holds back notes the firmware would refuse (duty-cycle and polyphony)
 
 ### Phase S2: Policy profiles and roles (ADR 0005, TD-25, part of TD-27)
-- [ ] Policy file carries roles, permissions, queue rules and limits; flags become overrides
-- [ ] Control API sessions with roles: owner token, per-booking guest tokens that expire
+- [x] Policy file carries roles, permissions, queue rules and limits; flags become overrides
+- [x] Control API sessions with roles: owner token, per-booking guest tokens that expire
+- [x] Shipped `crowd-jukebox` and `rental` profiles next to `live-band`
+- [x] Web remote shows only what the token's role may use
 
 ### Phase S3: Conductor service and PWA (TD-27)
 - [ ] Long-running service with library and editable queue, mDNS
@@ -53,6 +55,19 @@ each phase closes its tech-debt rows and raises its row in [QUALITY_SCORE.md](..
   the Conductor holds back what the brain would refuse, and the status panel can say why. Without
   a per-note `pulseMs`, a strike is assumed to cost `maxOnMs`: safety beats music. Without
   `safety`, no duty limit (a software instrument has no coil).
+- 2026-11-12: S2 shape. The policy stays `metrodom.policy/0` and gains optional `limits`,
+  `roles`, `queue` and `sessions`; a file without them means what it meant before. Flags can only
+  tighten numeric limits (lower wins) so a policy written for a room isn't loosened by accident;
+  `--quiet` replaces the window because two windows can't be merged sensibly. The owner isn't a
+  configurable role, and three rules hold whatever a file says (operators always view and panic,
+  guests only view/request/vote, only the owner hands out tokens), so a typo can't take panic
+  away or give it to a crowd. Every route declares one grant and an undeclared route is refused,
+  checked against the spec's `x-metrodom-grant` by a test. Handed-out tokens are hashed, in
+  memory, and revocation closes their streams; persisting them waits for the S3 service. Queue
+  rules are parsed now so the shipped profiles are complete, and enforced when requests exist.
+  The enum is `Grant`, not `Permission` (the .NET analyzer reserves that suffix); files and docs
+  still say permissions.
 
 ## Open questions
-- None yet.
+- The shipped jukebox and rental values (limits, quiet hours, request rules, token lives) are
+  guesses to try at the first party, not decisions.

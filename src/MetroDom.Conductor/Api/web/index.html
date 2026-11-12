@@ -27,6 +27,7 @@
       <div class="title">
         <div id="song">–</div>
         <div id="status" class="muted">Connecting…</div>
+        <div id="role" class="muted"></div>
       </div>
       <button id="forget" class="ghost" type="button" title="Forget this token on this device">Forget</button>
     </header>
@@ -39,16 +40,16 @@
     </section>
 
     <section class="controls">
-      <button id="startstop" type="button" class="primary">Start</button>
-      <button id="next" type="button">Next</button>
-      <button id="slower" type="button" aria-label="Slower">− Tempo</button>
-      <button id="faster" type="button" aria-label="Faster">Tempo +</button>
-      <button id="tap" type="button">Tap</button>
-      <button id="vamp" type="button">Vamp</button>
-      <button id="outro" type="button">Outro</button>
+      <button id="startstop" type="button" class="primary" data-grant="transport">Start</button>
+      <button id="next" type="button" data-grant="transport">Next</button>
+      <button id="slower" type="button" aria-label="Slower" data-grant="tempo">− Tempo</button>
+      <button id="faster" type="button" aria-label="Faster" data-grant="tempo">Tempo +</button>
+      <button id="tap" type="button" data-grant="tempo">Tap</button>
+      <button id="vamp" type="button" data-grant="sections">Vamp</button>
+      <button id="outro" type="button" data-grant="sections">Outro</button>
     </section>
 
-    <button id="panic" type="button" class="panic">PANIC</button>
+    <button id="panic" type="button" class="panic" data-grant="panic">PANIC</button>
 
     <section>
       <h2>Setlist</h2>

@@ -11,11 +11,17 @@ room full of people. Threat model scales with deployment mode.
 | Guest | Bar patron, party guest | Browse, request, vote, within rate limits. Never panic/settings/live notes |
 
 The active policy profile ([ADR 0005](design-docs/0005-deployment-modes-are-policy.md))
-maps roles to permissions. The Conductor enforces it. Apps only hide buttons.
+maps roles to permissions (its `roles`, [policy profile](references/policy-profile.md)). The
+Conductor enforces it on every Control API route. Apps only hide buttons. Built: owner token at
+start, expiring operator and guest tokens handed out by the owner, a grant per route (fail
+closed), and these rules whatever a policy file says: operators always have view and panic,
+guests only view, request and vote, only the owner hands out tokens.
 
 ## Rules
-- **Authenticate every Control API session.** v0: a bearer token, loopback by default ([control API](references/control-api.md)). Owner/operator sessions come from explicit pairing
-  (e.g. QR code with a one-time token shown on the box), never "anyone on the Wi-Fi".
+- **Authenticate every Control API session.** A bearer token, loopback by default ([control API](references/control-api.md)). The owner's token is shown on the box; operator and guest
+  tokens are handed out by the owner, end with the booking or night, and can be revoked at
+  once. Never "anyone on the Wi-Fi". Pairing links carry the token in the URL fragment; a QR code
+  for them comes with the PWA (plan 0004 S3).
 - **Guests are untrusted input.** Validate and rate-limit everything: request floods, vote
   stuffing, oversized payloads, offensive free text (avoid free text where possible).
 - **No live MIDI from the network for guests.** Live note input is operator-only.

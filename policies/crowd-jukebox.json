@@ -1,0 +1,24 @@
+{
+  "schema": "metrodom.policy/0",
+  "mode": "crowd-jukebox",
+  "controls": {
+    "start-stop": "cc:80",
+    "next": "cc:81",
+    "panic": "cc:85"
+  },
+  "limits": {
+    "maxNotesPerSecond": 16,
+    "quietHours": { "from": "01:00", "to": "10:00", "maxVelocity": 0 }
+  },
+  "roles": {
+    "operator": ["view", "transport", "tempo", "sections", "panic", "queue.edit"],
+    "guest": ["view", "queue.request", "queue.vote"]
+  },
+  "queue": {
+    "requests": true,
+    "votes": true,
+    "maxPerGuest": 2,
+    "cooldownSeconds": 300
+  },
+  "sessions": { "maxTokenHours": 12 }
+}

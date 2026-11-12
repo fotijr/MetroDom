@@ -40,15 +40,6 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
         [Description("MIDI input of a foot controller (or any control surface) that drives the set: start/stop, next, tap, vamp, outro, panic, mapped by the policy (see [bold]--policy[/]). With start/stop mapped, each song waits for the pedal.")]
         public string? Control { get; init; }
 
-        [CommandOption("--policy <FILE>")]
-        [Description("Policy profile (metrodom.policy/0 JSON) whose [bold]controls[/] map pedals to actions. Default: the built-in live-band profile (policies/live-band.json: start-stop cc:80, next cc:81, vamp cc:82, outro cc:83, panic cc:85, tap cc:64).")]
-        public string? Policy { get; init; }
-
-        public PolicyProfile PolicyProfile =>
-            Policy is not null && File.Exists(Policy) && PolicyProfile.TryParse(File.ReadAllText(Policy), out var profile, out _)
-                ? profile
-                : PolicyProfile.LiveBand;
-
         [CommandOption("-a|--arrange")]
         [Description("Let the arranger give each output the part it plays best, on its first channel, using its /NOTES (transposed, folded, thinned to fit). Without it, outputs get their channels as written in the file.")]
         public bool Arrange { get; init; }
@@ -95,7 +86,7 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
         public (int Channel, int Note) ClickNote => TryParseClick(Click, out var click, out _) ? click : (9, 76);
 
         [CommandOption("--api <ADDRESS>")]
-        [Description("Serve the Control API (HTTP + JSON at /api/v0) for apps: [bold]PORT[/] on this computer only (e.g. [bold]7890[/]) or [bold]HOST:PORT[/] (e.g. [bold]0.0.0.0:7890[/] for the LAN). Calls need the token shown at start, or set METRODOM_API_TOKEN.")]
+        [Description("Serve the Control API (HTTP + JSON at /api/v0) for apps: [bold]PORT[/] on this computer only (e.g. [bold]7890[/]) or [bold]HOST:PORT[/] (e.g. [bold]0.0.0.0:7890[/] for the LAN). The token shown at start (or METRODOM_API_TOKEN) is the owner's; the owner hands out expiring operator and guest tokens, and the policy's [bold]roles[/] say what each may do.")]
         public string? Api { get; init; }
 
         public ApiEndpoint? ApiAt => Api is not null && MetroDom.Conductor.Api.ApiEndpoint.TryParse(Api, out var endpoint, out _) ? endpoint : null;
@@ -143,19 +134,6 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
             if (Paths.FirstOrDefault(p => !File.Exists(p)) is { } missing)
             {
                 return ValidationResult.Error($"file not found: {missing}");
-            }
-
-            if (Policy is not null)
-            {
-                if (!File.Exists(Policy))
-                {
-                    return ValidationResult.Error($"--policy: file not found: {Policy}");
-                }
-
-                if (!PolicyProfile.TryParse(File.ReadAllText(Policy), out _, out var policyError))
-                {
-                    return ValidationResult.Error($"--policy: {policyError}");
-                }
             }
 
             if (LightsPad is not null && Lights is null)
@@ -587,11 +565,12 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
 
         var fromEnv = Environment.GetEnvironmentVariable("METRODOM_API_TOKEN") is { Length: > 0 } set ? set : null;
         var token = fromEnv ?? ControlApi.NewToken();
-        var api = ControlApi.Start(endpoint, token, live, session);
+        var policy = settings.PolicyProfile;
+        var api = ControlApi.Start(endpoint, new TokenStore(token), policy, live, session);
         Ui.Note(fromEnv is null
-            ? $"Control API at {api.Address} · token {token}"
-            : $"Control API at {api.Address} · token from METRODOM_API_TOKEN");
-        Ui.Note($"Remote: open {ControlApi.PairingUrl(api.Address, endpoint, fromEnv is null ? token : null)} on a phone or browser.");
+            ? $"Control API at {api.Address} · owner token {token}"
+            : $"Control API at {api.Address} · owner token from METRODOM_API_TOKEN");
+        Ui.Note($"Remote: open {ControlApi.PairingUrl(api.Address, endpoint, fromEnv is null ? token : null)} on a phone or browser (owner). Hand out operator and guest links with POST {ControlApi.Prefix}/tokens (policy {policy.Mode}).");
         if (!endpoint.IsLoopback)
         {
             Ui.Warn("The Control API is open to the network over plain HTTP: anyone who sees the token can drive the band. Use it on a network you trust.");

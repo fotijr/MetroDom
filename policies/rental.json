@@ -1,0 +1,25 @@
+{
+  "schema": "metrodom.policy/0",
+  "mode": "rental",
+  "controls": {},
+  "limits": {
+    "maxVelocity": 100,
+    "maxNotesPerSecond": 16,
+    "quietHours": { "from": "22:00", "to": "08:00", "maxVelocity": 0 }
+  },
+  "roles": {
+    "operator": ["view", "transport", "tempo", "sections", "panic", "queue.edit"],
+    "guest": ["view", "queue.request"]
+  },
+  "queue": {
+    "requests": true,
+    "votes": false,
+    "maxPerGuest": 1,
+    "cooldownSeconds": 600
+  },
+  "sessions": { "maxTokenHours": 72 },
+  "lights": {
+    "maxBrightness": 80,
+    "quietHours": { "from": "22:00", "to": "08:00", "maxBrightness": 30 }
+  }
+}

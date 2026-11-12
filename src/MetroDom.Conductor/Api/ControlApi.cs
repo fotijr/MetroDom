@@ -60,10 +60,15 @@ internal sealed record ApiEndpoint(IPAddress Address, int Port)
         Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6 ? $"[{Address}]:{Port}" : $"{Address}:{Port}";
 }
 
+/// <summary>What a route needs: a grant, or (null) only a token that works.</summary>
+internal sealed record Requires(Grant? Grant);
+
 /// <summary>
 /// The Control API v0 (ADR 0003): HTTP + JSON at <c>/api/v0</c> on top of a running set's
-/// <see cref="LiveControl"/>. Every route but the spec needs the bearer token. Routes and the
-/// checked-in <c>openapi.json</c> are kept equal by a test. See docs/references/control-api.md.
+/// <see cref="LiveControl"/>. Every route but the spec needs a token, and the token's role must
+/// have the route's grant under the policy (ADR 0005, docs/SECURITY.md); a route that declares
+/// nothing is refused. Routes and the checked-in <c>openapi.json</c> are kept equal by a test.
+/// See docs/references/control-api.md.
 /// </summary>
 internal sealed class ControlApi : IAsyncDisposable
 {
@@ -102,11 +107,16 @@ internal sealed class ControlApi : IAsyncDisposable
     public static string NewToken() =>
         Convert.ToBase64String(RandomNumberGenerator.GetBytes(16)).TrimEnd('=').Replace('+', '-').Replace('/', '_');
 
+    /// <summary>Starts listening with one owner token and the live-band policy. Throws if the port is taken.</summary>
+    public static ControlApi Start(ApiEndpoint endpoint, string ownerToken, LiveControl live, Session session) =>
+        Start(endpoint, new TokenStore(ownerToken), PolicyProfile.LiveBand, live, session);
+
     /// <summary>Starts listening. Throws if the port is taken.</summary>
-    public static ControlApi Start(ApiEndpoint endpoint, string token, LiveControl live, Session session)
+    public static ControlApi Start(ApiEndpoint endpoint, TokenStore tokens, PolicyProfile policy, LiveControl live, Session session)
     {
         ArgumentNullException.ThrowIfNull(endpoint);
-        ArgumentException.ThrowIfNullOrWhiteSpace(token);
+        ArgumentNullException.ThrowIfNull(tokens);
+        ArgumentNullException.ThrowIfNull(policy);
         ArgumentNullException.ThrowIfNull(live);
         ArgumentNullException.ThrowIfNull(session);
 
@@ -121,7 +131,7 @@ internal sealed class ControlApi : IAsyncDisposable
             options.AddServerHeader = false;
         });
         var app = builder.Build();
-        Map(app, token, live, session);
+        Map(app, tokens, policy, live, session);
         app.StartAsync().GetAwaiter().GetResult();
 
         var bound = app.Urls.Select(u => new Uri(u)).First();
@@ -130,6 +140,17 @@ internal sealed class ControlApi : IAsyncDisposable
 
     /// <summary>The routes this server answers.</summary>
     internal IEnumerable<(string Method, string Path)> Routes() => Routes(_app);
+
+    /// <summary>Each guarded route and the grant it declares ("" for any working token, null for none declared).</summary>
+    internal IEnumerable<(string Method, string Path, string? Grant)> Grants() =>
+        ((IEndpointRouteBuilder)_app).DataSources
+            .SelectMany(d => d.Endpoints)
+            .OfType<RouteEndpoint>()
+            .Where(e => e.RoutePattern.RawText!.TrimStart('/').StartsWith(Prefix.TrimStart('/') + "/", StringComparison.Ordinal))
+            .SelectMany(e => (e.Metadata.GetMetadata<HttpMethodMetadata>()?.HttpMethods ?? []).Select(m => (
+                m,
+                ("/" + e.RoutePattern.RawText!.TrimStart('/'))[Prefix.Length..],
+                e.Metadata.GetMetadata<Requires>() is { } r ? (r.Grant is { } g ? RolePermissions.NameOf(g) : "") : (string?)null)));
 
     public async ValueTask DisposeAsync()
     {
@@ -151,9 +172,8 @@ internal sealed class ControlApi : IAsyncDisposable
             .Where(r => r.Item2.StartsWith(Prefix + "/", StringComparison.Ordinal))
             .Select(r => (r.m, r.Item2[Prefix.Length..]));
 
-    internal static void Map(WebApplication app, string token, LiveControl live, Session session)
+    internal static void Map(WebApplication app, TokenStore tokens, PolicyProfile policy, LiveControl live, Session session)
     {
-        var expected = Encoding.UTF8.GetBytes(token);
         var spec = Spec();
         var schema = EventSchema();
         app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TimeSpan.FromSeconds(15) });
@@ -164,24 +184,54 @@ internal sealed class ControlApi : IAsyncDisposable
 
         var guarded = api.MapGroup("").AddEndpointFilter(async (context, next) =>
         {
-            if (Authorized(context.HttpContext.Request, expected))
+            var http = context.HttpContext;
+            if (tokens.Find(PresentedToken(http.Request)) is not { } holder)
             {
-                return await next(context).ConfigureAwait(false);
+                http.Response.Headers.WWWAuthenticate = "Bearer";
+                return Unauthorized();
             }
 
-            context.HttpContext.Response.Headers.WWWAuthenticate = "Bearer";
-            return Unauthorized();
+            // Fail closed: a route that forgot to say what it needs is refused to everyone.
+            if (http.GetEndpoint()?.Metadata.GetMetadata<Requires>() is not { } requires)
+            {
+                return Forbidden("This route declares no permission, so nobody may use it.");
+            }
+
+            if (requires.Grant is { } grant && !policy.Roles.Allows(holder.Role, grant))
+            {
+                return Forbidden($"A{(holder.Role == Role.Operator ? "n" : "")} {RolePermissions.NameOf(holder.Role)} can't do this under the {policy.Mode} policy (needs \"{RolePermissions.NameOf(grant)}\").");
+            }
+
+            http.Items[HolderKey] = holder;
+            return await next(context).ConfigureAwait(false);
         });
 
-        guarded.MapGet("/state", () => Results.Json(State(live.Snapshot())));
+        guarded.MapGet("/session", (HttpContext context) =>
+        {
+            var holder = Holder(context);
+            return Results.Json(new
+            {
+                id = holder.Id,
+                role = RolePermissions.NameOf(holder.Role),
+                label = holder.Label,
+                expiresAt = holder.Expires,
+                mode = policy.Mode,
+                grants = policy.Roles.For(holder.Role).Select(RolePermissions.NameOf),
+            });
+        }).Needs(null);
+        guarded.MapGet("/state", () => Results.Json(State(live.Snapshot()))).Needs(Grant.View);
         var stream = new StateStream(live, session);
-        guarded.MapGet("/stream", (Delegate)((HttpContext context) => stream.Accept(context, app.Lifetime.ApplicationStopping)));
+        guarded.MapGet("/stream", (Delegate)((HttpContext context) =>
+        {
+            var holder = Holder(context);
+            return stream.Accept(context, () => tokens.IsValid(holder), app.Lifetime.ApplicationStopping);
+        })).Needs(Grant.View);
         guarded.MapGet("/queue", () =>
         {
             var state = live.Snapshot();
             return Results.Json(new { current = state.Index, songs = state.Setlist.Select((title, index) => new { index, title }) });
-        });
-        guarded.MapGet("/instruments", () => Results.Json(Instruments(session)));
+        }).Needs(Grant.View);
+        guarded.MapGet("/instruments", () => Results.Json(Instruments(session))).Needs(Grant.View);
 
         guarded.MapPost("/transport/start", () =>
         {
@@ -192,7 +242,7 @@ internal sealed class ControlApi : IAsyncDisposable
 
             live.End(LiveSignal.Start);
             return Accepted("Starting.");
-        });
+        }).Needs(Grant.Transport);
         guarded.MapPost("/transport/stop", () =>
         {
             if (!live.IsPlaying)
@@ -202,12 +252,12 @@ internal sealed class ControlApi : IAsyncDisposable
 
             live.Control(ControlAction.StartStop);
             return Accepted("Stopping.");
-        });
+        }).Needs(Grant.Transport);
         guarded.MapPost("/transport/next", () =>
         {
             live.Control(ControlAction.Next);
             return Accepted("Going to the next song.");
-        });
+        }).Needs(Grant.Transport);
         guarded.MapPost("/tempo", (TempoRequest? request) =>
         {
             if (request?.Bpm is not { } bpm || !(bpm >= TapTempo.MinBpm && bpm <= TapTempo.MaxBpm))
@@ -217,20 +267,55 @@ internal sealed class ControlApi : IAsyncDisposable
 
             live.SetTempo(bpm, "API");
             return Accepted(string.Create(CultureInfo.InvariantCulture, $"Tempo {bpm:0.#} BPM."));
-        });
+        }).Needs(Grant.Tempo);
         guarded.MapPost("/tap", () =>
         {
             live.Tap("API");
             return Accepted("Tap.");
-        });
-        guarded.MapPost("/sections/vamp", () => Navigate(live, ControlAction.Vamp));
-        guarded.MapPost("/sections/outro", () => Navigate(live, ControlAction.Outro));
+        }).Needs(Grant.Tempo);
+        guarded.MapPost("/sections/vamp", () => Navigate(live, ControlAction.Vamp)).Needs(Grant.Sections);
+        guarded.MapPost("/sections/outro", () => Navigate(live, ControlAction.Outro)).Needs(Grant.Sections);
         guarded.MapPost("/panic", () =>
         {
             live.Control(ControlAction.Panic);
             return Results.Json(new { message = "PANIC: everything stopped." });
-        });
+        }).Needs(Grant.Panic);
+
+        guarded.MapGet("/tokens", () => Results.Json(new { tokens = tokens.Issued().Select(Describe) })).Needs(Grant.Tokens);
+        guarded.MapPost("/tokens", (HttpContext context, TokenRequest? request) =>
+        {
+            if (request?.Role is not ("operator" or "guest"))
+            {
+                return BadRequest("role must be \"operator\" or \"guest\".");
+            }
+
+            var role = request.Role == "operator" ? Role.Operator : Role.Guest;
+            var life = request.Hours is { } hours ? TimeSpan.FromHours(hours) : policy.Sessions.MaxTokenLife;
+            if (!tokens.TryIssue(role, life, request.Label, policy.Sessions, out var holder, out var secret, out var error))
+            {
+                return BadRequest(error!);
+            }
+
+            var pairing = $"{context.Request.Scheme}://{context.Request.Host}/#token={Uri.EscapeDataString(secret)}";
+            return Results.Json(new { token = secret, pairingUrl = pairing, holder = Describe(holder) }, statusCode: StatusCodes.Status201Created);
+        }).Needs(Grant.Tokens);
+        guarded.MapDelete("/tokens/{id}", (string id) => tokens.Revoke(id)
+            ? Results.Json(new { message = $"Token {id} revoked." })
+            : Results.Json(new { error = $"No token {id} (it may have expired)." }, statusCode: StatusCodes.Status404NotFound)).Needs(Grant.Tokens);
     }
+
+    private const string HolderKey = "metrodom.holder";
+
+    private static TokenHolder Holder(HttpContext context) => (TokenHolder)context.Items[HolderKey]!;
+
+    private static object Describe(TokenHolder holder) => new
+    {
+        id = holder.Id,
+        role = RolePermissions.NameOf(holder.Role),
+        label = holder.Label,
+        issuedAt = holder.Issued,
+        expiresAt = holder.Expires,
+    };
 
     private static IResult Navigate(LiveControl live, ControlAction action) =>
         live.Navigate(action) is { } message ? Results.Json(new { message }) : Conflict("Nothing is playing.");
@@ -314,31 +399,38 @@ internal sealed class ControlApi : IAsyncDisposable
         following = s.Following is { } f ? new { state = f.State.ToString().ToLowerInvariant(), bpm = f.Bpm } : null,
     };
 
-    private static bool Authorized(HttpRequest request, byte[] expected)
+    /// <summary>The token from <c>Authorization: Bearer</c>, or (browser WebSockets can't set headers) a <c>token.&lt;token&gt;</c> subprotocol.</summary>
+    private static string? PresentedToken(HttpRequest request)
     {
         var header = request.Headers.Authorization.ToString();
         const string scheme = "Bearer ";
         if (header.StartsWith(scheme, StringComparison.OrdinalIgnoreCase))
         {
-            return CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(header[scheme.Length..].Trim()), expected);
+            return header[scheme.Length..].Trim();
         }
 
-        // A browser WebSocket can't set headers: the token may come as a subprotocol, token.<token>.
         return request.Headers.SecWebSocketProtocol
             .SelectMany(v => (v ?? "").Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
             .Where(p => p.StartsWith(StateStream.TokenPrefix, StringComparison.Ordinal))
-            .Any(p => CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(p[StateStream.TokenPrefix.Length..]), expected));
+            .Select(p => p[StateStream.TokenPrefix.Length..])
+            .FirstOrDefault();
     }
 
     private static IResult Unauthorized() => Results.Json(
         new { error = "Missing or wrong token: send Authorization: Bearer <token shown by the Conductor>." },
         statusCode: StatusCodes.Status401Unauthorized);
 
+    private static IResult Forbidden(string error) => Results.Json(new { error }, statusCode: StatusCodes.Status403Forbidden);
+
+    private static IResult BadRequest(string error) => Results.Json(new { error }, statusCode: StatusCodes.Status400BadRequest);
+
     private static IResult Accepted(string message) => Results.Json(new { message }, statusCode: StatusCodes.Status202Accepted);
 
     private static IResult Conflict(string error) => Results.Json(new { error }, statusCode: StatusCodes.Status409Conflict);
 
     private sealed record TempoRequest(double? Bpm);
+
+    private sealed record TokenRequest(string? Role, double? Hours, string? Label);
 
     /// <summary>A host lifetime that ignores process signals.</summary>
     private sealed class NoSignals : IHostLifetime
@@ -347,6 +439,12 @@ internal sealed class ControlApi : IAsyncDisposable
 
         public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
     }
+}
+
+internal static class RouteGrants
+{
+    /// <summary>Declares what a route needs (see <see cref="Requires"/>).</summary>
+    public static RouteHandlerBuilder Needs(this RouteHandlerBuilder route, Grant? grant) => route.WithMetadata(new Requires(grant));
 }
 
 internal static class IPAddressExtensions

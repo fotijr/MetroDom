@@ -79,11 +79,38 @@
 
   async function tokenWorks() {
     try {
-      const response = await fetch(new URL("state", API), { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+      const response = await fetch(new URL("session", API), { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
       return response.status !== 401;
     } catch {
       return true; // Offline, not unauthorized: keep retrying.
     }
+  }
+
+  // What this token may do under the policy. The Conductor enforces it; this only hides buttons.
+  async function loadSession() {
+    let response;
+    try {
+      response = await fetch(new URL("session", API), { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+    } catch {
+      return true; // Offline: show everything, the stream will retry.
+    }
+    if (response.status === 401) {
+      reject();
+      return false;
+    }
+    if (!response.ok) return true;
+    const session = await response.json();
+    const grants = new Set(session.grants);
+    document.querySelectorAll("[data-grant]").forEach((element) => {
+      element.hidden = !grants.has(element.dataset.grant);
+    });
+    const until = session.expiresAt ? ` · until ${new Date(session.expiresAt).toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" })}` : "";
+    $("role").textContent = `${session.label ? `${session.label} · ` : ""}${session.role} · ${session.mode}${until}`;
+    if (!grants.has("view")) {
+      $("status").textContent = `This ${session.role} link can't see the band under the ${session.mode} policy.`;
+      return false;
+    }
+    return true;
   }
 
   function connect() {
@@ -238,10 +265,10 @@
     call("tempo", { bpm: target });
   }
 
-  function start() {
+  async function start() {
     showBand();
     link("", "Connecting…");
-    connect();
+    if (await loadSession()) connect();
   }
 
   $("pair-form").addEventListener("submit", (event) => {

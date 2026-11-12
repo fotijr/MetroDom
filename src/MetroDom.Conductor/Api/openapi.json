@@ -2,9 +2,9 @@
   "openapi": "3.1.0",
   "info": {
     "title": "MetroDom Control API",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "summary": "The one front door for apps that control a MetroDom band (ADR 0003).",
-    "description": "HTTP + JSON on the local network. Every path except this spec needs `Authorization: Bearer <token>`: the token the Conductor shows when it starts (or METRODOM_API_TOKEN). v0 serves a running `metrodom play` set and every token has the operator role. Safety lives below the API: no request can bypass the safety governor. See docs/references/control-api.md.",
+    "description": "HTTP + JSON on the local network. Every path except this spec needs `Authorization: Bearer <token>`: the token the Conductor shows when it starts (or METRODOM_API_TOKEN). The token the Conductor shows is the owner's; the owner hands out operator and guest tokens that expire, and the policy's roles say what each may do (each operation's `x-metrodom-grant`; a 403 otherwise). v0 serves a running `metrodom play` set. Safety lives below the API: no request can bypass the safety governor. See docs/references/control-api.md.",
     "license": { "name": "MIT", "identifier": "MIT" }
   },
   "servers": [{ "url": "http://127.0.0.1:7890/api/v0", "description": "Default when started with --api 7890" }],
@@ -21,22 +21,26 @@
     "/state": {
       "get": {
         "operationId": "getState",
+        "x-metrodom-grant": "view",
         "summary": "What the band is doing now.",
         "responses": {
           "200": { "description": "Current state.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/State" } } } },
-          "401": { "$ref": "#/components/responses/Unauthorized" }
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
         }
       }
     },
     "/stream": {
       "get": {
         "operationId": "stream",
+        "x-metrodom-grant": "view",
         "summary": "Live state over a WebSocket (subprotocol metrodom.v0). Events: events.schema.json, served at /events.schema.json.",
         "description": "Authenticate with the Authorization header, or (browsers can't set headers on a WebSocket) by also offering the subprotocol `token.<token>`. At most 16 streams at once.",
         "responses": {
           "101": { "description": "Switched to a WebSocket; JSON text frames follow." },
           "400": { "$ref": "#/components/responses/BadRequest" },
           "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
           "503": { "description": "Too many streams open.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
         }
       }
@@ -52,33 +56,39 @@
     "/queue": {
       "get": {
         "operationId": "getQueue",
+        "x-metrodom-grant": "view",
         "summary": "The setlist and which song is playing or up next.",
         "responses": {
           "200": { "description": "The queue.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Queue" } } } },
-          "401": { "$ref": "#/components/responses/Unauthorized" }
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
         }
       }
     },
     "/instruments": {
       "get": {
         "operationId": "getInstruments",
+        "x-metrodom-grant": "view",
         "summary": "The band's instruments: channels, latency, notes, connection.",
         "responses": {
           "200": {
             "description": "Instruments in output order.",
             "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Instrument" } } } }
           },
-          "401": { "$ref": "#/components/responses/Unauthorized" }
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
         }
       }
     },
     "/transport/start": {
       "post": {
         "operationId": "start",
+        "x-metrodom-grant": "transport",
         "summary": "Start the song that is up next.",
         "responses": {
           "202": { "$ref": "#/components/responses/Accepted" },
           "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
           "409": { "$ref": "#/components/responses/Conflict" }
         }
       }
@@ -86,10 +96,12 @@
     "/transport/stop": {
       "post": {
         "operationId": "stop",
+        "x-metrodom-grant": "transport",
         "summary": "Stop the song playing (the band then waits, or plays on through the setlist without a start control).",
         "responses": {
           "202": { "$ref": "#/components/responses/Accepted" },
           "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
           "409": { "$ref": "#/components/responses/Conflict" }
         }
       }
@@ -97,16 +109,19 @@
     "/transport/next": {
       "post": {
         "operationId": "next",
+        "x-metrodom-grant": "transport",
         "summary": "Go to the next song now (skips it while waiting).",
         "responses": {
           "202": { "$ref": "#/components/responses/Accepted" },
-          "401": { "$ref": "#/components/responses/Unauthorized" }
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
         }
       }
     },
     "/tempo": {
       "post": {
         "operationId": "setTempo",
+        "x-metrodom-grant": "tempo",
         "summary": "Set the tempo now, or for the next song while waiting.",
         "requestBody": {
           "required": true,
@@ -115,27 +130,32 @@
         "responses": {
           "202": { "$ref": "#/components/responses/Accepted" },
           "400": { "$ref": "#/components/responses/BadRequest" },
-          "401": { "$ref": "#/components/responses/Unauthorized" }
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
         }
       }
     },
     "/tap": {
       "post": {
         "operationId": "tap",
+        "x-metrodom-grant": "tempo",
         "summary": "One tap of tap tempo (shares the history with keys and pedals).",
         "responses": {
           "202": { "$ref": "#/components/responses/Accepted" },
-          "401": { "$ref": "#/components/responses/Unauthorized" }
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
         }
       }
     },
     "/sections/vamp": {
       "post": {
         "operationId": "toggleVamp",
+        "x-metrodom-grant": "sections",
         "summary": "Vamp on (repeat the current section) or off.",
         "responses": {
           "200": { "$ref": "#/components/responses/Message" },
           "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
           "409": { "$ref": "#/components/responses/Conflict" }
         }
       }
@@ -143,10 +163,12 @@
     "/sections/outro": {
       "post": {
         "operationId": "jumpToOutro",
+        "x-metrodom-grant": "sections",
         "summary": "Go to the outro when the current section ends.",
         "responses": {
           "200": { "$ref": "#/components/responses/Message" },
           "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
           "409": { "$ref": "#/components/responses/Conflict" }
         }
       }
@@ -154,23 +176,77 @@
     "/panic": {
       "post": {
         "operationId": "panic",
+        "x-metrodom-grant": "panic",
         "summary": "Stop every actuator now. Always accepted; the band then waits for start.",
         "responses": {
           "200": { "$ref": "#/components/responses/Message" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
+    "/session": {
+      "get": {
+        "operationId": "getSession",
+        "summary": "Who this token is: role, what it may do under the policy, when it ends. Any working token.",
+        "responses": {
+          "200": { "description": "The caller.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Session" } } } },
           "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/tokens": {
+      "get": {
+        "operationId": "listTokens",
+        "x-metrodom-grant": "tokens",
+        "summary": "Operator and guest tokens out now, soonest to end first (never the secrets). Owner only.",
+        "responses": {
+          "200": {
+            "description": "Tokens out now.",
+            "content": { "application/json": { "schema": { "type": "object", "required": ["tokens"], "properties": { "tokens": { "type": "array", "items": { "$ref": "#/components/schemas/TokenHolder" } } } } } }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      },
+      "post": {
+        "operationId": "issueToken",
+        "x-metrodom-grant": "tokens",
+        "summary": "Hand out an operator or guest token. The secret is returned once, with a pairing link. Owner only.",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TokenRequest" } } } },
+        "responses": {
+          "201": { "description": "The new token.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/IssuedToken" } } } },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
+    "/tokens/{id}": {
+      "delete": {
+        "operationId": "revokeToken",
+        "x-metrodom-grant": "tokens",
+        "summary": "Stop a handed-out token working now; its open streams close. Owner only.",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": {
+          "200": { "$ref": "#/components/responses/Message" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "description": "No such token (or it expired).", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
         }
       }
     }
   },
   "components": {
     "securitySchemes": {
-      "token": { "type": "http", "scheme": "bearer", "description": "Shown by the Conductor at start, or METRODOM_API_TOKEN." }
+      "token": { "type": "http", "scheme": "bearer", "description": "The owner's: shown by the Conductor at start, or METRODOM_API_TOKEN. Operators and guests: handed out by the owner (POST /tokens), each with an end." }
     },
     "responses": {
       "Accepted": { "description": "Taken; the band acts on it now.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Message" } } } },
       "Message": { "description": "Done, with what will happen.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Message" } } } },
       "BadRequest": { "description": "The request is malformed or out of range.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
-      "Unauthorized": { "description": "Missing or wrong bearer token.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+      "Forbidden": { "description": "The token works, but its role may not do this under the policy (or the route declares no grant).", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+      "Unauthorized": { "description": "Missing, wrong, revoked or expired bearer token.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
       "Conflict": { "description": "Not possible in the current state (e.g. stop while waiting).", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
     },
     "schemas": {
@@ -183,6 +259,48 @@
         "type": "object",
         "required": ["error"],
         "properties": { "error": { "type": "string" } }
+      },
+      "Session": {
+        "type": "object",
+        "required": ["id", "role", "mode", "grants"],
+        "properties": {
+          "id": { "type": "string", "description": "\"owner\", or the handed-out token's id." },
+          "role": { "type": "string", "enum": ["owner", "operator", "guest"] },
+          "label": { "type": ["string", "null"] },
+          "expiresAt": { "type": ["string", "null"], "format": "date-time", "description": "Null for the owner token (it lasts the run)." },
+          "mode": { "type": "string", "description": "The policy's mode, e.g. live-band." },
+          "grants": { "type": "array", "items": { "$ref": "#/components/schemas/Grant" } }
+        }
+      },
+      "Grant": { "type": "string", "enum": ["view", "transport", "tempo", "sections", "panic", "queue.request", "queue.vote", "queue.edit", "tokens"] },
+      "TokenHolder": {
+        "type": "object",
+        "required": ["id", "role", "issuedAt", "expiresAt"],
+        "properties": {
+          "id": { "type": "string" },
+          "role": { "type": "string", "enum": ["operator", "guest"] },
+          "label": { "type": ["string", "null"] },
+          "issuedAt": { "type": "string", "format": "date-time" },
+          "expiresAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "TokenRequest": {
+        "type": "object",
+        "required": ["role"],
+        "properties": {
+          "role": { "type": "string", "enum": ["operator", "guest"] },
+          "hours": { "type": "number", "exclusiveMinimum": 0, "description": "How long it lasts. Default and maximum: the policy's sessions.maxTokenHours." },
+          "label": { "type": "string", "maxLength": 60, "description": "e.g. \"Smith party\"." }
+        }
+      },
+      "IssuedToken": {
+        "type": "object",
+        "required": ["token", "pairingUrl", "holder"],
+        "properties": {
+          "token": { "type": "string", "description": "The secret, shown once." },
+          "pairingUrl": { "type": "string", "description": "The web remote with the token in the fragment." },
+          "holder": { "$ref": "#/components/schemas/TokenHolder" }
+        }
       },
       "TempoRequest": {
         "type": "object",

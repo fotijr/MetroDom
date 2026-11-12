@@ -65,6 +65,11 @@ internal sealed class Session : IDisposable
         : this(Open(settings, out var book), settings.MutedChannels, settings.Limits)
     {
         Book = book;
+        if (_limits != SafetyLimits.None)
+        {
+            var flags = settings.MaxVelocity is not null || settings.MaxRate is not null || settings.Quiet is not null ? " + flags" : "";
+            Ui.Note($"Limits (policy {settings.PolicyProfile.Mode}{flags}): {_limits.Describe()}.");
+        }
     }
 
     /// <summary>One output on every channel, no latency.</summary>

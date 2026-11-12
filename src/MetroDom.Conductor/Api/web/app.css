@@ -103,3 +103,5 @@ li.current { font-weight: 700; }
 
 form { display: grid; gap: .5rem; }
 input { font: inherit; padding: .7rem; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--fg); }
+
+[hidden] { display: none !important; }

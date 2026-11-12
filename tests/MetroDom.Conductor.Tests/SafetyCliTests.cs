@@ -49,6 +49,50 @@ public class SafetyCliTests
         }
     }
 
+    private static string RepoFile(string relative)
+    {
+        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
+        {
+            if (File.Exists(Path.Combine(dir.FullName, relative)))
+            {
+                return Path.Combine(dir.FullName, relative);
+            }
+        }
+
+        throw new FileNotFoundException(relative);
+    }
+
+    [Fact]
+    public void PolicyLimits_ReachTheGovernors_WithFlagsOnTop()
+    {
+        var rental = RepoFile("policies/rental.json");
+        var settings = new PlayCommand.Settings { Policy = rental, MaxVelocity = 120, MaxRate = 8 };
+        Assert.Equal("rental", settings.PolicyProfile.Mode);
+        Assert.Equal(100, settings.Limits.MaxVelocity);       // the policy's 100 beats the looser flag
+        Assert.Equal(8, settings.Limits.MaxNotesPerSecond);   // the tighter flag beats the policy's 16
+        Assert.Equal(new QuietHours(new TimeOnly(22, 0), new TimeOnly(8, 0)), settings.Limits.Quiet);
+
+        var tonight = new PlayCommand.Settings { Policy = rental, Quiet = "23:30-07:00@20" };
+        Assert.Equal(new QuietHours(new TimeOnly(23, 30), new TimeOnly(7, 0), 20), tonight.Limits.Quiet);
+    }
+
+    [Fact]
+    public void BadPolicyFile_IsAUsageErrorForPlayAndRoute()
+    {
+        var policy = Path.Combine(Path.GetTempPath(), $"metrodom-policy-{Guid.NewGuid():N}.json");
+        File.WriteAllText(policy, """{"schema":"metrodom.policy/0","mode":"x","roles":{"guest":["panic"]}}""");
+        try
+        {
+            Assert.Equal(MetroDomApp.UsageError, MetroDomApp.Create().Run(["route", "-i", "0", "-o", "0", "--policy", policy], TestContext.Current.CancellationToken));
+            var error = new RouteCommand.Settings { Policy = policy }.Validate().Message;
+            Assert.Contains("guests can't have", error, StringComparison.Ordinal);
+        }
+        finally
+        {
+            File.Delete(policy);
+        }
+    }
+
     [Fact]
     public void Session_SendsEverythingThroughGovernors_AndReportsWhatWasHeldBack()
     {
