@@ -102,12 +102,15 @@ Brain::Brain(const BrainConfig& config, Outputs& outputs, Replies& replies, Body
 }
 
 void Brain::begin(uint32_t nowMs) {
+  enabled_ = false;
+  outputs_.enable(false);  // everything off while disabled, then enable
   for (uint8_t i = 0; i < count_; ++i) {
     state_[i] = State{};
     state_[i].heatAt = nowMs;
     off(i);
   }
   lastRefusal_ = Refusal::None;
+  updateEnable();
 }
 
 void Brain::message(const uint8_t* data, size_t length, uint32_t nowMs) {
@@ -216,6 +219,14 @@ void Brain::tick(uint32_t nowMs) {
   for (uint8_t i = 0; i < count_; ++i) {
     if ((state_[i].on && nowMs - state_[i].onAt >= state_[i].pulse) || state_[i].stuck) off(i);
   }
+  updateEnable();
+}
+
+void Brain::updateEnable() {
+  bool allowed = host_ && !restart_ && !faulted();
+  if (allowed == enabled_) return;
+  enabled_ = allowed;
+  outputs_.enable(allowed);
 }
 
 bool Brain::faulted() const {
@@ -235,6 +246,7 @@ uint16_t Brain::pulseFor(uint8_t index, uint8_t velocity) const {
 void Brain::hostConnected(bool connected) {
   if (!connected) allOff();
   host_ = connected;
+  updateEnable();
 }
 
 void Brain::allOff() {
@@ -246,6 +258,7 @@ void Brain::off(uint8_t index) {
   bool ok = outputs_.set(actuators_[index].output, false);  // always written, even if already off
   if (!ok) counters_.faults++;
   state_[index].stuck = !ok;
+  if (!ok) updateEnable();  // cut every output in hardware now; tick() re-enables once the off takes
 }
 
 void Brain::sysex(const uint8_t* data, size_t length) {
@@ -316,8 +329,10 @@ void Brain::bodyChunk(const uint8_t* data, size_t length) {
   // write failed (a half-written EEPROM boots as a silent brain, never as a wrong instrument).
   allOff();
   restart_ = true;
+  updateEnable();
   if (!store_->write(bodyIn_, bodyLength_)) {
     restart_ = false;
+    updateEnable();
     replyWrite(WriteStatus::Failed);
     return;
   }

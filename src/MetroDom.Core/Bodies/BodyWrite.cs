@@ -33,7 +33,7 @@ public sealed record BodyWriteReply(BodyWriteStatus Status, int Detail)
         BodyWriteStatus.BadMessage => "the brain got the record garbled (a chunk out of order or not hex); nothing was stored",
         BodyWriteStatus.Invalid when Detail == 0 => "the brain refused the record; nothing was stored",
         BodyWriteStatus.Invalid => $"the brain refused the record: {BodyWrite.ErrorText(Detail)}; nothing was stored",
-        BodyWriteStatus.Failed => "the EEPROM didn't keep it: is the body's write-protect jumper on, or the EEPROM missing?",
+        BodyWriteStatus.Failed => "the EEPROM didn't keep it: was the body's write button held the whole time? (Or the EEPROM is missing.) The old body keeps playing",
         BodyWriteStatus.NoStore => "this brain can't store a body",
         _ => $"unknown status {(int)Status}",
     };

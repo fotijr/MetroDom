@@ -33,8 +33,8 @@ sends these **only to ports whose Identity Reply said MetroDom**.
   characters (64 bytes) per chunk, sent in order from `<index>` 0; chunk 0 starts over. After the
   last chunk the brain answers once: `<status>` 0 written (it restarts), 1 bad message, 2 refused
   (`<detail>` = the firmware's `BodyError` number), 3 the EEPROM didn't keep it, 4 no body store.
-  A bad chunk is answered at once. Owner-only by procedure: `metrodom body write` is a local
-  command, and the body's write-protect jumper must be fitted.
+  A bad chunk is answered at once. Owner-only by hardware: `metrodom body write` is a local
+  command, and the body's write button must be held while it runs.
 - Free sub-IDs after `05` are for later MetroDom messages.
 
 ## What `metrodom devices --identify` does

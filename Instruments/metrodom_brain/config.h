@@ -3,6 +3,7 @@
 // M0 bench rig (docs/ROADMAP.md): one solenoid on a logic-level MOSFET, gate on GPIO 15,
 // flyback diode across the coil, current-limited bench supply. Note 60 (middle C) strikes it.
 // Edit the table for your wiring; the profile the brain sends is built from these values.
+// Keep off GPIO 4, 5 and 6: the brain uses them for the body's Qwiic bus and the PCA9685's /OE.
 #pragma once
 
 #include "src/brain/Brain.h"

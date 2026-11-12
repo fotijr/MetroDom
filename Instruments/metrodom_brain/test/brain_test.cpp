@@ -30,6 +30,12 @@ struct FakePins : Outputs {
   bool level[64] = {};
   bool broken[64] = {};  // writes to these fail and change nothing
   std::vector<std::pair<uint8_t, bool>> writes;
+  bool enabled = false;
+  std::vector<bool> enables;
+  void enable(bool on) override {
+    enabled = on;
+    enables.push_back(on);
+  }
   bool set(uint8_t output, bool on) override {
     writes.emplace_back(output, on);
     if (broken[output]) return false;
@@ -529,6 +535,10 @@ void body_RefusesWhatItCantSafelyBe() {
   CHECK(validateBody(gpio) == BodyError::None);
   gpio.actuators[2].output = 29;
   CHECK(validateBody(gpio) == BodyError::Output);
+  for (uint8_t pin : {kPinSda, kPinScl, kPinOutputEnable}) {  // the backplane's I2C and /OE
+    gpio.actuators[2].output = pin;
+    CHECK(validateBody(gpio) == BodyError::Output);
+  }
 }
 
 void body_ParseSaysWhatsWrong() {
@@ -740,7 +750,7 @@ void eeprom_WritesPages_AndVerifies() {
   CHECK(parseBody(back.data(), back.size(), b) == BodyError::None);
   CHECK(std::string(b.id) == "xylophone-m1");
 
-  bus.protect = true;  // WP jumper on: acks, keeps the old bytes
+  bus.protect = true;  // write button not held (WP high): acks, keeps the old bytes
   Body other = M1();
   std::strcpy(other.name, "Other");
   auto otherBytes = Encode(other);
@@ -748,6 +758,63 @@ void eeprom_WritesPages_AndVerifies() {
 
   bus.eepromThere = false;
   CHECK(!eeprom.present());
+}
+
+void outputEnable_OnlyWhileTheBrainIsHealthy() {
+  Rig r;
+  CHECK(r.pins.enables.size() == 2 && !r.pins.enables[0] && r.pins.enables[1]);  // off, outputs off, then on
+  CHECK(r.pins.writes.size() == 3);  // the offs happened while disabled
+
+  r.brain.hostConnected(false);
+  CHECK(!r.pins.enabled);
+  r.brain.hostConnected(true);
+  CHECK(r.pins.enabled);
+
+  r.on(60, 0);
+  r.pins.broken[2] = true;  // the PCA9685 stops answering mid-strike
+  r.brain.tick(30);
+  CHECK(!r.pins.enabled);   // /OE cuts it at once, bus or no bus
+  r.brain.tick(31);
+  CHECK(!r.pins.enabled);
+  r.pins.broken[2] = false;
+  r.brain.tick(32);
+  CHECK(r.pins.enabled);
+  size_t changes = r.pins.enables.size();
+  r.brain.tick(33);
+  CHECK(r.pins.enables.size() == changes);  // written on change only
+
+  r.store.works = false;
+  for (auto& c : WriteChunks(Encode(M1()))) r.raw(c);
+  CHECK(r.pins.enabled);  // a failed write keeps the old body playing
+  r.store.works = true;
+  for (auto& c : WriteChunks(Encode(M1()))) r.raw(c);
+  CHECK(!r.pins.enabled);  // written: disabled until the restart
+}
+
+bool oePin = false;  // true = outputs enabled (/OE low)
+void setOe(bool on) { oePin = on; }
+
+void pca9685_OutputEnable_DrivesOe_EvenWithTheChipGone() {
+  FakeBus bus;
+  Pca9685 pca(bus, 0x40, setOe);
+  pca.begin();
+  Body m1 = M1();
+  BrainConfig c = m1.config();
+  FakeReplies replies;
+  Brain brain(c, pca, replies);
+  brain.begin(0);
+  CHECK(oePin);
+  uint8_t on[] = {0x90, 72, 100};
+  brain.message(on, 3, 0);
+  bus.pcaThere = false;
+  brain.tick(30);
+  CHECK(!oePin);
+  bus.pcaThere = true;
+  brain.tick(31);
+  CHECK(oePin);
+
+  Pca9685 unwired(bus, 0x40);
+  unwired.enable(false);  // no /OE: a no-op, not a crash
 }
 
 }  // namespace
@@ -771,6 +838,7 @@ int main() {
       bodyWrite_RefusesBadRecords_AndKeepsPlaying, bodyWrite_RefusesChunksOutOfOrder_OrNotHex,
       bodyWrite_SaysWhenItCant, pca9685_DrivesFullOnAndFullOff,
       pca9685_UnderTheBrain_FaultsWhenTheChipGoesAway, eeprom_WritesPages_AndVerifies,
+      outputEnable_OnlyWhileTheBrainIsHealthy, pca9685_OutputEnable_DrivesOe_EvenWithTheChipGone,
   };
   for (auto test : tests) test();
   std::printf("brain: %d checks, %d failed\n", checks, failures);

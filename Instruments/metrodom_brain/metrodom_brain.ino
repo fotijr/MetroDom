@@ -25,8 +25,9 @@
 
 namespace {
 
-// Qwiic on the body (hardware/interfaces.md): I2C0 on GPIO 4 (SDA) and 5 (SCL), 400 kHz.
-constexpr uint8_t kSda = 4, kScl = 5;
+// The backplane (hardware/modules/body-backplane): Qwiic I2C0 on GPIO 4 (SDA) and 5 (SCL) at
+// 400 kHz, and the PCA9685's /OE on GPIO 6 with a pull-up (high = every output off).
+constexpr uint8_t kSda = metrodom::kPinSda, kScl = metrodom::kPinScl, kOe = metrodom::kPinOutputEnable;
 constexpr uint32_t kI2cHz = 400000;
 constexpr uint32_t kRestartDelayMs = 50;  // lets the Body Write Reply leave before the reboot
 
@@ -64,6 +65,9 @@ class UsbReplies : public metrodom::Replies {
 
 void waitMs(uint32_t ms) { delay(ms); }
 
+// /OE is active low: on = drive low. The brain only enables outputs while it's healthy.
+void outputEnable(bool on) { digitalWrite(kOe, on ? LOW : HIGH); }
+
 WireBus bus;
 metrodom::Eeprom24 eeprom(bus, waitMs);
 metrodom::Body body;
@@ -97,7 +101,7 @@ metrodom::Outputs& chooseBody() {
   }
   active = body.config();
   if (body.driver == metrodom::BodyDriver::Pca9685) {
-    static metrodom::Pca9685 chip(bus, body.address);
+    static metrodom::Pca9685 chip(bus, body.address, outputEnable);
     pca = &chip;
     return chip;
   }
@@ -123,6 +127,10 @@ void onSysEx(byte* data, unsigned size) { brain->message(data, size, millis()); 
 }  // namespace
 
 void setup() {
+  // /OE high first: until the brain says otherwise, a PCA9685 body's outputs are disabled (the
+  // pull-up already holds it there while the brain resets or is out of its socket).
+  pinMode(kOe, OUTPUT);
+  digitalWrite(kOe, HIGH);
   // The bench pins low before anything else: a brain that boots or resets is silent. A PCA9685
   // powers up with every output off, and Pca9685::begin() turns them all off again.
   {

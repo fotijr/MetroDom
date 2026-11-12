@@ -88,6 +88,19 @@ public class BodyImageTests
     }
 
     [Fact]
+    public void GpioBodies_KeepOffTheBackplanesPins()
+    {
+        var gpio = M1() with { Driver = BodyDriver.Gpio, Address = 0 };
+        Assert.Null(BodyImage.Validate(gpio with { Notes = [gpio.Notes[0] with { Output = 28 }] }));
+        foreach (var pin in new[] { 4, 5, 6 })
+        {
+            Assert.Contains("taken by the backplane", BodyImage.Validate(gpio with { Notes = [gpio.Notes[0] with { Output = pin }] }), StringComparison.Ordinal);
+        }
+
+        Assert.Null(BodyImage.Validate(M1() with { Notes = [M1().Notes[0] with { Output = 6 }] })); // a PCA9685 channel 6 is fine
+    }
+
+    [Fact]
     public void Json_AcceptsANumericAddress_AndDefaultsThePca9685s()
     {
         var json = File.ReadAllText(BodyFile("m1-xylophone.json"));
@@ -152,6 +165,6 @@ public class BodyImageTests
         Assert.True(BodyWrite.TryParseReply(reply, out var parsed));
         Assert.Equal(BodyWriteStatus.Invalid, parsed.Status);
         Assert.Equal("the brain refused the record: bad CRC; nothing was stored", parsed.Describe());
-        Assert.Contains("write-protect", new BodyWriteReply(BodyWriteStatus.Failed, 0).Describe(), StringComparison.Ordinal);
+        Assert.Contains("write button held", new BodyWriteReply(BodyWriteStatus.Failed, 0).Describe(), StringComparison.Ordinal);
     }
 }

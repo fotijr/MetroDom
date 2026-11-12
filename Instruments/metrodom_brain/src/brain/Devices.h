@@ -24,7 +24,9 @@ class I2c {
 
 class Pca9685 : public Outputs {
  public:
-  Pca9685(I2c& bus, uint8_t address) : bus_(bus), address_(address) {}
+  // outputEnable drives the chip's /OE: true = outputs on (pin low). nullptr if /OE isn't wired.
+  Pca9685(I2c& bus, uint8_t address, void (*outputEnable)(bool on) = nullptr)
+      : bus_(bus), address_(address), outputEnable_(outputEnable) {}
 
   // Auto-increment, totem-pole outputs, oscillator running, every output full off.
   bool begin();
@@ -35,9 +37,15 @@ class Pca9685 : public Outputs {
   // Every channel off in one write (ALL_LED registers).
   bool allOff();
 
+  // /OE: every output on or off at once, without the bus. Works even if the chip stopped answering.
+  void enable(bool on) override {
+    if (outputEnable_ != nullptr) outputEnable_(on);
+  }
+
  private:
   I2c& bus_;
   uint8_t address_;
+  void (*outputEnable_)(bool on);
 };
 
 class Eeprom24 : public BodyStore {

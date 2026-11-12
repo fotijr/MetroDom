@@ -64,6 +64,10 @@ class Outputs {
  public:
   virtual bool set(uint8_t output, bool on) = 0;
 
+  // A hardware switch over every output at once, where the driver has one (the PCA9685's /OE).
+  // The brain enables outputs only while it's healthy: host connected, no fault, no restart due.
+  virtual void enable(bool on) { (void)on; }
+
  protected:
   ~Outputs() = default;
 };
@@ -123,6 +127,7 @@ class Brain {
 
   bool isOn(uint8_t index) const { return index < count_ && state_[index].on; }
   bool faulted() const;
+  bool outputsEnabled() const { return enabled_; }
   // A new body was written: the sketch restarts the brain so it boots as that body.
   bool restartRequested() const { return restart_; }
   Refusal lastRefusal() const { return lastRefusal_; }
@@ -157,6 +162,7 @@ class Brain {
   void sendIdentity();
   void sendProfile();
   void off(uint8_t index);
+  void updateEnable();
   void cool(State& s, uint32_t nowMs) const;
   void buildProfile();
 
@@ -173,6 +179,7 @@ class Brain {
   bool velocity_ = false;
   bool host_ = true;
   bool restart_ = false;
+  bool enabled_ = false;
   uint8_t bodyIn_[kMaxBodyBytes] = {};
   size_t bodyLength_ = 0;
   uint8_t bodyNext_ = 0;

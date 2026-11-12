@@ -86,13 +86,14 @@ Current-limit the bench supply. Never power the coil from the Pico.
 ## A real body (M1)
 
 Wire the [body-backplane](../../hardware/modules/body-backplane/README.md) (EEPROM at `0x50`,
-PCA9685 at `0x40`, Qwiic on GPIO 4/5), fit the EEPROM's write jumper, then:
+PCA9685 at `0x40` with `/OE` on GPIO 6, Qwiic on GPIO 4/5), then run this and hold the body's
+write button when it asks:
 
 ```bash
 metrodom body write "MetroDom brain" Instruments/metrodom_brain/bodies/m1-xylophone.json
 ```
 
-The brain restarts as "MetroDom xylophone". Remove the jumper.
+The brain restarts as "MetroDom xylophone".
 
 ## Not yet (TD-29)
 

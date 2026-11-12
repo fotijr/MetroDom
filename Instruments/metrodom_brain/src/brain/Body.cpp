@@ -6,6 +6,9 @@ namespace metrodom {
 namespace {
 
 constexpr uint8_t kGpioOutputs = 29;  // Pico GPIO 0-28
+
+// The backplane's pins (hardware/modules/body-backplane): Qwiic SDA/SCL and the PCA9685's /OE.
+bool reserved(uint8_t pin) { return pin == kPinSda || pin == kPinScl || pin == kPinOutputEnable; }
 constexpr uint8_t kPcaOutputs = 16;
 
 uint16_t get16(const uint8_t* p) { return static_cast<uint16_t>(p[0] | (p[1] << 8)); }
@@ -99,7 +102,7 @@ BodyError validateBody(const Body& b) {
   for (uint8_t i = 0; i < b.count; ++i) {
     const Actuator& a = b.actuators[i];
     if (a.note > 127) return BodyError::Note;
-    if (a.output >= outputs) return BodyError::Output;
+    if (a.output >= outputs || (b.driver == BodyDriver::Gpio && reserved(a.output))) return BodyError::Output;
     for (uint8_t j = 0; j < i; ++j) {
       if (b.actuators[j].note == a.note) return BodyError::Note;
       if (b.actuators[j].output == a.output) return BodyError::Output;

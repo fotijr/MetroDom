@@ -6,6 +6,7 @@ using Melanchall.DryWetMidi.MusicTheory;
 using MetroDom.Conductor.Cli;
 using MetroDom.Conductor.Midi;
 using MetroDom.Core.Bodies;
+using MetroDom.Core.Discovery;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
@@ -120,7 +121,13 @@ internal sealed class BodyWriteCommand : Command<BodyWriteCommand.Settings>
 
         BodyFile.Show(body, record);
         var was = before.Profile?.Name ?? "an instrument with no profile";
-        Ui.Note($"{port.Name} is {was} now; writing {body.Name}…");
+        Ui.Note($"{port.Name} is {was} now.");
+        if (!AskForTheButton(before, cancellationToken))
+        {
+            return 1;
+        }
+
+        Ui.Note($"Writing {body.Name}…");
         var reply = BodyWriter.Write(backend, port, record, BodyWriter.DefaultTimeout);
         if (reply is null)
         {
@@ -155,5 +162,39 @@ internal sealed class BodyWriteCommand : Command<BodyWriteCommand.Settings>
 
         Ui.Warn($"The brain didn't answer as {body.Name} within {ComeBack.TotalSeconds:0} s. Check with metrodom devices --identify.");
         return 0;
+    }
+
+    /// <summary>
+    /// The body's EEPROM only takes a write while its button is held (WP to ground). A brain gets
+    /// the prompt; a virtual instrument has no button. Piped: say so and go, the person is there.
+    /// </summary>
+    private static bool AskForTheButton(IdentifiedPort port, CancellationToken cancellationToken)
+    {
+        if (port.Identity?.Model == DeviceIdentity.VirtualModel)
+        {
+            Ui.Note("A virtual instrument: no write button to hold.");
+            return true;
+        }
+
+        if (!Ui.IsInteractive)
+        {
+            Ui.Note("Hold the body's write button now; the write takes about a second.");
+            return true;
+        }
+
+        AnsiConsole.MarkupLine("[bold]Hold the body's write button[/], then press [bold]Enter[/] (keep holding until it says written). Esc cancels.");
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            switch (Console.ReadKey(intercept: true).Key)
+            {
+                case ConsoleKey.Enter:
+                    return true;
+                case ConsoleKey.Escape:
+                    Ui.Note("Cancelled; nothing was sent.");
+                    return false;
+            }
+        }
+
+        return false;
     }
 }

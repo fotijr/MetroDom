@@ -21,6 +21,7 @@
 //  18  1  idLength         1-32
 //  19  1  nameLength       1-48
 //  20  count x 10          note, output, pulseMs, minPulseMs, minIntervalMs, latencyMs
+//                          (a GPIO output can't be 4, 5 or 6: the backplane's I2C and /OE)
 //   .  idLength            id: a-z, 0-9, '-'
 //   .  nameLength          name: printable ASCII
 //  -2  2  CRC-16/CCITT-FALSE of everything before it
@@ -40,6 +41,9 @@ constexpr size_t kBodyMaxName = 48;
 constexpr size_t kBodyMaxBytes = kBodyHeaderBytes + kMaxActuators * kBodyActuatorBytes + kBodyMaxId + kBodyMaxName + 2;
 static_assert(kBodyMaxBytes == kMaxBodyBytes, "Brain.h's buffer must hold the largest record");
 constexpr uint8_t kBodyVersion = 1;
+
+// Brain pins the backplane uses, so a GPIO body can't (hardware/modules/body-backplane).
+constexpr uint8_t kPinSda = 4, kPinScl = 5, kPinOutputEnable = 6;
 
 enum class BodyDriver : uint8_t { Gpio = 0, Pca9685 = 1 };
 

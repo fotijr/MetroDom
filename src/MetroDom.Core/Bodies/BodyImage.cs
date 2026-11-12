@@ -76,6 +76,9 @@ public static class BodyImage
     public const int CeilingDutyPercent = 50;
 
     public const int MaxActuators = 16;
+
+    /// <summary>Brain pins the backplane uses (Qwiic SDA, SCL, the PCA9685's /OE), so a GPIO body can't.</summary>
+    public static readonly IReadOnlySet<int> ReservedPins = new HashSet<int> { 4, 5, 6 };
     public const int MaxIdLength = 32;
     public const int MaxNameLength = 48;
     public const int HeaderBytes = 20;
@@ -154,6 +157,11 @@ public static class BodyImage
             if (a.Output < 0 || a.Output >= outputs || body.Notes.Take(i).Any(b => b.Output == a.Output))
             {
                 return $"note {a.Note}: output {a.Output} must be 0-{outputs - 1} and used by one note only.";
+            }
+
+            if (body.Driver == BodyDriver.Gpio && ReservedPins.Contains(a.Output))
+            {
+                return $"note {a.Note}: GPIO {a.Output} is taken by the backplane (4 and 5 are its I2C, 6 the PCA9685's /OE).";
             }
 
             if (a.PulseMs < 1 || a.PulseMs > body.MaxOnMs)

@@ -1,6 +1,7 @@
 # Body record (the body's ID EEPROM)
 
-Status: **Draft**, pending owner review. Implements [ADR 0006](../design-docs/0006-swappable-instrument-brains.md) §3:
+Status: **Accepted** by the owner on 2026-11-12 (binary record, hold-to-write button, `/OE` on
+the brain). Implements [ADR 0006](../design-docs/0006-swappable-instrument-brains.md) §3:
 a body describes itself, so any brain plugged into it becomes that instrument.
 Code: firmware `Instruments/metrodom_brain/src/brain/Body.{h,cpp}`, Conductor
 `src/MetroDom.Core/Bodies/`, `metrodom body`. Plan: [0005](../exec-plans/active/0005-brain-for-m1.md).
@@ -97,7 +98,7 @@ metrodom body write "MetroDom brain" Instruments/metrodom_brain/bodies/m1-xyloph
 
 `body check` validates with the firmware's rules and shows the table (`--hex OUT` writes the
 bytes). `body write` checks the file, identifies the port (only MetroDom instruments get it),
-sends the record as Body Write SysEx ([profile exchange](midi-profile-exchange.md)), and waits
+asks you to hold the body's write button (in a terminal: hold it, then press Enter), sends the record as Body Write SysEx ([profile exchange](midi-profile-exchange.md)), and waits
 for the reply. The brain turns everything off, writes the EEPROM page by page, reads it back,
 answers, and restarts; the command waits up to 5 s for it to answer as the new body.
 
@@ -106,13 +107,16 @@ answers, and restarts; the command waits up to 5 s for it to answer as the new b
 | written | Stored and verified; restarting |
 | bad message | A chunk out of order, not hex, or too long |
 | refused: *reason* | The record failed the brain's checks (same reasons as above) |
-| didn't keep it | Write-protected, missing EEPROM, or the read-back differed. The old body keeps playing |
+| didn't keep it | The write button wasn't held, the EEPROM is missing, or the read-back differed. The old body keeps playing |
 | can't store | This brain has no body store |
 | no answer | Firmware older than 0.2 |
 
-**Write protection is a jumper.** USB MIDI has no login, so anything plugged into the brain could
-send a Body Write. The body's EEPROM `WP` pin is pulled high (protected) and a jumper to ground
-allows writes: fit it, write, remove it. See [body-backplane](../../hardware/modules/body-backplane/README.md).
+**Write protection is a button you hold.** USB MIDI has no login, so anything plugged into the
+brain could send a Body Write. The body's EEPROM `WP` pin is pulled high (protected), and a
+momentary button on the outside of the case pulls it to ground while it's held. Hold it for the
+second the write takes; let go and the body is protected again, so it can't be left writable by
+mistake. It's wired to the EEPROM, not read by the brain, so no firmware bug can bypass it. See
+[body-backplane](../../hardware/modules/body-backplane/README.md).
 `metrodom virtual` instruments accept Body Write too and then describe themselves as that body
 (they still play as their `-i` spec), so the command can be tried with no hardware.
 

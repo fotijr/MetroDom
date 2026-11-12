@@ -44,7 +44,7 @@ Conductor side, and one image fixture that both sides must agree on byte for byt
 ## Decisions log
 - 2026-11-12: Plan written when plan 0004 finished, because M0/M1 hardware is next and the
   firmware is what it would wait on.
-- 2026-11-12: B1-B3 shape (draft, needs owner review). The EEPROM holds a binary table, not the
+- 2026-11-12: B1-B3 shape. The EEPROM holds a binary table, not the
   profile JSON verbatim: the brain enforces the table and builds the profile from it, so they
   can't disagree, and the brain never parses JSON. One fixture (`m1-xylophone.hex`) pins the
   layout for both the C++ and the C# code. A bad record boots a silent brain, never the bench
@@ -54,9 +54,11 @@ Conductor side, and one image fixture that both sides must agree on byte for byt
   login. The brain restarts after a write so boot stays the one place a body is applied.
   Firmware version 0.2.0. `metrodom virtual` accepts Body Write so the command can be tried
   without hardware: checked on macOS, the virtual xylophone answered as the M1 body.
+- 2026-11-12: Owner decisions. (1) The binary body record is accepted. (2) The PCA9685's `/OE`
+  goes to brain GPIO 6 with a 10 kΩ pull-up: outputs are enabled only while the firmware holds it
+  low, so a reset or a pulled brain cuts every channel at once, and the firmware lets go of it
+  on an output fault, when USB is lost and after a body write. (3) Write protection is a
+  momentary button wired to the EEPROM's `WP` pin, held during the write: it can't be left on
+  like a jumper, sits outside the case, and needs no firmware. `body write` asks for it.
 
 ## Open questions
-- Wire the PCA9685's `/OE` to a brain pin with a pull-up, so a hung or resetting brain disables
-  every output at once instead of waiting for the watchdog? Costs one pin and one resistor.
-- Write-protect jumper fitted only while writing (as documented), or a write-enable that the
-  owner holds a button for?

@@ -39,7 +39,8 @@ guests only view, request and vote, only the owner hands out tokens.
 - **Song files are untrusted.** Enforce size, track and event-count limits when parsing SMF.
 - **Firmware updates are owner-only** and should be signed once there's a fleet (rental).
 - **Body writes are owner-only by hardware.** USB MIDI has no login, so a Body Write
-  ([body record](references/body-record.md)) needs the body's EEPROM write jumper fitted, and
+  ([body record](references/body-record.md)) needs someone holding the body's write button
+  (wired to the EEPROM's write-protect pin, not read by firmware), and
   the Control API has no route for it. Whatever a body says, the firmware's ceilings (pulse,
   duty) still hold.
 - **LAN-only by default.** Remote access goes through the optional cloud relay with its own
