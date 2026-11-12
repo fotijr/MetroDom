@@ -28,9 +28,10 @@ phase is fun on its own and doesn't wait for the next one.
 - [ ] Write down what was confusing in [lighting essentials](../../references/lighting-essentials.md)
 
 ### Phase V1: Accent LEDs on instruments (`led-accent`)
-- [ ] Brain firmware drives a short strip on the body: each note's LED flashes on Note On
-- [ ] Instrument profile declares its accent LEDs (count, note → LED index, color)
-- [ ] Printed diffuser (PLA is fine at home). Brightness capped in firmware
+- [x] Brain firmware drives a short strip on the body: each note's LED flashes on Note On
+      (host-tested; [body record](../../references/body-record.md#accent-leds), TD-29)
+- [x] Instrument profile declares its accent LEDs (count, note → LED range, color), from the body record
+- [ ] Printed diffuser (PLA is fine at home). Brightness capped in firmware (done: 25% ceiling)
 - [ ] Fits the xylophone body from exec plan 0002 without a second power supply design
 
 ### Phase V2: Conductor drives lights
@@ -60,6 +61,12 @@ phase is fun on its own and doesn't wait for the next one.
 - [ ] Fog/haze (needs venue rules) and moving heads
 
 ## Decisions log
+- 2026-11-12: V1 firmware built ahead of the hardware, like the body record. Proposed, not yet
+  accepted by the owner: the strip is part of the body record (version 2; a body without one stays
+  version 1, byte for byte), on brain GPIO 7 through a 74AHCT125, at most 64 LEDs and 25%
+  brightness (about 1 A worst case). Each note owns a range of LEDs and a color; ranges can't
+  overlap, so one note's flash ending never darkens another's. Only strikes flash (a refused note
+  stays dark), brightness scales with velocity, and every panic turns the LEDs off with the coils.
 - 2026-11-10: Visuals are three tiers (accent, stage, display) on the same MIDI timeline.
   Built light hardware speaks MIDI, bought lighting gets sACN/Art-Net/DMX. Reactive lights by
   default, live and authored cues override. Strobe capped by default, panic = safe look (ADR 0011).

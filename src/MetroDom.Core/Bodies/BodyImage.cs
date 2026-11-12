@@ -23,7 +23,11 @@ public enum BodyDriver
 /// <param name="MinPulseMs">Strike length at velocity 1; 0 means every strike is <paramref name="PulseMs"/>.</param>
 /// <param name="MinIntervalMs">Fastest repeat; at least the pulse.</param>
 /// <param name="LatencyMs">Measured Note On → sound; 0 if not measured yet.</param>
-public sealed record BodyActuator(int Note, int Output, int PulseMs, int MinPulseMs, int MinIntervalMs, int LatencyMs);
+public sealed record BodyActuator(int Note, int Output, int PulseMs, int MinPulseMs, int MinIntervalMs, int LatencyMs)
+{
+    /// <summary>The accent LEDs this note flashes, or <c>null</c> for none.</summary>
+    public AccentLed? Led { get; init; }
+}
 
 /// <summary>
 /// What a body is: the <a href="../../../docs/references/body-record.md">body record</a> its ID
@@ -45,6 +49,9 @@ public sealed record BodyDefinition(string Id, string Name, BodyDriver Driver, i
 
     public int WatchdogMs { get; init; } = 500;
 
+    /// <summary>The body's accent LED strip, or <c>null</c> for none (a version 1 record).</summary>
+    public AccentStrip? Accent { get; init; }
+
     /// <summary>Whether any note's strike gets shorter with lower velocity.</summary>
     public bool Velocity => Notes.Any(n => n.MinPulseMs > 0 && n.MinPulseMs < n.PulseMs);
 
@@ -60,12 +67,15 @@ public sealed record BodyDefinition(string Id, string Name, BodyDriver Driver, i
         Polyphony = Polyphony,
         Safety = new ActuatorSafety(TimeSpan.FromMilliseconds(MaxOnMs), MaxDutyPercent, TimeSpan.FromMilliseconds(DutyWindowMs)),
         SpeaksMetroDom = true,
+        Accent = Accent,
+        NoteLed = Notes.Where(n => n.Led is not null).ToDictionary(n => n.Note, n => n.Led!),
     };
 }
 
 /// <summary>
 /// Body records: JSON ↔ definition ↔ bytes. The byte layout, the limits and the error numbers are
-/// shared with the brain firmware; both test suites check <c>bodies/m1-xylophone.hex</c>.
+/// shared with the brain firmware; both test suites check <c>bodies/m1-xylophone.hex</c> (version 1)
+/// and <c>bodies/m1-xylophone-accent.hex</c> (version 2, with accent LEDs).
 /// </summary>
 public static class BodyImage
 {
@@ -81,12 +91,25 @@ public static class BodyImage
 
     /// <summary>Brain pins the backplane uses (Qwiic SDA, SCL, the PCA9685's /OE), so a GPIO body can't.</summary>
     public static readonly IReadOnlySet<int> ReservedPins = new HashSet<int> { 4, 5, 6 };
+
+    /// <summary>The accent strip's data pin, which a GPIO body with accent LEDs can't use.</summary>
+    public const int LedPin = 7;
+
+    /// <summary>Most accent LEDs on a body (firmware <c>kMaxLeds</c>).</summary>
+    public const int MaxLeds = 64;
+
+    /// <summary>Brightest any body's LEDs may be (firmware <c>kCeilingLedPercent</c>).</summary>
+    public const int CeilingLedPercent = 25;
     public const int MaxIdLength = 32;
     public const int MaxNameLength = 48;
     public const int HeaderBytes = 20;
     public const int ActuatorBytes = 10;
-    public const int MaxBytes = HeaderBytes + (MaxActuators * ActuatorBytes) + MaxIdLength + MaxNameLength + 2;
+    public const int LedHeaderBytes = 4;
+    public const int LedBytes = 5;
+    public const int MaxBytes = HeaderBytes + (MaxActuators * ActuatorBytes) + MaxIdLength + MaxNameLength
+        + LedHeaderBytes + (MaxActuators * LedBytes) + 2;
     private const byte Version = 1;
+    private const byte VersionLeds = 2;
     private static readonly JsonSerializerOptions Indented = new() { WriteIndented = true };
     private const byte Omni = 0xFF;
 
@@ -167,6 +190,11 @@ public static class BodyImage
                 return $"note {a.Note}: GPIO {a.Output} is taken by the backplane (4 and 5 are its I2C, 6 the PCA9685's /OE).";
             }
 
+            if (body.Driver == BodyDriver.Gpio && body.Accent is not null && a.Output == LedPin)
+            {
+                return $"note {a.Note}: GPIO {LedPin} drives the accent LEDs on a body that has them.";
+            }
+
             if (a.PulseMs < 1 || a.PulseMs > body.MaxOnMs)
             {
                 return $"note {a.Note}: \"pulseMs\" must be 1-{body.MaxOnMs} (safety.maxOnMs).";
@@ -195,7 +223,59 @@ public static class BodyImage
 
         return body.Name.Length is < 1 or > MaxNameLength || !body.Name.All(c => c is >= ' ' and < (char)0x7F)
             ? $"\"name\" must be 1-{MaxNameLength} printable ASCII characters."
-            : null;
+            : ValidateAccent(body);
+    }
+
+    /// <summary>The firmware's <c>validateLeds</c>.</summary>
+    private static string? ValidateAccent(BodyDefinition body)
+    {
+        if (body.Accent is not { } strip)
+        {
+            return body.Notes.FirstOrDefault(n => n.Led is not null) is { } lit
+                ? $"note {lit.Note}: \"led\" needs an \"accent\" strip."
+                : null;
+        }
+
+        if (strip.Leds is < 1 or > MaxLeds)
+        {
+            return $"\"accent.leds\" must be 1-{MaxLeds}.";
+        }
+
+        if (strip.MaxBrightnessPercent is < 1 or > CeilingLedPercent)
+        {
+            return $"\"accent.maxBrightnessPercent\" must be 1-{CeilingLedPercent} (the firmware's ceiling).";
+        }
+
+        if (strip.FlashMs is < 10 or > 1000)
+        {
+            return "\"accent.flashMs\" must be 10-1000.";
+        }
+
+        for (var i = 0; i < body.Notes.Count; i++)
+        {
+            if (body.Notes[i].Led is not { } led)
+            {
+                continue;
+            }
+
+            var note = body.Notes[i].Note;
+            if (led.First < 0 || led.Count is < 1 or > 255 || led.First + led.Count > strip.Leds)
+            {
+                return $"note {note}: its LEDs must be on the strip (0-{strip.Leds - 1}).";
+            }
+
+            if (led.Color is < 0 or > 0xFFFFFF)
+            {
+                return $"note {note}: \"color\" must be #000000-#FFFFFF.";
+            }
+
+            if (body.Notes.Take(i).FirstOrDefault(o => o.Led is { } other && led.First < other.First + other.Count && other.First < led.First + led.Count) is { } overlap)
+            {
+                return $"note {note}: its LEDs overlap note {overlap.Note}'s.";
+            }
+        }
+
+        return null;
     }
 
     /// <summary>The record a brain stores. Throws if <paramref name="body"/> isn't valid.</summary>
@@ -206,10 +286,11 @@ public static class BodyImage
             throw new ArgumentException(error, nameof(body));
         }
 
-        var total = HeaderBytes + (body.Notes.Count * ActuatorBytes) + body.Id.Length + body.Name.Length + 2;
+        var total = HeaderBytes + (body.Notes.Count * ActuatorBytes) + body.Id.Length + body.Name.Length + 2
+            + (body.Accent is null ? 0 : LedHeaderBytes + (body.Notes.Count * LedBytes));
         var bytes = new byte[total];
         "MDB"u8.CopyTo(bytes);
-        bytes[3] = Version;
+        bytes[3] = body.Accent is null ? Version : VersionLeds;
         Put16(bytes, 4, total);
         bytes[6] = (byte)body.Driver;
         bytes[7] = (byte)body.Address;
@@ -236,6 +317,28 @@ public static class BodyImage
 
         Encoding.ASCII.GetBytes(body.Id, bytes.AsSpan(at));
         Encoding.ASCII.GetBytes(body.Name, bytes.AsSpan(at + body.Id.Length));
+        if (body.Accent is { } strip)
+        {
+            at += body.Id.Length + body.Name.Length;
+            bytes[at] = (byte)strip.Leds;
+            bytes[at + 1] = (byte)strip.MaxBrightnessPercent;
+            Put16(bytes, at + 2, strip.FlashMs);
+            at += LedHeaderBytes;
+            foreach (var a in body.Notes)
+            {
+                if (a.Led is { } led)
+                {
+                    bytes[at] = (byte)led.First;
+                    bytes[at + 1] = (byte)led.Count;
+                    bytes[at + 2] = (byte)(led.Color >> 16);
+                    bytes[at + 3] = (byte)(led.Color >> 8);
+                    bytes[at + 4] = (byte)led.Color;
+                }
+
+                at += LedBytes;
+            }
+        }
+
         Put16(bytes, total - 2, Crc16(bytes.AsSpan(0, total - 2)));
         return bytes;
     }
@@ -250,9 +353,10 @@ public static class BodyImage
             return false;
         }
 
-        if (bytes[3] != Version)
+        var version = bytes[3];
+        if (version is not (Version or VersionLeds))
         {
-            error = $"body record version {bytes[3]}; this Conductor reads version {Version}.";
+            error = $"body record version {version}; this Conductor reads versions {Version} and {VersionLeds}.";
             return false;
         }
 
@@ -270,20 +374,45 @@ public static class BodyImage
         }
 
         int count = bytes[11], idLength = bytes[18], nameLength = bytes[19];
-        if (total != HeaderBytes + (count * ActuatorBytes) + idLength + nameLength + 2)
+        var plain = HeaderBytes + (count * ActuatorBytes) + idLength + nameLength + 2;
+        if (total != (version == Version ? plain : plain + LedHeaderBytes + (count * LedBytes)))
         {
             error = "bad length.";
             return false;
+        }
+
+        var text = HeaderBytes + (count * ActuatorBytes);
+        var ledsAt = text + idLength + nameLength;
+        AccentStrip? accent = null;
+        if (version == VersionLeds)
+        {
+            if (bytes[ledsAt] == 0)
+            {
+                error = "bad accent LEDs.";
+                return false;
+            }
+
+            accent = new AccentStrip(bytes[ledsAt], bytes[ledsAt + 1], Get16(bytes, ledsAt + 2));
         }
 
         var notes = new List<BodyActuator>(count);
         for (var i = 0; i < count; i++)
         {
             var at = HeaderBytes + (i * ActuatorBytes);
-            notes.Add(new BodyActuator(bytes[at], bytes[at + 1], Get16(bytes, at + 2), Get16(bytes, at + 4), Get16(bytes, at + 6), Get16(bytes, at + 8)));
+            var led = ledsAt + LedHeaderBytes + (i * LedBytes);
+            notes.Add(new BodyActuator(bytes[at], bytes[at + 1], Get16(bytes, at + 2), Get16(bytes, at + 4), Get16(bytes, at + 6), Get16(bytes, at + 8))
+            {
+                Led = accent is null || bytes[led + 1] == 0
+                    ? null
+                    : new AccentLed(bytes[led], bytes[led + 1], (bytes[led + 2] << 16) | (bytes[led + 3] << 8) | bytes[led + 4]),
+            });
+            if (accent is not null && bytes[led + 1] == 0 && (bytes[led] | bytes[led + 2] | bytes[led + 3] | bytes[led + 4]) != 0)
+            {
+                error = "bad accent LEDs.";
+                return false;
+            }
         }
 
-        var text = HeaderBytes + (count * ActuatorBytes);
         body = new BodyDefinition(
             Encoding.ASCII.GetString(bytes.Slice(text, idLength)),
             Encoding.ASCII.GetString(bytes.Slice(text + idLength, nameLength)),
@@ -297,6 +426,7 @@ public static class BodyImage
             MaxOnMs = Get16(bytes, 12),
             DutyWindowMs = Get16(bytes, 14),
             WatchdogMs = Get16(bytes, 16),
+            Accent = accent,
         };
         error = Validate(body);
         return error is null;
@@ -353,7 +483,20 @@ public static class BodyImage
                     return false;
                 }
 
-                notes.Add(new BodyActuator(note, output, pulse, item["minPulseMs"]?.GetValue<int>() ?? 0, interval, item["latencyMs"]?.GetValue<int>() ?? 0));
+                AccentLed? led = null;
+                if (item["led"] is { } ledNode)
+                {
+                    if (ledNode["first"]?.GetValue<int>() is not { } first || ledNode["count"]?.GetValue<int>() is not { } count
+                        || !AccentLed.TryParseColor(ledNode["color"]?.GetValue<string>(), out var color))
+                    {
+                        error = $"note {note}: \"led\" needs \"first\", \"count\" and a \"color\" like \"#FF8000\".";
+                        return false;
+                    }
+
+                    led = new AccentLed(first, count, color);
+                }
+
+                notes.Add(new BodyActuator(note, output, pulse, item["minPulseMs"]?.GetValue<int>() ?? 0, interval, item["latencyMs"]?.GetValue<int>() ?? 0) { Led = led });
             }
 
             var driverNode = obj["driver"];
@@ -383,6 +526,18 @@ public static class BodyImage
                 return false;
             }
 
+            AccentStrip? accent = null;
+            if (obj["accent"] is { } accentNode)
+            {
+                if (accentNode["leds"]?.GetValue<int>() is not { } leds || accentNode["maxBrightnessPercent"]?.GetValue<int>() is not { } brightness)
+                {
+                    error = "\"accent\" needs \"leds\" and \"maxBrightnessPercent\".";
+                    return false;
+                }
+
+                accent = new AccentStrip(leds, brightness, accentNode["flashMs"]?.GetValue<int>() ?? 80);
+            }
+
             int? channel = obj["midi"]?["channel"]?.GetValue<int>() is { } c ? c - 1 : null;
             body = new BodyDefinition(obj["id"]?.GetValue<string>() ?? "", obj["name"]?.GetValue<string>() ?? "", driver.Value, address, notes)
             {
@@ -392,6 +547,7 @@ public static class BodyImage
                 MaxDutyPercent = duty,
                 DutyWindowMs = safety["dutyWindowMs"]?.GetValue<int>() ?? 1000,
                 WatchdogMs = safety["watchdogMs"]?.GetValue<int>() ?? 500,
+                Accent = accent,
             };
             error = Validate(body);
             return error is null;
@@ -436,6 +592,16 @@ public static class BodyImage
             ["dutyWindowMs"] = body.DutyWindowMs,
             ["watchdogMs"] = body.WatchdogMs,
         };
+        if (body.Accent is { } strip)
+        {
+            obj["accent"] = new JsonObject
+            {
+                ["leds"] = strip.Leds,
+                ["maxBrightnessPercent"] = strip.MaxBrightnessPercent,
+                ["flashMs"] = strip.FlashMs,
+            };
+        }
+
         var notes = new JsonArray();
         foreach (var a in body.Notes)
         {
@@ -449,6 +615,11 @@ public static class BodyImage
             if (a.LatencyMs > 0)
             {
                 entry["latencyMs"] = a.LatencyMs;
+            }
+
+            if (a.Led is { } led)
+            {
+                entry["led"] = new JsonObject { ["first"] = led.First, ["count"] = led.Count, ["color"] = led.Hex };
             }
 
             notes.Add(entry);

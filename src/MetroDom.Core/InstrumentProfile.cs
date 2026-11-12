@@ -56,6 +56,12 @@ public sealed record InstrumentProfile(string Name, TimeSpan Latency)
     /// <summary>How long each note's actuator stays on per strike (<c>pulseMs</c>), where declared.</summary>
     public IReadOnlyDictionary<int, TimeSpan> NotePulse { get; init; } = new Dictionary<int, TimeSpan>();
 
+    /// <summary>The instrument's accent LED strip (<c>accent</c>), or <c>null</c> if it has none.</summary>
+    public AccentStrip? Accent { get; init; }
+
+    /// <summary>Which accent LEDs each note flashes (a note's <c>led</c>), where declared.</summary>
+    public IReadOnlyDictionary<int, AccentLed> NoteLed { get; init; } = new Dictionary<int, AccentLed>();
+
     /// <summary>
     /// The instrument answered the Identity Request as MetroDom, so MetroDom SysEx (the all-off)
     /// is safe to send it. Set by discovery, never read from the JSON: anyone can write a profile.

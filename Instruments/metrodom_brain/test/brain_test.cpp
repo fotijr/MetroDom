@@ -54,6 +54,27 @@ struct FakeStore : BodyStore {
   }
 };
 
+struct FakeLeds : Leds {
+  uint8_t rgb[kMaxLeds][3] = {};
+  uint8_t shown[kMaxLeds][3] = {};
+  int shows = 0;
+  void set(uint8_t index, uint8_t r, uint8_t g, uint8_t b) override {
+    rgb[index][0] = r;
+    rgb[index][1] = g;
+    rgb[index][2] = b;
+  }
+  void show() override {
+    std::memcpy(shown, rgb, sizeof shown);
+    ++shows;
+  }
+  bool dark() const {
+    for (auto& led : shown) {
+      if (led[0] || led[1] || led[2]) return false;
+    }
+    return true;
+  }
+};
+
 struct FakeReplies : Replies {
   std::vector<std::vector<uint8_t>> sent;
   void sysex(const uint8_t* data, size_t length) override { sent.emplace_back(data, data + length); }
@@ -80,9 +101,10 @@ struct Rig {
   FakePins pins;
   FakeReplies replies;
   FakeStore store;
+  FakeLeds leds;
   Brain brain;
-  explicit Rig(BrainConfig c = Three(), bool canWrite = true)
-      : config(c), brain(config, pins, replies, canWrite ? &store : nullptr) {
+  explicit Rig(BrainConfig c = Three(), bool canWrite = true, bool withLeds = false)
+      : config(c), brain(config, pins, replies, canWrite ? &store : nullptr, withLeds ? &leds : nullptr) {
     brain.begin(0);
   }
   void send(std::initializer_list<uint8_t> bytes, uint32_t now) {
@@ -486,6 +508,211 @@ void body_RoundTrips() {
   CHECK(parseBody(bytes.data(), bytes.size(), back) == BodyError::None);
 }
 
+// The M1 xylophone with accent LEDs (bodies/m1-xylophone-accent.json): three LEDs under each bar.
+Body M1Accent() {
+  Body b = M1();
+  std::strcpy(b.id, "xylophone-m1-accent");
+  b.ledCount = 9;
+  b.ledBrightnessPercent = 20;
+  b.flashMs = 80;
+  const uint8_t colors[3][3] = {{0xFF, 0x40, 0x00}, {0xFF, 0xC0, 0x00}, {0x00, 0x80, 0xFF}};
+  for (uint8_t i = 0; i < 3; ++i) {
+    b.actuators[i].ledFirst = static_cast<uint8_t>(i * 3);
+    b.actuators[i].ledCount = 3;
+    std::memcpy(b.actuators[i].color, colors[i], 3);
+  }
+  return b;
+}
+
+std::string ReadFixture(const char* path) {
+  std::ifstream file(path);
+  std::stringstream text;
+  text << file.rdbuf();
+  std::string committed = text.str();
+  while (!committed.empty() && (committed.back() == '\n' || committed.back() == '\r')) committed.pop_back();
+  return committed;
+}
+
+void accent_RoundTripsAsVersion2_AndMatchesTheFixture() {
+  auto bytes = Encode(M1Accent());
+  CHECK(bytes.size() == 20 + 3 * 10 + 19 + 18 + 4 + 3 * 5 + 2);
+  CHECK(bytes[3] == 2);
+  Body back;
+  CHECK(parseBody(bytes.data(), bytes.size(), back) == BodyError::None);
+  CHECK(back.ledCount == 9 && back.ledBrightnessPercent == 20 && back.flashMs == 80);
+  CHECK(back.actuators[2].ledFirst == 6 && back.actuators[2].ledCount == 3 && back.actuators[2].color[2] == 0xFF);
+  CHECK(Encode(back) == bytes);
+  CHECK(Encode(M1())[3] == 1);  // no LEDs: still version 1, byte for byte
+
+  std::string expected = Hex(bytes);
+  std::string committed = ReadFixture(BODY_ACCENT_FIXTURE);
+  if (committed != expected) std::printf("  expected m1-xylophone-accent.hex to be:\n%s\n", expected.c_str());
+  CHECK(committed == expected);
+
+  // The largest record still fits the brain's buffer.
+  Body big = M1Accent();
+  big.count = kMaxActuators;
+  big.ledCount = kMaxLeds;
+  big.polyphony = 1;
+  for (uint8_t i = 0; i < kMaxActuators; ++i) {
+    big.actuators[i] = {static_cast<uint8_t>(40 + i), i, 30, 60, 0, 12};
+    big.actuators[i].ledFirst = static_cast<uint8_t>(i * 4);
+    big.actuators[i].ledCount = 4;
+    big.actuators[i].color[0] = 1;
+  }
+  std::memset(big.id, 'a', kBodyMaxId);
+  std::memset(big.name, 'N', kBodyMaxName);
+  CHECK(Encode(big).size() == kBodyMaxBytes);
+}
+
+void accent_BodyRefusesWhatItCantShow() {
+  auto refused = [](void (*change)(Body&)) {
+    Body b = M1Accent();
+    change(b);
+    return validateBody(b) == BodyError::Leds;
+  };
+  CHECK(refused([](Body& b) { b.ledBrightnessPercent = kCeilingLedPercent + 1; }));
+  CHECK(refused([](Body& b) { b.ledBrightnessPercent = 0; }));
+  CHECK(refused([](Body& b) { b.flashMs = 9; }));
+  CHECK(refused([](Body& b) { b.flashMs = 1001; }));
+  CHECK(refused([](Body& b) { b.ledCount = kMaxLeds + 1; }));
+  CHECK(refused([](Body& b) { b.actuators[2].ledFirst = 7; }));              // runs off the strip
+  CHECK(refused([](Body& b) { b.actuators[1].ledFirst = 2; }));              // overlaps the first bar
+  CHECK(refused([](Body& b) { b.actuators[1].ledCount = 0; }));              // no LEDs but a color
+  CHECK(refused([](Body& b) { b.ledCount = 0; }));                           // notes with LEDs, no strip
+  CHECK(refused([](Body& b) { b.ledCount = 0; for (auto& a : b.actuators) a = Actuator{a.note, a.output, a.pulseMs, a.minIntervalMs, 0, a.minPulseMs}; b.flashMs = 80; }));
+  Body fine = M1Accent();
+  fine.actuators[1].ledCount = 0;
+  fine.actuators[1].ledFirst = 0;
+  std::memset(fine.actuators[1].color, 0, 3);
+  CHECK(validateBody(fine) == BodyError::None);  // a note may have no LEDs
+
+  // GPIO 7 is the strip's data pin, but only on a body with a strip.
+  Body gpio = M1();
+  gpio.driver = BodyDriver::Gpio;
+  gpio.address = 0;
+  gpio.actuators[0].output = 7;
+  CHECK(validateBody(gpio) == BodyError::None);
+  gpio.ledCount = 9;
+  gpio.ledBrightnessPercent = 20;
+  gpio.flashMs = 80;
+  CHECK(validateBody(gpio) == BodyError::Output);
+
+  // A version 2 record must have a strip.
+  auto bytes = Encode(M1Accent());
+  bytes[20 + 3 * 10 + 19 + 18] = 0;  // ledCount
+  uint16_t crc = crc16(bytes.data(), bytes.size() - 2);
+  bytes[bytes.size() - 2] = static_cast<uint8_t>(crc & 0xFF);
+  bytes[bytes.size() - 1] = static_cast<uint8_t>(crc >> 8);
+  Body back;
+  CHECK(parseBody(bytes.data(), bytes.size(), back) == BodyError::Leds);
+  CHECK(std::string(bodyErrorText(BodyError::Leds)) == "bad accent LEDs");
+}
+
+void accent_StrikeFlashesItsLeds_ForFlashMs() {
+  Body body = M1Accent();
+  Rig r(body.config(), true, true);
+  CHECK(r.leds.dark() && r.leds.shows == 1);  // begin() clears the strip
+  r.on(74, 1000, 0, 127);
+  // #FFC000 at 20%: 51, 38, 0.
+  for (int led = 3; led < 6; ++led) {
+    CHECK(r.leds.shown[led][0] == 51 && r.leds.shown[led][1] == 38 && r.leds.shown[led][2] == 0);
+  }
+  CHECK(r.leds.shown[0][0] == 0 && r.leds.shown[6][2] == 0);
+  CHECK(r.brain.isLit(1));
+  r.brain.tick(1079);
+  CHECK(r.brain.isLit(1) && r.leds.shown[3][0] == 51);
+  r.brain.tick(1080);
+  CHECK(!r.brain.isLit(1) && r.leds.dark());
+
+  // Softer is dimmer, but never dark.
+  r.on(72, 2000, 0, 1);
+  CHECK(r.leds.shown[0][0] == 1 && r.leds.shown[0][1] == 1 && r.leds.shown[0][2] == 0);
+}
+
+void accent_RefusedNotesDontFlash_AndPanicDarkens() {
+  Body body = M1Accent();
+  Rig r(body.config(), true, true);
+  r.on(72, 1000);
+  r.brain.tick(1035);
+  r.on(72, 1040);  // too soon: refused
+  CHECK(r.brain.lastRefusal() == Refusal::Interval);
+  r.brain.tick(1080);
+  CHECK(r.leds.dark());  // the refused repeat didn't relight it
+
+  r.on(74, 2000);
+  r.send({0xB5, 120, 0}, 2001);
+  CHECK(r.leds.dark() && !r.brain.isLit(1));
+  r.on(76, 3000);
+  r.brain.hostConnected(false);
+  CHECK(r.leds.dark());
+  r.brain.hostConnected(true);
+  r.on(76, 3100);
+  r.raw({0xF0, 0x7D, 0x4D, 0x44, 0x03, 0xF7}, 3101);
+  CHECK(r.leds.dark());
+}
+
+void accent_CeilingsAndRanges_AreClamped() {
+  Actuator wide[2] = {{60, 2, 30, 60, 0}, {64, 3, 30, 60, 0}};
+  wide[0].ledFirst = 0;
+  wide[0].ledCount = 200;  // past the strip: trimmed to it
+  wide[0].color[0] = 255;
+  wide[1].ledFirst = 10;   // starts past the strip: no LEDs
+  wide[1].ledCount = 2;
+  wide[1].color[0] = 255;
+  BrainConfig c;
+  c.id = "x";
+  c.name = "x";
+  c.actuators = wide;
+  c.actuatorCount = 2;
+  c.ledCount = 8;
+  c.ledBrightnessPercent = 100;  // over the ceiling
+  c.flashMs = 1;
+  Rig r(c, true, true);
+  CHECK(r.brain.ledCount() == 8 && r.brain.ledBrightnessPercent() == kCeilingLedPercent);
+  r.on(60, 1000, 0, 127);
+  CHECK(r.leds.shown[7][0] == 255 * kCeilingLedPercent / 100);
+  r.brain.tick(1009);
+  CHECK(!r.leds.dark());  // flash is at least 10 ms
+  r.brain.tick(1010);
+  CHECK(r.leds.dark());
+  int shows = r.leds.shows;
+  r.on(64, 2000);
+  CHECK(r.leds.shows == shows && !r.brain.isLit(1));
+  std::string json(r.brain.profileJson(), r.brain.profileLength());
+  CHECK(json.find("\"accent\":{\"leds\":8,\"maxBrightnessPercent\":25,\"flashMs\":10}") != std::string::npos);
+  CHECK(json.find("\"led\":{\"first\":0,\"count\":8,\"color\":\"#FF0000\"}") != std::string::npos);
+
+  // No strip wired: no LEDs, whatever the config says, and the profile doesn't claim any.
+  Rig none(c, true, false);
+  CHECK(none.brain.ledCount() == 0);
+  none.on(60, 1000);
+  std::string plain(none.brain.profileJson(), none.brain.profileLength());
+  CHECK(plain.find("accent") == std::string::npos && plain.find("\"led\"") == std::string::npos);
+}
+
+void accent_LargestProfileFits() {
+  Actuator many[kMaxActuators];
+  for (uint8_t i = 0; i < kMaxActuators; ++i) {
+    many[i] = {static_cast<uint8_t>(100 + i), i, 250, 10000, 1000, 249};
+    many[i].ledFirst = static_cast<uint8_t>(i * 4);
+    many[i].ledCount = 4;
+    many[i].color[0] = 0xAB;
+  }
+  BrainConfig c;
+  c.id = "abcdefghijklmnopqrstuvwxyz012345";
+  c.name = "NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN";
+  c.actuators = many;
+  c.actuatorCount = kMaxActuators;
+  c.channel = 15;
+  c.maxOnMs = 250;
+  c.ledCount = kMaxLeds;
+  c.ledBrightnessPercent = 25;
+  c.flashMs = 1000;
+  Rig r(c, true, true);
+  CHECK(r.brain.profileLength() > 0);
+}
+
 void body_MatchesTheCommittedFixture() {
   // The Conductor's encoder (BodyImage) must produce the same bytes from bodies/m1-xylophone.json.
   std::ifstream file(BODY_FIXTURE);
@@ -550,7 +777,7 @@ void body_ParseSaysWhatsWrong() {
   bad[0] = 'X';
   CHECK(parseBody(bad.data(), bad.size(), b) == BodyError::Magic);
   bad = good;
-  bad[3] = 2;
+  bad[3] = 3;
   CHECK(parseBody(bad.data(), bad.size(), b) == BodyError::Version);
   bad = good;
   bad[25] ^= 1;  // a pulse byte, so only the CRC catches it
@@ -859,7 +1086,9 @@ int main() {
       bodyWrite_SaysWhenItCant, pca9685_DrivesFullOnAndFullOff,
       pca9685_UnderTheBrain_FaultsWhenTheChipGoesAway, eeprom_WritesPages_AndVerifies,
       outputEnable_OnlyWhileTheBrainIsHealthy, pca9685_OutputEnable_DrivesOe_EvenWithTheChipGone,
-      bodyRead_SendsTheRecordItBootedFrom,
+      bodyRead_SendsTheRecordItBootedFrom, accent_RoundTripsAsVersion2_AndMatchesTheFixture,
+      accent_BodyRefusesWhatItCantShow, accent_StrikeFlashesItsLeds_ForFlashMs,
+      accent_RefusedNotesDontFlash_AndPanicDarkens, accent_CeilingsAndRanges_AreClamped, accent_LargestProfileFits,
   };
   for (auto test : tests) test();
   std::printf("brain: %d checks, %d failed\n", checks, failures);

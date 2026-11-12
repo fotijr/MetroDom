@@ -5,6 +5,7 @@ using Melanchall.DryWetMidi.Common;
 using Melanchall.DryWetMidi.MusicTheory;
 using MetroDom.Conductor.Cli;
 using MetroDom.Conductor.Midi;
+using MetroDom.Core;
 using MetroDom.Core.Bodies;
 using MetroDom.Core.Calibration;
 using MetroDom.Core.Discovery;
@@ -56,23 +57,47 @@ internal static class BodyFile
             $"[bold]{Markup.Escape(body.Name)}[/] [grey]({Markup.Escape(body.Id)})[/] · {driver} · {(body.Channel is { } c ? $"channel {c + 1}" : "any channel")} · polyphony {body.Polyphony}"));
         var table = new Table().Border(TableBorder.Rounded).BorderColor(Color.Grey)
             .AddColumn("Note").AddColumn("Output").AddColumn("Pulse").AddColumn("Repeat ≥").AddColumn("Latency");
+        if (body.Accent is not null)
+        {
+            table.AddColumn("LEDs");
+        }
+
         foreach (var a in body.Notes)
         {
             var pulse = a.MinPulseMs > 0 && a.MinPulseMs < a.PulseMs
                 ? string.Create(CultureInfo.InvariantCulture, $"{a.MinPulseMs}-{a.PulseMs} ms [grey](by velocity)[/]")
                 : string.Create(CultureInfo.InvariantCulture, $"{a.PulseMs} ms");
-            table.AddRow(
+            List<string> row =
+            [
                 string.Create(CultureInfo.InvariantCulture, $"{Note.Get((SevenBitNumber)(byte)a.Note)} [grey]({a.Note})[/]"),
                 a.Output.ToString(CultureInfo.InvariantCulture),
                 pulse,
                 string.Create(CultureInfo.InvariantCulture, $"{a.MinIntervalMs} ms"),
-                a.LatencyMs > 0 ? string.Create(CultureInfo.InvariantCulture, $"{a.LatencyMs} ms") : "[grey]not measured[/]");
+                a.LatencyMs > 0 ? string.Create(CultureInfo.InvariantCulture, $"{a.LatencyMs} ms") : "[grey]not measured[/]",
+            ];
+            if (body.Accent is not null)
+            {
+                row.Add(Leds(a.Led));
+            }
+
+            table.AddRow([.. row]);
         }
 
         AnsiConsole.Write(table);
         AnsiConsole.MarkupLine(string.Create(CultureInfo.InvariantCulture,
             $"[grey]Safety: pulse ≤ {body.MaxOnMs} ms, duty ≤ {body.MaxDutyPercent}% of {body.DutyWindowMs} ms, watchdog {body.WatchdogMs} ms. Record: {record.Length} bytes, {BodyWrite.Chunks(record).Count} SysEx messages.[/]"));
+        if (body.Accent is { } strip)
+        {
+            AnsiConsole.MarkupLine(string.Create(CultureInfo.InvariantCulture,
+                $"[grey]Accent LEDs: {strip.Leds} on GPIO {BodyImage.LedPin}, flash {strip.FlashMs} ms, at most {strip.MaxBrightnessPercent}% bright.[/]"));
+        }
     }
+
+    /// <summary>"0-2 ■ #FF4000", the swatch in the LED's own color.</summary>
+    internal static string Leds(AccentLed? led) => led is null
+        ? "[grey]none[/]"
+        : string.Create(CultureInfo.InvariantCulture,
+            $"{(led.Count == 1 ? $"{led.First}" : $"{led.First}-{led.First + led.Count - 1}")} [{led.Hex}]■[/] [grey]{led.Hex}[/]");
 }
 
 /// <summary>Shows the body record a brain booted from, and saves it as a body file.</summary>

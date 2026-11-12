@@ -1,7 +1,8 @@
 // MetroDom generic brain firmware (ADR 0006, exec plans 0001 Phase 1 and 0005).
 //
 // Board: Raspberry Pi Pico / Pico 2 with the arduino-pico core (Earle Philhower).
-// Tools > USB Stack: "Adafruit TinyUSB". Libraries: "MIDI Library" (FortySevenEffects).
+// Tools > USB Stack: "Adafruit TinyUSB". Libraries: "MIDI Library" (FortySevenEffects),
+// "Adafruit NeoPixel" (accent LEDs).
 // See README.md for wiring and flashing.
 //
 // This file only moves bytes and pins. Every decision (which body, pulse length, limits, panic,
@@ -13,6 +14,7 @@
 // - the EEPROM answers with a blank or bad record: no actuators at all, and the profile name says
 //   why, so `metrodom devices --identify` shows it and `metrodom body write` can fix it.
 
+#include <Adafruit_NeoPixel.h>
 #include <Adafruit_TinyUSB.h>
 #include <MIDI.h>
 #include <Wire.h>
@@ -57,6 +59,21 @@ class Pins : public metrodom::Outputs {
   }
 };
 
+// Accent LEDs: a WS2812B strip on GPIO 7 through a 3.3 V -> 5 V level shifter (led-accent).
+// show() takes about 30 us per LED (2 ms for 64), sent by the core's PIO driver.
+class Strip : public metrodom::Leds {
+ public:
+  void begin(uint8_t count) {
+    pixels_.updateLength(count);
+    pixels_.begin();
+  }
+  void set(uint8_t index, uint8_t r, uint8_t g, uint8_t b) override { pixels_.setPixelColor(index, r, g, b); }
+  void show() override { pixels_.show(); }
+
+ private:
+  Adafruit_NeoPixel pixels_{metrodom::kMaxLeds, metrodom::kPinLeds, NEO_GRB + NEO_KHZ800};
+};
+
 class UsbReplies : public metrodom::Replies {
  public:
   void sysex(const uint8_t* data, size_t length) override {
@@ -79,6 +96,7 @@ char silentName[64];
 Pins pins;
 metrodom::Pca9685* pca = nullptr;
 UsbReplies replies;
+Strip strip;
 metrodom::Brain* brain = nullptr;
 bool mounted = false;
 uint32_t restartAt = 0;
@@ -159,7 +177,8 @@ void setup() {
       digitalWrite(active.actuators[i].output, LOW);
     }
   }
-  static metrodom::Brain theBrain(active, outputs, replies, &eeprom);
+  if (active.ledCount > 0) strip.begin(active.ledCount);
+  static metrodom::Brain theBrain(active, outputs, replies, &eeprom, active.ledCount > 0 ? &strip : nullptr);
   brain = &theBrain;
   if (bodyRecordLength > 0) brain->setBodyRecord(bodyRecord, bodyRecordLength);
   brain->begin(millis());

@@ -13,6 +13,10 @@
 // - At most `polyphony` actuators on at once.
 // - Ceilings no body can raise: a pulse never over kCeilingOnMs, duty never over kCeilingDutyPercent.
 // - An output that won't turn off blocks every new strike until it does.
+//
+// Accent LEDs (ADR 0011 tier 1, docs/references/body-record.md): each strike flashes its note's
+// LEDs for flashMs, at no more than kCeilingLedPercent brightness. Refused notes don't flash, so
+// the lights show what the instrument actually played. Off with the actuators on every panic.
 #pragma once
 
 #include <stddef.h>
@@ -22,10 +26,12 @@ namespace metrodom {
 
 constexpr uint8_t kMaxActuators = 16;
 constexpr uint8_t kOmni = 0xFF;
-constexpr size_t kProfileBufferSize = 2048;
+constexpr size_t kProfileBufferSize = 3072;
 constexpr uint16_t kCeilingOnMs = 250;       // longest pulse any body may ask for
 constexpr uint8_t kCeilingDutyPercent = 50;  // highest duty any body may ask for
-constexpr size_t kMaxBodyBytes = 262;        // largest body record (Body.h)
+constexpr size_t kMaxBodyBytes = 346;        // largest body record (Body.h)
+constexpr uint8_t kMaxLeds = 64;             // accent LEDs on one body
+constexpr uint8_t kCeilingLedPercent = 25;   // brightest any body may ask for (current budget)
 
 // MetroDom's MIDI identity (docs/references/midi-identity.md).
 constexpr uint8_t kManufacturer = 0x7D;
@@ -40,6 +46,9 @@ struct Actuator {
   uint16_t minIntervalMs;  // fastest repeat; never less than the pulse
   uint16_t latencyMs;      // measured Note On -> sound, 0 if not measured yet
   uint16_t minPulseMs = 0; // strike length at velocity 1; 0 = every strike is pulseMs
+  uint8_t ledFirst = 0;    // accent LEDs this note flashes: ledCount from ledFirst; 0 = none
+  uint8_t ledCount = 0;
+  uint8_t color[3] = {};   // R, G, B at full brightness (scaled by brightness and velocity)
 };
 
 // What one body is: read from the body's EEPROM (Body.h), or compiled in (config.h) on a bench
@@ -55,6 +64,9 @@ struct BrainConfig {
   uint8_t maxDutyPercent = 30;    // on-time budget per actuator
   uint16_t dutyWindowMs = 1000;   // burst size: maxDutyPercent of this window
   uint16_t watchdogMs = 500;      // hardware watchdog: a hung loop restarts the brain (all off at boot)
+  uint8_t ledCount = 0;           // accent LEDs on the strip, 0-kMaxLeds; 0 = none
+  uint8_t ledBrightnessPercent = 0;  // at most kCeilingLedPercent
+  uint16_t flashMs = 80;          // how long a strike's LEDs stay lit
   uint16_t model = 1;             // identity model: 1 = generic brain
   uint8_t version[4] = {0, 1, 0, 0};  // stays 0.1 until a brain runs on real hardware
 };
@@ -70,6 +82,16 @@ class Outputs {
 
  protected:
   ~Outputs() = default;
+};
+
+// The accent LED strip (WS2812B). set() only changes a buffer; show() sends it.
+class Leds {
+ public:
+  virtual void set(uint8_t index, uint8_t r, uint8_t g, uint8_t b) = 0;
+  virtual void show() = 0;
+
+ protected:
+  ~Leds() = default;
 };
 
 // Where SysEx replies go (USB-MIDI out). data includes F0 ... F7.
@@ -108,7 +130,9 @@ struct Counters {
 class Brain {
  public:
   // store: where Body Write puts a new body; nullptr if this brain can't write one.
-  Brain(const BrainConfig& config, Outputs& outputs, Replies& replies, BodyStore* store = nullptr);
+  // leds: the accent strip; nullptr if the body has none wired.
+  Brain(const BrainConfig& config, Outputs& outputs, Replies& replies, BodyStore* store = nullptr,
+        Leds* leds = nullptr);
 
   // Everything off. Call first in setup(), before USB starts.
   void begin(uint32_t nowMs);
@@ -133,6 +157,7 @@ class Brain {
   }
 
   bool isOn(uint8_t index) const { return index < count_ && state_[index].on; }
+  bool isLit(uint8_t index) const { return index < count_ && state_[index].lit; }
   bool faulted() const;
   bool outputsEnabled() const { return enabled_; }
   // A new body was written: the sketch restarts the brain so it boots as that body.
@@ -149,12 +174,16 @@ class Brain {
   uint16_t pulseMs(uint8_t index) const { return actuators_[index].pulseMs; }
   uint16_t minIntervalMs(uint8_t index) const { return actuators_[index].minIntervalMs; }
   uint16_t pulseFor(uint8_t index, uint8_t velocity) const;
+  uint8_t ledCount() const { return ledCount_; }
+  uint8_t ledBrightnessPercent() const { return ledPercent_; }
 
  private:
   struct State {
     bool on = false;
     bool struck = false;     // has struck since begin()
     bool stuck = false;      // the last write to this output failed: retry off every tick
+    bool lit = false;        // its accent LEDs are flashing
+    uint32_t litAt = 0;
     uint16_t pulse = 0;      // this strike's length
     uint32_t onAt = 0;
     uint32_t lastStrike = 0;
@@ -170,6 +199,9 @@ class Brain {
   void sendIdentity();
   void sendProfile();
   void off(uint8_t index);
+  void flash(uint8_t index, uint8_t velocity, uint32_t nowMs);
+  void paint(uint8_t index, uint8_t r, uint8_t g, uint8_t b);
+  void ledsOff();
   void updateEnable();
   void cool(State& s, uint32_t nowMs) const;
   void buildProfile();
@@ -178,6 +210,10 @@ class Brain {
   Outputs& outputs_;
   Replies& replies_;
   BodyStore* store_;
+  Leds* leds_;
+  uint8_t ledCount_ = 0;
+  uint8_t ledPercent_ = 0;
+  uint16_t flashMs_ = 80;
   Actuator actuators_[kMaxActuators] = {};
   State state_[kMaxActuators] = {};
   uint8_t count_ = 0;

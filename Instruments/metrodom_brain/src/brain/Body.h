@@ -5,7 +5,7 @@
 // (src/MetroDom.Core/Bodies/BodyImage.cs) must produce exactly what this parser accepts:
 // both test suites check the bench fixture (bench-body.hex).
 //
-// Layout, little-endian, version 1 (docs/references/body-record.md):
+// Layout, little-endian, version 1, or 2 with accent LEDs (docs/references/body-record.md):
 //   0  3  "MDB"            magic
 //   3  1  1                format version
 //   4  2  length           whole record including the CRC
@@ -24,6 +24,12 @@
 //                          (a GPIO output can't be 4, 5 or 6: the backplane's I2C and /OE)
 //   .  idLength            id: a-z, 0-9, '-'
 //   .  nameLength          name: printable ASCII
+// Version 2 only (a body with accent LEDs; one without is always written as version 1):
+//   .  1  ledCount         1-kMaxLeds, on GPIO kPinLeds
+//   .  1  brightness       1-kCeilingLedPercent
+//   .  2  flashMs          10-1000
+//   .  count x 5           per actuator, in order: ledFirst, ledCount (0 = none), R, G, B
+//                          (each range on the strip, no two overlapping)
 //  -2  2  CRC-16/CCITT-FALSE of everything before it
 #pragma once
 
@@ -38,12 +44,17 @@ constexpr size_t kBodyHeaderBytes = 20;
 constexpr size_t kBodyActuatorBytes = 10;
 constexpr size_t kBodyMaxId = 32;
 constexpr size_t kBodyMaxName = 48;
-constexpr size_t kBodyMaxBytes = kBodyHeaderBytes + kMaxActuators * kBodyActuatorBytes + kBodyMaxId + kBodyMaxName + 2;
+constexpr size_t kBodyLedHeaderBytes = 4;
+constexpr size_t kBodyLedBytes = 5;
+constexpr size_t kBodyMaxBytes = kBodyHeaderBytes + kMaxActuators * kBodyActuatorBytes + kBodyMaxId + kBodyMaxName +
+                                 kBodyLedHeaderBytes + kMaxActuators * kBodyLedBytes + 2;
 static_assert(kBodyMaxBytes == kMaxBodyBytes, "Brain.h's buffer must hold the largest record");
 constexpr uint8_t kBodyVersion = 1;
+constexpr uint8_t kBodyVersionLeds = 2;
 
 // Brain pins the backplane uses, so a GPIO body can't (hardware/modules/body-backplane).
-constexpr uint8_t kPinSda = 4, kPinScl = 5, kPinOutputEnable = 6;
+// The accent strip's data pin is reserved only on a body that has accent LEDs.
+constexpr uint8_t kPinSda = 4, kPinScl = 5, kPinOutputEnable = 6, kPinLeds = 7;
 
 enum class BodyDriver : uint8_t { Gpio = 0, Pca9685 = 1 };
 
@@ -63,6 +74,7 @@ enum class BodyError : uint8_t {
   Pulse = 11,     // pulse outside 1-maxOnMs, or minPulse over the pulse
   Interval = 12,  // minInterval under the pulse or over 10 s, latency over 1 s
   Text = 13,      // id or name empty, too long, or with characters it can't have
+  Leds = 14,      // accent LEDs: count, brightness or flash out of range, a range off the strip or overlapping
 };
 
 const char* bodyErrorText(BodyError error);
@@ -76,6 +88,9 @@ struct Body {
   uint16_t maxOnMs = 45;
   uint16_t dutyWindowMs = 1000;
   uint16_t watchdogMs = 500;
+  uint8_t ledCount = 0;            // 0 = no accent LEDs (a version 1 record)
+  uint8_t ledBrightnessPercent = 0;
+  uint16_t flashMs = 0;
   uint8_t count = 0;
   Actuator actuators[kMaxActuators] = {};
   char id[kBodyMaxId + 1] = {};

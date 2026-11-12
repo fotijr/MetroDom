@@ -81,8 +81,8 @@ int hexDigit(uint8_t c) {
 
 }  // namespace
 
-Brain::Brain(const BrainConfig& config, Outputs& outputs, Replies& replies, BodyStore* store)
-    : config_(config), outputs_(outputs), replies_(replies), store_(store) {
+Brain::Brain(const BrainConfig& config, Outputs& outputs, Replies& replies, BodyStore* store, Leds* leds)
+    : config_(config), outputs_(outputs), replies_(replies), store_(store), leds_(leds) {
   count_ = config.actuators == nullptr ? 0 : config.actuatorCount > kMaxActuators ? kMaxActuators : config.actuatorCount;
   polyphony_ = config.polyphony == 0 ? 1 : config.polyphony;
   // Ceilings: whatever the body says, no pulse over kCeilingOnMs and no duty over kCeilingDutyPercent.
@@ -90,9 +90,20 @@ Brain::Brain(const BrainConfig& config, Outputs& outputs, Replies& replies, Body
   maxDutyPercent_ = config.maxDutyPercent == 0 ? 1
                     : config.maxDutyPercent > kCeilingDutyPercent ? kCeilingDutyPercent
                                                                  : config.maxDutyPercent;
+  // Accent LEDs only with a strip to drive, never brighter than the ceiling.
+  ledCount_ = leds == nullptr ? 0 : config.ledCount > kMaxLeds ? kMaxLeds : config.ledCount;
+  ledPercent_ = config.ledBrightnessPercent > kCeilingLedPercent ? kCeilingLedPercent : config.ledBrightnessPercent;
+  flashMs_ = clamp16(config.flashMs, 10, 1000);
   for (uint8_t i = 0; i < count_; ++i) {
     Actuator a = config.actuators[i];
     a.note &= 0x7F;
+    // Its LEDs stay on the strip; with no strip or no brightness, it has none.
+    if (ledCount_ == 0 || ledPercent_ == 0 || a.ledFirst >= ledCount_) {
+      a.ledCount = 0;
+      a.ledFirst = 0;
+    } else if (a.ledCount > ledCount_ - a.ledFirst) {
+      a.ledCount = static_cast<uint8_t>(ledCount_ - a.ledFirst);
+    }
     // The pulse never exceeds maxOnMs; a repeat never comes before the pulse has ended.
     a.pulseMs = clamp16(a.pulseMs, 1, maxOnMs_);
     if (a.minPulseMs >= a.pulseMs) a.minPulseMs = 0;  // no range: a fixed pulse
@@ -111,6 +122,7 @@ void Brain::begin(uint32_t nowMs) {
     state_[i].heatAt = nowMs;
     off(i);
   }
+  ledsOff();
   lastRefusal_ = Refusal::None;
   updateEnable();
 }
@@ -209,6 +221,34 @@ void Brain::noteOn(uint8_t channel, uint8_t note, uint8_t velocity, uint32_t now
   s.lastStrike = nowMs;
   lastRefusal_ = Refusal::None;
   counters_.struck++;
+  flash(index, velocity, nowMs);
+}
+
+// Lights a strike's LEDs: its color, scaled by the body's brightness and the velocity.
+void Brain::flash(uint8_t index, uint8_t velocity, uint32_t nowMs) {
+  const Actuator& a = actuators_[index];
+  if (a.ledCount == 0) return;
+  uint8_t rgb[3];
+  for (int c = 0; c < 3; ++c) {
+    uint32_t v = static_cast<uint32_t>(a.color[c]) * ledPercent_ * velocity / (100u * 127u);
+    rgb[c] = static_cast<uint8_t>(v == 0 && a.color[c] > 0 ? 1 : v);  // dim, never dark
+  }
+  paint(index, rgb[0], rgb[1], rgb[2]);
+  leds_->show();
+  state_[index].lit = true;
+  state_[index].litAt = nowMs;
+}
+
+void Brain::paint(uint8_t index, uint8_t r, uint8_t g, uint8_t b) {
+  const Actuator& a = actuators_[index];
+  for (uint8_t led = 0; led < a.ledCount; ++led) leds_->set(static_cast<uint8_t>(a.ledFirst + led), r, g, b);
+}
+
+void Brain::ledsOff() {
+  for (uint8_t i = 0; i < count_; ++i) state_[i].lit = false;
+  if (ledCount_ == 0) return;
+  for (uint8_t led = 0; led < ledCount_; ++led) leds_->set(led, 0, 0, 0);
+  leds_->show();
 }
 
 void Brain::cool(State& s, uint32_t nowMs) const {
@@ -221,6 +261,15 @@ void Brain::tick(uint32_t nowMs) {
   for (uint8_t i = 0; i < count_; ++i) {
     if ((state_[i].on && nowMs - state_[i].onAt >= state_[i].pulse) || state_[i].stuck) off(i);
   }
+  bool dark = false;
+  for (uint8_t i = 0; i < count_; ++i) {
+    if (state_[i].lit && nowMs - state_[i].litAt >= flashMs_) {
+      paint(i, 0, 0, 0);
+      state_[i].lit = false;
+      dark = true;
+    }
+  }
+  if (dark) leds_->show();
   updateEnable();
 }
 
@@ -253,6 +302,7 @@ void Brain::hostConnected(bool connected) {
 
 void Brain::allOff() {
   for (uint8_t i = 0; i < count_; ++i) off(i);
+  ledsOff();
 }
 
 void Brain::off(uint8_t index) {
@@ -423,11 +473,19 @@ void Brain::buildProfile() {
     const Actuator& a = actuators_[i];
     w.add("%s{\"note\":%u", i == 0 ? "" : ",", a.note);
     if (a.latencyMs > 0) w.add(",\"latencyMs\":%u", a.latencyMs);
+    if (a.ledCount > 0) {
+      w.add(",\"led\":{\"first\":%u,\"count\":%u,\"color\":\"#%02X%02X%02X\"}", a.ledFirst, a.ledCount,
+            a.color[0], a.color[1], a.color[2]);
+    }
     w.add(",\"minIntervalMs\":%u", a.minIntervalMs);
     if (a.minPulseMs > 0) w.add(",\"minPulseMs\":%u", a.minPulseMs);
     w.add(",\"pulseMs\":%u}", a.pulseMs);
   }
-  w.add("],\"polyphony\":%u,\"velocity\":{\"supported\":%s}", polyphony_, velocity_ ? "true" : "false");
+  w.add("]");
+  if (ledCount_ > 0) {
+    w.add(",\"accent\":{\"leds\":%u,\"maxBrightnessPercent\":%u,\"flashMs\":%u}", ledCount_, ledPercent_, flashMs_);
+  }
+  w.add(",\"polyphony\":%u,\"velocity\":{\"supported\":%s}", polyphony_, velocity_ ? "true" : "false");
   w.add(",\"safety\":{\"maxOnMs\":%u,\"maxDutyPercent\":%u,\"dutyWindowMs\":%u,\"watchdogMs\":%u}}",
         maxOnMs_, maxDutyPercent_, config_.dutyWindowMs, config_.watchdogMs);
   profileLength_ = w.overflow ? 0 : w.length;

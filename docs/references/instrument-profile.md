@@ -47,6 +47,10 @@ Fields:
   keeps its own, as the firmware enforces it (a snare can roll faster than the kick next to it).
   The top-level value covers notes without their own; default: the slowest note's.
 - No `notes` array means the instrument plays any note (software instruments).
+- `accent` (optional): the instrument's accent LED strip, `leds`, `maxBrightnessPercent` and
+  `flashMs`; and per note, `led` with `first`, `count` and `color` (`"#RRGGBB"`). The instrument
+  flashes them itself; the Conductor shows them (`devices --identify`). See
+  [body record](body-record.md#accent-leds).
 - `midi.channel` (1-16) is where the [auto band](auto-band.md) puts the instrument when it isn't
   assigned, and the channel `-i NAME@profile.json` plays on.
 - The Conductor reads profile files from the command line where a latency would go

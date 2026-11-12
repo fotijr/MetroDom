@@ -27,6 +27,11 @@ An EEPROM with a bad record: a silent brain whose profile name says why.
 | Body Write `F0 7D 4D 44 04 …` | Checks the record, turns everything off, writes the EEPROM, reads it back, answers `05`, restarts as that body |
 | Body Read `F0 7D 4D 44 06 F7` | The record it booted from, as `07` chunks; "none" for the bench body or a silent brain |
 
+A body with accent LEDs ([led-accent](../../hardware/modules/led-accent/README.md), WS2812B on
+GPIO 7) gets each strike's LEDs flashed for `flashMs`, in the note's color scaled by velocity and
+the body's brightness (never over 25%). Refused notes don't flash; every LED goes off with the
+actuators. See [body record](../../docs/references/body-record.md#accent-leds).
+
 A note is **refused** (never queued) when:
 - its actuator is still striking, or struck less than `minIntervalMs` ago;
 - the actuator's thermal budget is spent: a leaky bucket holding `maxDutyPercent` of a 1 s window
@@ -54,10 +59,10 @@ Conductor's reader.
 | File | What |
 | --- | --- |
 | `config.h` | The bench body, used when no EEPROM answers: notes, GPIO pins, pulse, limits |
-| `bodies/` | Body files (`metrodom.body/0`) for real instruments, and the M1 fixture both test suites check |
+| `bodies/` | Body files (`metrodom.body/0`) for real instruments, and the M1 fixtures (with and without accent LEDs) both test suites check |
 | `metrodom_brain.ino` | Arduino layer only: TinyUSB MIDI, Wire, GPIO, watchdog, USB mount state, choosing the body |
 | `src/brain/Brain.{h,cpp}` | Every decision, platform-free |
-| `src/brain/Body.{h,cpp}` | The body record: parse, check, encode, CRC |
+| `src/brain/Body.{h,cpp}` | The body record (versions 1 and 2): parse, check, encode, CRC |
 | `src/brain/Devices.{h,cpp}` | PCA9685 and 24LC32 over an I²C interface (Wire on the Pico, a fake in tests) |
 | `test/` | Host tests (`make -C test`, any C++17 compiler; runs in CI) |
 
@@ -79,7 +84,7 @@ Current-limit the bench supply. Never power the coil from the Pico.
 
 1. Arduino IDE: add the board URL
    `https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json`,
-   install **Raspberry Pi Pico/RP2040/RP2350**, and the **MIDI Library** (FortySevenEffects).
+   install **Raspberry Pi Pico/RP2040/RP2350**, the **MIDI Library** (FortySevenEffects) and **Adafruit NeoPixel** (accent LEDs).
 2. Tools > Board: your Pico. Tools > USB Stack: **Adafruit TinyUSB**.
 3. Open `metrodom_brain.ino`, Upload (hold BOOTSEL while plugging in the first time).
 4. Check: `metrodom devices --identify` lists "Bench solenoid" as a MetroDom brain with its
@@ -99,6 +104,6 @@ The brain restarts as "MetroDom xylophone".
 
 ## Not yet (TD-29)
 
-Never flashed or run against a real EEPROM or PCA9685. No MCP23017 driver or servo outputs.
+Never flashed or run against a real EEPROM, PCA9685 or LED strip. No MCP23017 driver or servo outputs.
 No silence timeout (USB unmount
 is the only host-loss signal).

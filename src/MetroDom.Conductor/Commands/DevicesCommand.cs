@@ -183,7 +183,10 @@ internal sealed class DevicesCommand : Command<DevicesCommand.Settings>
         var interval = slowest <= TimeSpan.Zero ? ""
             : quickest == slowest ? string.Create(CultureInfo.InvariantCulture, $" · repeat ≥ {slowest.TotalMilliseconds:0.#} ms")
             : string.Create(CultureInfo.InvariantCulture, $" · repeat ≥ {quickest.TotalMilliseconds:0.#}-{slowest.TotalMilliseconds:0.#} ms");
-        return $"{notes} · {latency}{interval}";
+        var accent = profile.Accent is { } strip
+            ? string.Create(CultureInfo.InvariantCulture, $" · {strip.Leds} accent LEDs")
+            : "";
+        return $"{notes} · {latency}{interval}{accent}";
     }
 
     private static Table Ports(IReadOnlyList<string> names)

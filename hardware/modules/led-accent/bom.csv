@@ -1,0 +1,6 @@
+part_id,qty,ref,notes
+ws2812b-strip-60,1,STRIP,"cut to the body's LED count, up to 64"
+level-shifter-74ahct125,1,U1,
+resistor-330r,1,R1,data series
+cap-1000uf-10v,1,C1,across the strip's 5 V input
+conn-jst-sm-3p,1,J1,

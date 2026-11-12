@@ -7,8 +7,8 @@ namespace MetroDom.Core;
 /// <summary>
 /// Reads and writes the <a href="../../docs/references/instrument-profile.md">instrument profile</a>
 /// JSON (<c>metrodom.instrument-profile/0</c>). Only the fields the Conductor uses today become
-/// <see cref="InstrumentProfile"/> properties (of <c>midi</c>, only the channel); the rest (identity, velocity,
-/// watchdog) are accepted and ignored until something needs them.
+/// <see cref="InstrumentProfile"/> properties (of <c>midi</c>, only the channel; accent LEDs are carried
+/// so they can be shown); the rest (identity, velocity, watchdog) are accepted and ignored until something needs them.
 /// </summary>
 public static class InstrumentProfileJson
 {
@@ -73,6 +73,7 @@ public static class InstrumentProfileJson
         var latencies = new Dictionary<int, TimeSpan>();
         var pulses = new Dictionary<int, TimeSpan>();
         var intervals = new Dictionary<int, TimeSpan>();
+        var leds = new Dictionary<int, AccentLed>();
         HashSet<int>? notes = null;
         if (obj["notes"] is JsonArray array)
         {
@@ -112,7 +113,35 @@ public static class InstrumentProfileJson
                 {
                     intervals[note.Value] = interval;
                 }
+
+                if (item["led"] is JsonObject ledNode)
+                {
+                    var first = ledNode["first"]?.GetValue<int>() ?? 0;
+                    var count = ledNode["count"]?.GetValue<int>() ?? 1;
+                    if (first < 0 || count < 1 || !AccentLed.TryParseColor(ledNode["color"]?.GetValue<string>(), out var color))
+                    {
+                        error = $"note {note}: \"led\" needs \"first\" 0 or more, \"count\" 1 or more and a \"color\" like \"#FF8000\".";
+                        return false;
+                    }
+
+                    leds[note.Value] = new AccentLed(first, count, color);
+                }
             }
+        }
+
+        AccentStrip? accent = null;
+        if (obj["accent"] is JsonObject accentNode)
+        {
+            var count = accentNode["leds"]?.GetValue<int>() ?? 0;
+            var brightness = accentNode["maxBrightnessPercent"]?.GetValue<int>() ?? 0;
+            var flash = accentNode["flashMs"]?.GetValue<int>() ?? 0;
+            if (count < 1 || brightness is < 0 or > 100 || flash < 0)
+            {
+                error = "\"accent\" needs \"leds\" 1 or more, \"maxBrightnessPercent\" 0-100 and \"flashMs\" 0 or more.";
+                return false;
+            }
+
+            accent = new AccentStrip(count, brightness, flash);
         }
 
         // Notes without their own latency fall back to the top-level one, else the slowest note.
@@ -184,6 +213,8 @@ public static class InstrumentProfileJson
             NoteLatency = latencies,
             MinInterval = minInterval,
             NoteInterval = intervals,
+            Accent = accent,
+            NoteLed = leds,
         };
         error = null;
         return true;
@@ -234,10 +265,25 @@ public static class InstrumentProfileJson
                     entry["minIntervalMs"] = interval.TotalMilliseconds;
                 }
 
+                if (profile.NoteLed.TryGetValue(note, out var led))
+                {
+                    entry["led"] = new JsonObject { ["first"] = led.First, ["count"] = led.Count, ["color"] = led.Hex };
+                }
+
                 notes.Add(entry);
             }
 
             obj["notes"] = notes;
+        }
+
+        if (profile.Accent is { } strip)
+        {
+            obj["accent"] = new JsonObject
+            {
+                ["leds"] = strip.Leds,
+                ["maxBrightnessPercent"] = strip.MaxBrightnessPercent,
+                ["flashMs"] = strip.FlashMs,
+            };
         }
 
         if (profile.Polyphony is { } polyphony)

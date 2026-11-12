@@ -23,6 +23,7 @@ only together with it.
 | PCA9685 `/OE` | Brain GPIO 6, 10 kΩ to 3.3 V | Outputs enabled only while the firmware holds it low. A resetting or unplugged brain leaves it pulled high: every channel off at once. The firmware also lets go of it on a fault, when USB is lost and after a body write |
 | Driver inputs (MOSFET gates) | 10 kΩ pull-down each | Off while the PCA9685 is unpowered or the brain is out of its socket |
 | I²C pull-ups | 4.7 kΩ to 3.3 V, once on the bus | |
+| Accent strip data (optional) | Brain GPIO 7 to a [led-accent](../led-accent/README.md) | Only on a body whose record has `accent` |
 
 No EEPROM answering at `0x50` makes the brain use its compiled-in bench body (GPIO 15). A body
 with an EEPROM that holds no valid record gets a silent brain, never the bench body.

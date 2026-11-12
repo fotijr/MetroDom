@@ -32,6 +32,82 @@ public class BodyImageTests
         Assert.Equal(hex, BodyImage.ToHex(BodyImage.Encode(M1())));
     }
 
+    private static BodyDefinition M1Accent()
+    {
+        Assert.True(BodyImage.TryParseJson(File.ReadAllText(BodyFile("m1-xylophone-accent.json")), out var body, out var error), error);
+        return body;
+    }
+
+    [Fact]
+    public void AccentBody_EncodesAsVersion2_ToTheBytesTheFirmwareTestCommitted()
+    {
+        // brain_test.cpp accent_RoundTripsAsVersion2_AndMatchesTheFixture checks the same file.
+        var hex = File.ReadAllText(BodyFile("m1-xylophone-accent.hex")).Trim();
+        var record = BodyImage.Encode(M1Accent());
+
+        Assert.Equal(hex, BodyImage.ToHex(record));
+        Assert.Equal(2, record[3]);
+        Assert.Equal(1, BodyImage.Encode(M1())[3]);
+        Assert.True(BodyImage.TryDecode(record, out var back, out var error), error);
+        Assert.Equal(new AccentStrip(9, 20, 80), back.Accent);
+        Assert.Equal(new AccentLed(6, 3, 0x0080FF), back.Notes[2].Led);
+        Assert.Equal(record, BodyImage.Encode(back));
+        Assert.Equal(BodyImage.ToJson(M1Accent()), BodyImage.ToJson(back));
+    }
+
+    [Theory]
+    [InlineData("\"maxBrightnessPercent\": 20", "\"maxBrightnessPercent\": 26", "\"accent.maxBrightnessPercent\" must be 1-25 (the firmware's ceiling).")]
+    [InlineData("\"flashMs\": 80", "\"flashMs\": 5", "\"accent.flashMs\" must be 10-1000.")]
+    [InlineData("\"leds\": 9", "\"leds\": 65", "\"accent.leds\" must be 1-64.")]
+    [InlineData("\"first\": 6", "\"first\": 7", "note 76: its LEDs must be on the strip (0-8).")]
+    [InlineData("\"first\": 3", "\"first\": 2", "note 74: its LEDs overlap note 72's.")]
+    [InlineData("\"color\": \"#FF4000\"", "\"color\": \"orange\"", "note 72: \"led\" needs \"first\", \"count\" and a \"color\" like \"#FF8000\".")]
+    public void AccentJson_RefusesWhatTheFirmwareWouldRefuse(string find, string replace, string expected)
+    {
+        var json = File.ReadAllText(BodyFile("m1-xylophone-accent.json")).Replace(find, replace, StringComparison.Ordinal);
+
+        Assert.False(BodyImage.TryParseJson(json, out _, out var error));
+        Assert.Equal(expected, error);
+    }
+
+    [Fact]
+    public void Accent_LedsNeedAStrip_AndGpio7IsTheStripsOnABodyThatHasOne()
+    {
+        var noStrip = M1Accent() with { Accent = null };
+        Assert.Equal("note 72: \"led\" needs an \"accent\" strip.", BodyImage.Validate(noStrip));
+
+        var gpio = M1() with { Driver = BodyDriver.Gpio, Address = 0 };
+        gpio = gpio with { Notes = [gpio.Notes[0] with { Output = 7 }, .. gpio.Notes.Skip(1)] };
+        Assert.Null(BodyImage.Validate(gpio));
+        Assert.Equal("note 72: GPIO 7 drives the accent LEDs on a body that has them.", BodyImage.Validate(gpio with { Accent = new AccentStrip(4, 10, 80) }));
+
+        var record = BodyImage.Encode(M1Accent());
+        record[20 + (3 * 10) + 19 + 18] = 0; // the strip's LED count
+        var crc = BodyImage.Crc16(record.AsSpan(0, record.Length - 2));
+        record[^2] = (byte)crc;
+        record[^1] = (byte)(crc >> 8);
+        Assert.False(BodyImage.TryDecode(record, out _, out var error));
+        Assert.Equal("bad accent LEDs.", error);
+    }
+
+    [Fact]
+    public void AccentProfile_IsWhatTheBrainSends_AndRoundTrips()
+    {
+        var profile = M1Accent().ToProfile();
+        Assert.Equal(new AccentStrip(9, 20, 80), profile.Accent);
+        Assert.Equal(new AccentLed(3, 3, 0xFFC000), profile.NoteLed[74]);
+
+        // The brain's own wording (Brain.cpp buildProfile).
+        const string brain = """{"schema":"metrodom.instrument-profile/0","id":"xylophone-m1-accent","name":"MetroDom xylophone","firmwareVersion":"0.1.0","midi":{"identity":{"manufacturer":"7D","family":8781,"model":1}},"notes":[{"note":72,"led":{"first":0,"count":3,"color":"#FF4000"},"minIntervalMs":60,"minPulseMs":12,"pulseMs":30}],"accent":{"leds":9,"maxBrightnessPercent":20,"flashMs":80},"polyphony":2,"velocity":{"supported":true},"safety":{"maxOnMs":45,"maxDutyPercent":30,"dutyWindowMs":1000,"watchdogMs":500}}""";
+        Assert.True(InstrumentProfileJson.TryParse(brain, out var sent, out var error), error);
+        Assert.Equal(profile.Accent, sent.Accent);
+        Assert.Equal(profile.NoteLed[72], sent.NoteLed[72]);
+
+        Assert.True(InstrumentProfileJson.TryParse(InstrumentProfileJson.Write(profile), out var back, out error), error);
+        Assert.Equal(profile.Accent, back.Accent);
+        Assert.Equal(profile.NoteLed.OrderBy(p => p.Key), back.NoteLed.OrderBy(p => p.Key));
+    }
+
     [Fact]
     public void Decode_GivesBackTheDefinition_AndIgnoresTheRestOfTheEeprom()
     {

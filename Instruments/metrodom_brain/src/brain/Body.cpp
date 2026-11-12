@@ -8,7 +8,9 @@ namespace {
 constexpr uint8_t kGpioOutputs = 29;  // Pico GPIO 0-28
 
 // The backplane's pins (hardware/modules/body-backplane): Qwiic SDA/SCL and the PCA9685's /OE.
-bool reserved(uint8_t pin) { return pin == kPinSda || pin == kPinScl || pin == kPinOutputEnable; }
+bool reserved(uint8_t pin, bool leds) {
+  return pin == kPinSda || pin == kPinScl || pin == kPinOutputEnable || (leds && pin == kPinLeds);
+}
 constexpr uint8_t kPcaOutputs = 16;
 
 uint16_t get16(const uint8_t* p) { return static_cast<uint16_t>(p[0] | (p[1] << 8)); }
@@ -31,6 +33,42 @@ bool textOk(const char* text, size_t max, bool (*allowed)(char)) {
   return true;
 }
 
+BodyError validateLeds(const Body& b) {
+  if (b.ledCount == 0) {
+    // No strip: nothing else may say otherwise, so a version 1 record reads back the same.
+    if (b.ledBrightnessPercent != 0 || b.flashMs != 0) return BodyError::Leds;
+    for (uint8_t i = 0; i < b.count; ++i) {
+      const Actuator& a = b.actuators[i];
+      if (a.ledFirst != 0 || a.ledCount != 0 || a.color[0] != 0 || a.color[1] != 0 || a.color[2] != 0) return BodyError::Leds;
+    }
+    return BodyError::None;
+  }
+  if (b.ledCount > kMaxLeds || b.ledBrightnessPercent < 1 || b.ledBrightnessPercent > kCeilingLedPercent ||
+      b.flashMs < 10 || b.flashMs > 1000) {
+    return BodyError::Leds;
+  }
+  for (uint8_t i = 0; i < b.count; ++i) {
+    const Actuator& a = b.actuators[i];
+    if (a.ledCount == 0) {
+      if (a.ledFirst != 0 || a.color[0] != 0 || a.color[1] != 0 || a.color[2] != 0) return BodyError::Leds;
+      continue;
+    }
+    if (a.ledFirst + a.ledCount > b.ledCount) return BodyError::Leds;
+    for (uint8_t j = 0; j < i; ++j) {
+      const Actuator& o = b.actuators[j];
+      if (o.ledCount > 0 && a.ledFirst < o.ledFirst + o.ledCount && o.ledFirst < a.ledFirst + a.ledCount) {
+        return BodyError::Leds;
+      }
+    }
+  }
+  return BodyError::None;
+}
+
+size_t recordLength(const Body& b, size_t idLength, size_t nameLength) {
+  size_t total = kBodyHeaderBytes + b.count * kBodyActuatorBytes + idLength + nameLength + 2;
+  return b.ledCount == 0 ? total : total + kBodyLedHeaderBytes + b.count * kBodyLedBytes;
+}
+
 }  // namespace
 
 const char* bodyErrorText(BodyError error) {
@@ -49,6 +87,7 @@ const char* bodyErrorText(BodyError error) {
     case BodyError::Pulse: return "bad pulse";
     case BodyError::Interval: return "bad interval or latency";
     case BodyError::Text: return "bad id or name";
+    case BodyError::Leds: return "bad accent LEDs";
   }
   return "unknown";
 }
@@ -65,6 +104,9 @@ BrainConfig Body::config() const {
   c.maxDutyPercent = maxDutyPercent;
   c.dutyWindowMs = dutyWindowMs;
   c.watchdogMs = watchdogMs;
+  c.ledCount = ledCount;
+  c.ledBrightnessPercent = ledBrightnessPercent;
+  if (ledCount > 0) c.flashMs = flashMs;
   return c;
 }
 
@@ -102,7 +144,7 @@ BodyError validateBody(const Body& b) {
   for (uint8_t i = 0; i < b.count; ++i) {
     const Actuator& a = b.actuators[i];
     if (a.note > 127) return BodyError::Note;
-    if (a.output >= outputs || (b.driver == BodyDriver::Gpio && reserved(a.output))) return BodyError::Output;
+    if (a.output >= outputs || (b.driver == BodyDriver::Gpio && reserved(a.output, b.ledCount > 0))) return BodyError::Output;
     for (uint8_t j = 0; j < i; ++j) {
       if (b.actuators[j].note == a.note) return BodyError::Note;
       if (b.actuators[j].output == a.output) return BodyError::Output;
@@ -112,7 +154,7 @@ BodyError validateBody(const Body& b) {
   }
 
   if (!textOk(b.id, kBodyMaxId, idChar) || !textOk(b.name, kBodyMaxName, nameChar)) return BodyError::Text;
-  return BodyError::None;
+  return validateLeds(b);
 }
 
 BodyError parseBody(const uint8_t* data, size_t length, Body& body) {
@@ -125,7 +167,8 @@ BodyError parseBody(const uint8_t* data, size_t length, Body& body) {
   if (ff || zero) return BodyError::Empty;
   if (data[0] != 'M' || data[1] != 'D' || data[2] != 'B') return BodyError::Magic;
   if (length < kBodyHeaderBytes) return BodyError::Length;
-  if (data[3] != kBodyVersion) return BodyError::Version;
+  uint8_t version = data[3];
+  if (version != kBodyVersion && version != kBodyVersionLeds) return BodyError::Version;
 
   size_t total = get16(data + 4);
   if (total < kBodyHeaderBytes + 2 || total > kBodyMaxBytes || total > length) return BodyError::Length;
@@ -135,7 +178,10 @@ BodyError parseBody(const uint8_t* data, size_t length, Body& body) {
   if (count < 1 || count > kMaxActuators) return BodyError::Count;
   size_t idLength = data[18], nameLength = data[19];
   if (idLength > kBodyMaxId || nameLength > kBodyMaxName) return BodyError::Text;
-  if (total != kBodyHeaderBytes + count * kBodyActuatorBytes + idLength + nameLength + 2) return BodyError::Length;
+  size_t plain = kBodyHeaderBytes + count * kBodyActuatorBytes + idLength + nameLength + 2;
+  if (total != (version == kBodyVersion ? plain : plain + kBodyLedHeaderBytes + count * kBodyLedBytes)) {
+    return BodyError::Length;
+  }
 
   Body b;
   b.driver = static_cast<BodyDriver>(data[6]);
@@ -159,6 +205,22 @@ BodyError parseBody(const uint8_t* data, size_t length, Body& body) {
   }
   memcpy(b.id, p, idLength);
   memcpy(b.name, p + idLength, nameLength);
+  if (version == kBodyVersionLeds) {
+    p += idLength + nameLength;
+    b.ledCount = p[0];
+    b.ledBrightnessPercent = p[1];
+    b.flashMs = get16(p + 2);
+    if (b.ledCount == 0) return BodyError::Leds;  // version 2 always has a strip
+    p += kBodyLedHeaderBytes;
+    for (uint8_t i = 0; i < count; ++i, p += kBodyLedBytes) {
+      Actuator& a = b.actuators[i];
+      a.ledFirst = p[0];
+      a.ledCount = p[1];
+      a.color[0] = p[2];
+      a.color[1] = p[3];
+      a.color[2] = p[4];
+    }
+  }
 
   BodyError error = validateBody(b);
   if (error == BodyError::None) body = b;
@@ -168,13 +230,13 @@ BodyError parseBody(const uint8_t* data, size_t length, Body& body) {
 size_t encodeBody(const Body& b, uint8_t* out, size_t size) {
   if (validateBody(b) != BodyError::None) return 0;
   size_t idLength = strnlen(b.id, kBodyMaxId), nameLength = strnlen(b.name, kBodyMaxName);
-  size_t total = kBodyHeaderBytes + b.count * kBodyActuatorBytes + idLength + nameLength + 2;
+  size_t total = recordLength(b, idLength, nameLength);
   if (out == nullptr || size < total) return 0;
 
   out[0] = 'M';
   out[1] = 'D';
   out[2] = 'B';
-  out[3] = kBodyVersion;
+  out[3] = b.ledCount == 0 ? kBodyVersion : kBodyVersionLeds;
   put16(out + 4, static_cast<uint16_t>(total));
   out[6] = static_cast<uint8_t>(b.driver);
   out[7] = b.address;
@@ -199,6 +261,21 @@ size_t encodeBody(const Body& b, uint8_t* out, size_t size) {
   }
   memcpy(p, b.id, idLength);
   memcpy(p + idLength, b.name, nameLength);
+  if (b.ledCount > 0) {
+    p += idLength + nameLength;
+    p[0] = b.ledCount;
+    p[1] = b.ledBrightnessPercent;
+    put16(p + 2, b.flashMs);
+    p += kBodyLedHeaderBytes;
+    for (uint8_t i = 0; i < b.count; ++i, p += kBodyLedBytes) {
+      const Actuator& a = b.actuators[i];
+      p[0] = a.ledFirst;
+      p[1] = a.ledCount;
+      p[2] = a.color[0];
+      p[3] = a.color[1];
+      p[4] = a.color[2];
+    }
+  }
   put16(out + total - 2, crc16(out, total - 2));
   return total;
 }
