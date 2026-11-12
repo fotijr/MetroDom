@@ -1,6 +1,8 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Melanchall.DryWetMidi.Core;
+using MetroDom.Core.Lighting;
 using MetroDom.Core.Timing;
 
 namespace MetroDom.Core.Policy;
@@ -28,7 +30,8 @@ public enum ControlAction
 }
 
 /// <summary>
-/// A deployment mode's policy (ADR 0005), first cut: only the control-surface mapping exists.
+/// A deployment mode's policy (ADR 0005), first cut: the control-surface mapping and what the
+/// lights may do.
 /// Format <c>metrodom.policy/0</c>, see docs/references/policy-profile.md. Roles, queue rules and
 /// limits join it as they're built.
 /// </summary>
@@ -37,6 +40,9 @@ public enum ControlAction
 public sealed record PolicyProfile(string Mode, IReadOnlyDictionary<ControlAction, string> Controls)
 {
     public const string Schema = "metrodom.policy/0";
+
+    /// <summary>What the venue lets the lights do (ADR 0011 §5). Defaults: no strobe, 3 flashes a second, full brightness.</summary>
+    public LightLimits Lights { get; init; } = LightLimits.Default;
 
     private static readonly Dictionary<string, ControlAction> ActionNames = new(StringComparer.Ordinal)
     {
@@ -116,7 +122,12 @@ public sealed record PolicyProfile(string Mode, IReadOnlyDictionary<ControlActio
                 return false;
             }
 
-            profile = new PolicyProfile(mode.Trim(), controls);
+            if (!TryLights(root["lights"], out var lights, out error))
+            {
+                return false;
+            }
+
+            profile = new PolicyProfile(mode.Trim(), controls) { Lights = lights };
             error = null;
             return true;
         }
@@ -125,6 +136,51 @@ public sealed record PolicyProfile(string Mode, IReadOnlyDictionary<ControlActio
             error = $"not a valid policy file: {ex.Message}";
             return false;
         }
+    }
+
+    private static bool TryLights(JsonNode? node, out LightLimits lights, out string? error)
+    {
+        lights = LightLimits.Default;
+        error = null;
+        if (node is null)
+        {
+            return true;
+        }
+
+        if (node is not JsonObject obj)
+        {
+            error = "\"lights\" must be an object.";
+            return false;
+        }
+
+        QuietHours? quiet = null;
+        if (obj["quietHours"] is { } quietNode)
+        {
+            if (!TryTime(quietNode["from"], out var from) || !TryTime(quietNode["to"], out var to))
+            {
+                error = "\"lights.quietHours\" needs \"from\" and \"to\" as HH:mm (e.g. \"23:00\").";
+                return false;
+            }
+
+            quiet = new QuietHours(from, to, quietNode["maxBrightness"]?.GetValue<int>() ?? 30);
+        }
+
+        lights = new LightLimits
+        {
+            Strobe = obj["strobe"]?.GetValue<bool>() ?? false,
+            MaxFlashesPerSecond = obj["maxFlashesPerSecond"]?.GetValue<double>() ?? LightLimits.DefaultFlashesPerSecond,
+            MaxBrightness = obj["maxBrightness"]?.GetValue<int>() ?? 100,
+            Quiet = quiet,
+        };
+        error = lights.Validate();
+        return error is null;
+    }
+
+    private static bool TryTime(JsonNode? node, out TimeOnly time)
+    {
+        time = default;
+        return node?.GetValue<string>() is { } text
+            && TimeOnly.TryParseExact(text, "HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out time);
     }
 
     /// <summary>The profile as JSON, controls in a fixed order.</summary>
@@ -139,7 +195,29 @@ public sealed record PolicyProfile(string Mode, IReadOnlyDictionary<ControlActio
             }
         }
 
-        return new JsonObject { ["schema"] = Schema, ["mode"] = Mode, ["controls"] = controls }
+        var root = new JsonObject { ["schema"] = Schema, ["mode"] = Mode, ["controls"] = controls };
+        if (!Lights.IsDefault)
+        {
+            var lights = new JsonObject
+            {
+                ["strobe"] = Lights.Strobe,
+                ["maxFlashesPerSecond"] = Lights.MaxFlashesPerSecond,
+                ["maxBrightness"] = Lights.MaxBrightness,
+            };
+            if (Lights.Quiet is { } quiet)
+            {
+                lights["quietHours"] = new JsonObject
+                {
+                    ["from"] = quiet.From.ToString("HH:mm", CultureInfo.InvariantCulture),
+                    ["to"] = quiet.To.ToString("HH:mm", CultureInfo.InvariantCulture),
+                    ["maxBrightness"] = quiet.MaxBrightness,
+                };
+            }
+
+            root["lights"] = lights;
+        }
+
+        return root
             .ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + "\n";
     }
 

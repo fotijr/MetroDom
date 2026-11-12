@@ -26,6 +26,8 @@ internal sealed class LightShow : IMidiOutput, IDisposable
     private readonly ReactiveLights _reactive;
     private readonly LightCues _cues;
     private readonly ITimer? _timer;
+    private readonly LightLimits _limits;
+    private readonly TimeProvider _time;
     private readonly Lock _gate = new();
     private bool _safe;
     private bool _disposed;
@@ -34,18 +36,21 @@ internal sealed class LightShow : IMidiOutput, IDisposable
     /// <param name="output">Where frames go. Its own timer must be off: this show pumps it.</param>
     /// <param name="clock">The scheduler's clock, so note times and frame times agree.</param>
     /// <param name="band">Each instrument's channels, to share fixtures out.</param>
-    /// <param name="time">Drives the frame timer; null for the system's.</param>
+    /// <param name="limits">What the venue's policy allows (flash rate, strobe, brightness, quiet hours); null for the defaults.</param>
+    /// <param name="time">Drives the frame timer and says the local time for quiet hours; null for the system's.</param>
     /// <param name="start">False leaves frames to the caller (<see cref="Frame"/>), for tests.</param>
-    public LightShow(LightProfile profile, SacnOutput output, IClock clock, IReadOnlyList<IReadOnlyList<int>> band, TimeProvider? time = null, bool start = true)
+    public LightShow(LightProfile profile, SacnOutput output, IClock clock, IReadOnlyList<IReadOnlyList<int>> band, LightLimits? limits = null, TimeProvider? time = null, bool start = true)
     {
         _profile = profile;
         _output = output;
         _clock = clock;
-        _reactive = new ReactiveLights(profile, band);
-        _cues = new LightCues(profile);
+        _limits = limits ?? LightLimits.Default;
+        _time = time ?? TimeProvider.System;
+        _reactive = new ReactiveLights(profile, band, _limits);
+        _cues = new LightCues(profile, _limits);
         if (start)
         {
-            _timer = (time ?? TimeProvider.System).CreateTimer(_ => Frame(), null, TimeSpan.Zero, Tick);
+            _timer = _time.CreateTimer(_ => Frame(), null, TimeSpan.Zero, Tick);
         }
     }
 
@@ -57,6 +62,8 @@ internal sealed class LightShow : IMidiOutput, IDisposable
     public InstrumentProfile Timing => new(Name, _profile.Latency);
 
     public ReactiveLights Reactive => _reactive;
+
+    public LightLimits Limits => _limits;
 
     public LightCues Cues => _cues;
 
@@ -144,16 +151,21 @@ internal sealed class LightShow : IMidiOutput, IDisposable
                 return;
             }
 
-            // The safe look ignores the master: nobody trips in the dark because a fader was down.
+            // The safe look ignores the master (nobody trips in the dark because a fader was down),
+            // but not the venue's brightness cap, which is never below 10%.
             var now = _clock.Now;
             var reactive = _reactive.Look(now);
             var (scene, master) = _cues.At(now);
+            var local = LocalTime();
+            var cap = _limits.BrightnessAt(local);
             _output.Show(_safe
-                ? LightRenderer.Render(_profile, _profile.SafeLook)
-                : LightRenderer.Render(_profile, scene?.Look ?? reactive, master));
+                ? LightRenderer.Render(_profile, _profile.SafeLook, cap)
+                : LightRenderer.Render(_profile, scene?.Look ?? reactive, (byte)((master * cap + 127) / 255), _limits.StrobeAt(local)));
             _output.Pump();
         }
     }
+
+    private TimeOnly LocalTime() => TimeOnly.FromDateTime(_time.GetLocalNow().DateTime);
 
     /// <summary>Ends on the safe look (sent in full, not just in the terminated packets, whose data receivers ignore), then terminates.</summary>
     public void Dispose()
@@ -167,7 +179,7 @@ internal sealed class LightShow : IMidiOutput, IDisposable
             }
 
             _safe = true;
-            _output.Show(LightRenderer.Render(_profile, _profile.SafeLook));
+            _output.Show(LightRenderer.Render(_profile, _profile.SafeLook, _limits.BrightnessAt(LocalTime())));
             for (var i = 0; i < SacnOutput.Repeats; i++)
             {
                 _output.Pump();

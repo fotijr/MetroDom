@@ -139,6 +139,45 @@ public sealed class LightShowTests : IDisposable
     }
 
     [Fact]
+    public void VenueLimits_CapBrightness_AndQuietHoursCapItMore_SafeLookIncluded()
+    {
+        Assert.True(LightProfileJson.TryParse(Rig, out var rig, out _));
+        var time = new LocalTime(new DateTimeOffset(2026, 11, 11, 22, 0, 0, TimeSpan.Zero));
+        var limits = new LightLimits { MaxBrightness = 50, Quiet = new QuietHours(new TimeOnly(23, 0), new TimeOnly(7, 0), 20) };
+        using var show = new LightShow(rig, new SacnOutput(_socket, rig.Output, "test", start: false), _clock, [[0]], limits, time, start: false);
+
+        show.Send(On(60));
+        show.Frame();
+        Assert.Equal(128, Dimmer()); // full pulse at 50%
+
+        time.Now = time.Now.AddHours(2); // 00:00, quiet hours
+        show.Safe();
+        Assert.Equal(18, Dimmer()); // safe look 90 at 20%: dim, never dark
+    }
+
+    [Fact]
+    public void Strobe_ReachesFixtures_OnlyWhenThePolicyAllowsIt_AndNotInQuietHours()
+    {
+        const string strobeRig = """
+            {"schema":"metrodom.light-profile/0","name":"rig",
+             "fixtures":[{"id":"par","address":1,"channels":["dimmer","strobe"]}],
+             "scenes":[{"note":36,"set":{"*":{"dimmer":255,"strobe":200}}}]}
+            """;
+        Assert.True(LightProfileJson.TryParse(strobeRig, out var rig, out _));
+        var time = new LocalTime(new DateTimeOffset(2026, 11, 11, 22, 0, 0, TimeSpan.Zero));
+        var limits = new LightLimits { Strobe = true, Quiet = new QuietHours(new TimeOnly(23, 0), new TimeOnly(7, 0), 100) };
+        using var show = new LightShow(rig, new SacnOutput(_socket, rig.Output, "test", start: false), _clock, [[0]], limits, time, start: false);
+
+        show.Cue(On(36));
+        show.Frame();
+        Assert.Equal(200, _socket.Last![1]);
+
+        time.Now = time.Now.AddHours(1);
+        show.Frame();
+        Assert.Equal(0, _socket.Last![1]);
+    }
+
+    [Fact]
     public void Dispose_EndsOnTheSafeLook_ThenTerminates()
     {
         _show.Frame();
@@ -166,6 +205,16 @@ public sealed class LightShowTests : IDisposable
         public void Dispose()
         {
         }
+    }
+
+    /// <summary>Wall-clock time in UTC, settable, for quiet hours.</summary>
+    private sealed class LocalTime(DateTimeOffset now) : TimeProvider
+    {
+        public DateTimeOffset Now { get; set; } = now;
+
+        public override TimeZoneInfo LocalTimeZone => TimeZoneInfo.Utc;
+
+        public override DateTimeOffset GetUtcNow() => Now;
     }
 
     private sealed class Recorder : IMidiOutput

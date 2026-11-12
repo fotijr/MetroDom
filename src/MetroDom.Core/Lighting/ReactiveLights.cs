@@ -73,13 +73,13 @@ public sealed record ReactiveSettings
 /// Each fixture follows some channels; a note on one of them starts a pulse whose peak follows
 /// velocity and which fades back to the idle glow, in that channel's color. Notes are given
 /// with the time their light should change (sound time minus the rig's latency), which may be in
-/// the future. <b>Flash cap:</b> a fixture starts at most 3 pulses per second, and notes inside
+/// the future. <b>Flash cap:</b> a fixture starts at most 3 pulses per second (or the venue's rate), and notes inside
 /// that window change nothing on it (ADR 0011 §5). Thread-safe.
 /// </summary>
 public sealed class ReactiveLights
 {
-    /// <summary>Shortest time between two pulses on one fixture: 3 flashes per second at most.</summary>
-    public static readonly TimeSpan MinPulseGap = TimeSpan.FromSeconds(1.0 / 3);
+    /// <summary>Default shortest time between two pulses on one fixture: 3 flashes per second at most.</summary>
+    public static readonly TimeSpan MinPulseGap = LightLimits.Default.FlashGap;
 
     private readonly LightProfile _profile;
     private readonly ReactiveSettings _settings;
@@ -89,8 +89,10 @@ public sealed class ReactiveLights
 
     /// <param name="profile">The rig.</param>
     /// <param name="band">Each instrument's channels (0-15). Fixtures the profile doesn't assign are shared out across these in turn; with no band they follow every channel.</param>
-    public ReactiveLights(LightProfile profile, IReadOnlyList<IReadOnlyList<int>> band)
+    /// <param name="limits">The venue's limits: their flash rate sets <see cref="PulseGap"/>. Null for the defaults.</param>
+    public ReactiveLights(LightProfile profile, IReadOnlyList<IReadOnlyList<int>> band, LightLimits? limits = null)
     {
+        PulseGap = (limits ?? LightLimits.Default).FlashGap;
         ArgumentNullException.ThrowIfNull(profile);
         ArgumentNullException.ThrowIfNull(band);
         _profile = profile;
@@ -107,6 +109,9 @@ public sealed class ReactiveLights
             return new FixtureState(f, follows, idle);
         })];
     }
+
+    /// <summary>Shortest time between two pulses on one fixture, from the venue's flash rate.</summary>
+    public TimeSpan PulseGap { get; }
 
     /// <summary>Which channels each fixture follows (null: every channel), for showing the plan.</summary>
     public IReadOnlyDictionary<string, IReadOnlySet<int>?> Following => _fixtures.ToDictionary(f => f.Fixture.Id, f => f.Follows);
@@ -152,7 +157,7 @@ public sealed class ReactiveLights
                 {
                     foreach (var f in _fixtures.Where(f => f.Follows is null || f.Follows.Contains(channel)))
                     {
-                        if (f.LastPulse is { } last && at - last < MinPulseGap)
+                        if (f.LastPulse is { } last && at - last < PulseGap)
                         {
                             continue;
                         }

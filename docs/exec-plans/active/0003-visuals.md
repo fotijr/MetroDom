@@ -39,7 +39,7 @@ phase is fun on its own and doesn't wait for the next one.
 - [x] Reactive mode: color per instrument, pulse on notes, intensity from velocity: `play --lights` ([reactive lights](../../references/light-profile.md#reactive-lights-play---lights))
 - [x] Channel 16 lights track and pad scenes override reactive mode: lights track in the song, `play --lights-pad`, master CC ([cues](../../references/light-profile.md#cues-scenes-and-the-master-play---lights))
 - [x] Scheduler aligns light changes with measured instrument latency: the rig is a scheduler output, sent early by its own latency
-- [ ] Strobe cap (≤ 3 flashes/s), brightness cap, quiet hours from the policy profile, unit-tested
+- [x] Strobe cap (≤ 3 flashes/s), brightness cap, quiet hours from the policy profile, unit-tested: policy `lights` ([policy profile](../../references/policy-profile.md#lights))
 - [x] Panic → safe look (steady, no flashing), tested
 
 ### Phase V3: Stage fixtures
@@ -98,6 +98,13 @@ phase is fun on its own and doesn't wait for the next one.
   there for pads. Cues are capped at 3 look changes a second (a fast cue waits, the newest
   wins) and the master slews at most full range per third of a second. That caps flashing
   without making fades jumpy. The master survives song changes; scenes don't.
+- 2026-11-11: Venue light limits live in the policy profile's `lights` section (ADR 0005), not
+  the light profile: the rig belongs to the band, the rules to the room. One flash rate drives
+  pulses, cue changes and the master's slew. Raising it above 3 needs `strobe: true`, and 10 is
+  the ceiling. Strobe channels pass only with `strobe` on and never in quiet hours. Brightness
+  caps (whole day and quiet hours, the lower wins) scale every intensity channel, the safe look
+  included, with a 10% floor so panic is never dark. Quiet hours go by the Conductor's local
+  clock and may wrap past midnight.
 
 ## Open questions
 - Budget for V3 fixtures.

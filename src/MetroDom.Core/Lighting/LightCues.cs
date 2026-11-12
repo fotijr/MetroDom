@@ -16,17 +16,14 @@ public enum CueMode
 /// Cues on the lights channel (ADR 0011 §3.2, §3.3): notes recall scenes, which override
 /// reactive mode, and the master CC dims everything. Fed by the scheduler, so a lights track
 /// follows the human tempo and jumps like any part, and an operator's pads go through the same
-/// path. <b>Flash cap:</b> the look changes at most 3 times a second (a later cue waits, the
+/// path. <b>Flash cap:</b> the look changes at most 3 times a second, or the venue's rate (a later cue waits, the
 /// newest wins), and the master moves at most full range per third of a second, so neither cues
 /// nor a toggled fader can flash faster than the cap (ADR 0011 §5). Thread-safe.
 /// </summary>
 public sealed class LightCues
 {
-    /// <summary>Shortest time between two scene changes: the same 3-per-second cap as pulses.</summary>
-    public static readonly TimeSpan MinChangeGap = ReactiveLights.MinPulseGap;
-
-    /// <summary>Fastest master movement, per second: 0 to full in <see cref="MinChangeGap"/>.</summary>
-    public static readonly double MasterSlewPerSecond = 255 / MinChangeGap.TotalSeconds;
+    /// <summary>Default shortest time between two scene changes: the same 3-per-second cap as pulses.</summary>
+    public static readonly TimeSpan MinChangeGap = LightLimits.Default.FlashGap;
 
     private const int AllSoundOff = 120, AllNotesOff = 123;
 
@@ -40,11 +37,21 @@ public sealed class LightCues
     private double _masterWanted = 255;
     private TimeSpan? _masterAt;
 
-    public LightCues(LightProfile profile)
+    /// <param name="profile">The rig.</param>
+    /// <param name="limits">The venue's limits: their flash rate sets <see cref="ChangeGap"/> and the master's slew. Null for the defaults.</param>
+    public LightCues(LightProfile profile, LightLimits? limits = null)
     {
         ArgumentNullException.ThrowIfNull(profile);
         _profile = profile;
+        ChangeGap = (limits ?? LightLimits.Default).FlashGap;
+        MasterSlewPerSecond = 255 / ChangeGap.TotalSeconds;
     }
+
+    /// <summary>Shortest time between two scene changes, from the venue's flash rate.</summary>
+    public TimeSpan ChangeGap { get; }
+
+    /// <summary>Fastest master movement, per second: 0 to full in <see cref="ChangeGap"/>.</summary>
+    public double MasterSlewPerSecond { get; }
 
     /// <summary>The scene the cues ask for (null: reactive), before the flash cap.</summary>
     public LightScene? Wanted
@@ -148,7 +155,7 @@ public sealed class LightCues
     /// <summary>Lets the flash cap catch up: a waiting scene goes up once the gap has passed, the master slews.</summary>
     private void Advance(TimeSpan now)
     {
-        if (_shown != _wanted && (_changedAt is not { } last || now - last >= MinChangeGap))
+        if (_shown != _wanted && (_changedAt is not { } last || now - last >= ChangeGap))
         {
             _shown = _wanted;
             _changedAt = now;

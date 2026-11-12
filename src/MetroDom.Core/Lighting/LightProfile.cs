@@ -129,10 +129,11 @@ public static class LightRenderer
 
     /// <summary>
     /// Fills every universe the rig uses. <paramref name="master"/> (0-255) scales intensity
-    /// channels. Strobe channels are always 0: a fixture's built-in strobe flashes faster than the
-    /// 3-per-second cap, and nothing yet lets a venue's policy allow it (ADR 0011 §5).
+    /// channels. Strobe channels are 0 unless <paramref name="strobe"/>: a fixture's built-in
+    /// strobe flashes faster than the 3-per-second cap, so only a venue's policy may allow it
+    /// (ADR 0011 §5, <see cref="LightLimits.Strobe"/>).
     /// </summary>
-    public static IReadOnlyDictionary<int, byte[]> Render(LightProfile profile, LightLook look, byte master = 255)
+    public static IReadOnlyDictionary<int, byte[]> Render(LightProfile profile, LightLook look, byte master = 255, bool strobe = false)
     {
         ArgumentNullException.ThrowIfNull(profile);
         ArgumentNullException.ThrowIfNull(look);
@@ -145,7 +146,7 @@ public static class LightRenderer
                 for (var i = 0; i < fixture.Channels.Count; i++)
                 {
                     var role = fixture.Channels[i];
-                    var value = IsStrobe(role) ? 0 : look.ValueFor(fixture.Id, role);
+                    var value = IsStrobe(role) && !strobe ? 0 : look.ValueFor(fixture.Id, role);
                     if (IsIntensity(role))
                     {
                         value = (byte)((value * master + 127) / 255);

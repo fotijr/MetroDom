@@ -4,6 +4,7 @@ using System.Runtime.InteropServices;
 using MetroDom.Conductor.Cli;
 using MetroDom.Conductor.Lighting;
 using MetroDom.Core.Lighting;
+using MetroDom.Core.Policy;
 using Spectre.Console;
 using Spectre.Console.Cli;
 
@@ -38,6 +39,13 @@ internal sealed class LightsCommand : Command<LightsCommand.Settings>
         [Description("Send to this host instead of the profile's destination (e.g. a WLED's IP). Default: the profile's, else sACN multicast.")]
         public string? To { get; init; }
 
+        [CommandOption("--policy <FILE>")]
+        [Description("Policy profile (metrodom.policy/0) whose [bold]lights[/] limits apply: brightness cap, quiet hours, strobe. Default: no strobe, full brightness.")]
+        public string? Policy { get; init; }
+
+        public LightLimits Limits =>
+            Policy is not null && File.Exists(Policy) && PolicyProfile.TryParse(File.ReadAllText(Policy), out var policy, out _) ? policy.Lights : LightLimits.Default;
+
         [CommandOption("--for <SECONDS>")]
         [Description("Stop by itself after this long (for scripts).")]
         public double? For { get; init; }
@@ -55,6 +63,16 @@ internal sealed class LightsCommand : Command<LightsCommand.Settings>
             if (!LightProfileJson.TryParse(File.ReadAllText(Path), out var profile, out var error))
             {
                 return ValidationResult.Error($"{Path}: {error}");
+            }
+
+            if (Policy is not null && !File.Exists(Policy))
+            {
+                return ValidationResult.Error($"--policy: file not found: {Policy}");
+            }
+
+            if (Policy is not null && !PolicyProfile.TryParse(File.ReadAllText(Policy), out _, out var policyError))
+            {
+                return ValidationResult.Error($"--policy: {policyError}");
             }
 
             if (Scene is not null && Safe)
@@ -110,7 +128,17 @@ internal sealed class LightsCommand : Command<LightsCommand.Settings>
         long sent;
         using (var output = new SacnOutput(new UdpSacnSocket(), profile.Output, $"MetroDom {profile.Name}", log: Ui.Warn))
         {
-            output.Show(LightRenderer.Render(profile, look, (byte)settings.Master));
+            // The venue's caps apply here too; the safe look ignores --master, as in play.
+            var limits = settings.Limits;
+            var local = TimeOnly.FromDateTime(DateTime.Now);
+            var cap = limits.BrightnessAt(local);
+            var master = settings.Safe ? cap : (byte)((settings.Master * cap + 127) / 255);
+            output.Show(LightRenderer.Render(profile, look, master, !settings.Safe && limits.StrobeAt(local)));
+            if (!limits.IsDefault)
+            {
+                Console.WriteLine($"Policy: {limits.Describe()}.");
+            }
+
             var where = string.Join(", ", profile.Universes.Select(u => $"universe {u} → {output.DestinationFor(u)}"));
             Console.WriteLine($"Showing {name} on {where} (sACN, priority {profile.Output.Priority}). Ctrl+C to stop.");
             if (settings.For is { } seconds)

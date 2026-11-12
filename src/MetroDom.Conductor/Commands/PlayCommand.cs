@@ -366,7 +366,8 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
 
         var output = new SacnOutput(new UdpSacnSocket(), rig.Output, $"MetroDom {rig.Name}", log: session.Messages.Add, start: false);
         var band = session.Outputs.Select(o => (IReadOnlyList<int>)[.. o.Channels.Where(c => c != rig.Channel)]).ToList();
-        var show = new LightShow(rig, output, live.Clock, band);
+        var limits = settings.PolicyProfile.Lights;
+        var show = new LightShow(rig, output, live.Clock, band, limits);
 
         // The rig is one more output: every channel for reactive pulses, its own channel for cues,
         // which no instrument gets any more (a robot must never play a cue note).
@@ -380,7 +381,7 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
 
         var where = string.Join(", ", rig.Universes.Select(u => $"universe {u} → {output.DestinationFor(u)}"));
         var follows = string.Join(", ", show.Reactive.Following.Select(f => $"{f.Key} {(f.Value is null ? "all" : "ch " + ChannelList.Format(f.Value))}"));
-        Ui.Note($"Lights: {rig.Name} on {where} (sACN). Reactive: {follows}.");
+        Ui.Note($"Lights: {rig.Name} on {where} (sACN). Reactive: {follows}. Policy {settings.PolicyProfile.Mode}: {limits.Describe()}.");
         return show;
     }
 

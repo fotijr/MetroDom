@@ -56,7 +56,7 @@ metrodom play set.mid --lights rig.json --lights-pad "Launchpad"   # live scenes
 | `reactive.follow` | Fixture id → channels it pulses with | shared out across the band |
 
 - **Channel roles:** `dimmer`, `red`, `green`, `blue`, `white`, `amber`, `uv` are intensity (the
-  master scales them). `strobe` is always sent as 0 (below). Any other name (`program`,
+  master scales them). `strobe` is sent as 0 unless the venue's policy allows it (below). Any other name (`program`,
   `speed`, `pan`) is a channel the profile can set directly; it isn't scaled.
 - **Looks:** fixture id → role → 0-255. `"*"` is every fixture; a fixture's own entry wins for
   the roles it names. Anything not mentioned is 0, so a scene is the whole picture.
@@ -134,8 +134,13 @@ Live and authored shows (ADR 0011 §3.2, §3.3) override reactive mode. Code:
 
 ## Safety
 
-- **No strobe.** A fixture's built-in strobe flashes far faster than the 3-per-second cap and
-  no venue policy can allow it yet, so `strobe` channels are always 0 (ADR 0011 §5).
+- **No strobe unless the venue says so.** A fixture's built-in strobe flashes far faster than
+  the 3-per-second cap, so `strobe` channels are 0 unless the policy profile's `lights.strobe`
+  is true, and never during its quiet hours (ADR 0011 §5).
+- **Venue limits** (policy profile `lights`, see [policy profile](policy-profile.md#lights)):
+  the flash rate for pulses, cues and the master, a brightness cap, and quiet hours with a
+  lower cap. `play --policy` and `lights --policy` apply them. The brightness cap applies to the
+  safe look too, but can't go below 10%, so panic is never dark.
 - **Safe look, not blackout:** a profile without `safeLook` gets a warm, dim, steady look
   (dimmer 160, red 160, green 120, blue 80, white/amber 100).
 - **Lights never block music:** a failed send is logged once per run of failures, never thrown.
