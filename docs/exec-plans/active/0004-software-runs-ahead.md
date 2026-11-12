@@ -38,7 +38,7 @@ each phase closes its tech-debt rows and raises its row in [QUALITY_SCORE.md](..
       LAN: TD-27)
 
 ### Phase S4: Arranger (TD-21)
-- [ ] `profile.json` files, polyphony, drum-note substitution, per-piece drum seats
+- [x] `profile.json` files, polyphony, drum-note substitution, per-piece drum seats
 
 ### Phase S5: Calibration flow (ADR 0004)
 - [ ] Quick check on boot and full on-demand calibration against simulated onsets
@@ -84,6 +84,17 @@ each phase closes its tech-debt rows and raises its row in [QUALITY_SCORE.md](..
   5 s per lookup. QR codes come from QRCoder (MIT), drawn as SVG for the remote and half blocks
   for the terminal. The default operator gains `queue.edit` (a bandmate reorders the set).
   `CA1711` is suppressed for `SetQueue`: it is a queue, and that's the word the API uses.
+
+- 2026-11-12: S4 shape. A profile file goes where the latency goes (`-i NAME@FILE.json`,
+  `-o PORT@FILE.json`) rather than a new flag, so one spec still says everything about one
+  instrument; it beats what the instrument sends, for kits that can't send one or brains on old
+  firmware. Drum stand-ins are a hand-picked General MIDI table (`DrumMap`), best first, and
+  count toward which part a kit gets; notes with no stand-in are still dropped. Polyphony is
+  enforced in the arranger as well as the firmware and governor, so the table shows what will
+  really sound: a note holds an actuator for its pulse (or its length on a software
+  instrument), chords keep the top voice then the bass, drums keep kick, snare, hats/ride,
+  crashes, toms. Piece seats are `--seat ROLE=PLAYER/PIECES`; several may share a role when
+  their notes don't overlap, which is how two people share one kit.
 
 ## Open questions
 - The shipped jukebox and rental values (limits, quiet hours, request rules, token lives) are

@@ -84,4 +84,27 @@ public class SeatingTests
         var song = Song(("Guitar", 0, 0));
         Assert.Same(song, Seating.Apply(song, []).Song);
     }
+    [Fact]
+    public void PieceSeats_TakeOnlyTheirNotes_AndShareAKit()
+    {
+        var song = new MidiFile(new TrackChunk(new SequenceTrackNameEvent("Kit"))) { TimeDivision = new TicksPerQuarterNoteTimeDivision(Ppq) };
+        using (var notes = song.GetTrackChunks().First().ManageNotes())
+        {
+            foreach (var (n, beat) in new[] { (36, 0), (42, 0), (38, 1), (42, 1), (49, 2) })
+            {
+                notes.Objects.Add(new Note((SevenBitNumber)n, Ppq / 2, beat * Ppq) { Channel = (FourBitNumber)9 });
+            }
+        }
+
+        var sam = new Seat("drums", "Sam") { Notes = new HashSet<int> { 35, 36, 37, 38 }, Pieces = "kick, snare" };
+        var ana = new Seat("drums", "Ana") { Notes = new HashSet<int> { 49 }, Pieces = "crash" };
+        var nobody = new Seat("drums", "Lee") { Notes = new HashSet<int> { 56 }, Pieces = "cowbell" };
+
+        var seated = Seating.Apply(song, [sam, ana, nobody]);
+
+        Assert.Equal([42, 42], NoteOns(seated.Song).Select(n => n.Note));
+        Assert.Equal(["Sam", "Ana"], seated.Taken.Select(t => t.Seat.Player));
+        Assert.Equal("Lee", Assert.Single(seated.Empty).Player);
+        Assert.Equal("drums (Sam): kick, snare", sam.ToString());
+    }
 }

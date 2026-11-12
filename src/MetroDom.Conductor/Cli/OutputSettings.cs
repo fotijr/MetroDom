@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Globalization;
 using System.Text.RegularExpressions;
+using MetroDom.Core;
 using MetroDom.Core.Policy;
 using MetroDom.Core.Safety;
 using Spectre.Console;
@@ -117,15 +118,46 @@ internal class OutputSettings : CommandSettings
 /// sends channel 10 to the port matching "MetroDom drums", 35 ms early, and tells the arranger it
 /// can play notes 36 and 38. A plain port gets every channel; its latency and notes come from the
 /// instrument's profile if it sends one (<see cref="WantsProfile"/>), else none and every note.
+/// <c>PORT[=CHANNELS]@PROFILE.json</c> describes the instrument with its profile file instead,
+/// for one that can't send it (a general MIDI device, a brain on old firmware).
 /// </summary>
 internal sealed partial record OutputSpec(string Port, IReadOnlyList<int> Channels, TimeSpan? Latency = null, IReadOnlySet<int>? Notes = null)
 {
+    /// <summary>The profile file's contents, when the spec named one: it stands in for (and beats) what the instrument sends.</summary>
+    public InstrumentProfile? Profile { get; init; }
+
     /// <summary>Whether a profile from the instrument would add anything the command line didn't say.</summary>
-    public bool WantsProfile => Latency is null || Notes is null;
+    public bool WantsProfile => Profile is null && (Latency is null || Notes is null);
 
     public static bool TryParse(string raw, out OutputSpec spec, out string? error)
     {
         spec = null!;
+        var at = raw.LastIndexOf('@');
+        if (at > 0 && ProfileFile.Names(raw[(at + 1)..]))
+        {
+            var head = raw[..at];
+            if (Pattern().Match(head) is not { Success: true } named || named.Groups["lat"].Success || named.Groups["port"].Value.TrimStart() is ['=', ..])
+            {
+                error = $"'{raw}' is not PORT[=CHANNELS]@PROFILE.json.";
+                return false;
+            }
+
+            if (!ProfileFile.TryLoad(raw[(at + 1)..], out var profile, out error))
+            {
+                return false;
+            }
+
+            IReadOnlyList<int> fileChannels = InstrumentSpec.AllChannels;
+            if (named.Groups["ch"].Success && !ChannelList.TryParse(named.Groups["ch"].Value, out fileChannels, out var chError))
+            {
+                error = $"'{raw}': {chError}";
+                return false;
+            }
+
+            spec = new OutputSpec(named.Groups["port"].Value.Trim(), fileChannels) { Profile = profile };
+            return true;
+        }
+
         IReadOnlySet<int>? notes = null;
         if (NotesSuffix().Match(raw) is { Success: true } suffix)
         {

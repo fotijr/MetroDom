@@ -16,7 +16,8 @@ internal static class ArrangementView
             .AddColumn("Fit");
         foreach (var member in band)
         {
-            var instrument = $"{Markup.Escape(member.Profile.Name)} [grey]({(member.IsPercussion ? "drums: " : "")}{Markup.Escape(NoteList.Format(member.Profile.Notes))})[/]";
+            var polyphony = member.Profile.Polyphony is { } p ? $", {p.ToString(inv)} at once" : "";
+            var instrument = $"{Markup.Escape(member.Profile.Name)} [grey]({(member.IsPercussion ? "drums: " : "")}{Markup.Escape(NoteList.Format(member.Profile.Notes))}{polyphony})[/]";
             var a = arrangement.Assignments.FirstOrDefault(x => x.Instrument == member.Profile.Name);
             if (a is null)
             {
@@ -27,8 +28,10 @@ internal static class ArrangementView
             var transpose = a.Transpose == 0 ? "" : $" [blue]{a.Transpose.ToString("+0;-0", inv)}[/]";
             var fit = new List<string> { $"{a.Played.ToString(inv)} played" };
             AddCount(fit, a.Folded, "folded", "grey");
+            AddCount(fit, a.Substituted, "on a stand-in", "grey");
             AddCount(fit, a.Dropped, "dropped", "yellow");
             AddCount(fit, a.Thinned, "thinned", "yellow");
+            AddCount(fit, a.OverPolyphony, $"over polyphony {member.Profile.Polyphony}", "yellow");
             table.AddRow(
                 instrument,
                 $"{Markup.Escape(a.Part.Name)} [grey]({Markup.Escape(a.Part.Role)}) ch {a.Part.Channel + 1} {NoteList.Name(a.Part.LowestNote)}–{NoteList.Name(a.Part.HighestNote)}[/]{transpose}",

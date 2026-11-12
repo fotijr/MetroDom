@@ -32,7 +32,13 @@ after the port name. Leave out `@LATENCY` or `/NOTES` and `play` asks the instru
 profile ([profile exchange](midi-profile-exchange.md)) and uses what it sends; what you do write
 wins. `--no-identify` skips the question. Without any `-o`, `play` uses every MetroDom
 instrument it finds, each on the first channel of its spec, and picks up ones started mid-set at
-the next song ([auto band](auto-band.md)). Default band (roadmap S1): `xylo` on every channel except 10 at 10 ms,
+the next song ([auto band](auto-band.md)).
+
+A [profile file](instrument-profile.md) can stand where the latency goes: `-i xylo@Instruments/xylophone/profile.json`
+or `-o "General MIDI kit=10@kit-profile.json"`. It gives notes, latencies, minimum interval,
+polyphony and safety limits, as if the instrument had sent it (and beats what it does send). `-i`
+takes the profile's `midi.channel` unless `=CHANNELS` says otherwise; a missing or invalid file is
+a usage error naming it. Default band (roadmap S1): `xylo` on every channel except 10 at 10 ms,
 `drums` on 10 at 35 ms.
 
 ## Arranging a song onto the band
@@ -49,8 +55,13 @@ metrodom play song.mid --arrange -o "MetroDom xylo=1" -o "MetroDom drums=10"   #
 Rules (`Arranger`): a part is one track on one channel. Greedy pairing, most playable notes
 first, one part per instrument. Pitched parts move by whole octaves to fit, then leftover notes
 fold to the nearest playable note of the same name (`--no-fold` drops them), then repeats faster
-than the instrument's minimum interval are thinned. Only notes are kept. Every change is counted
-in the table. Played to note-limited `virtual` instruments, an arranged song skips nothing.
+than the instrument's minimum interval are thinned. Drum hits the kit lacks play on a stand-in
+(closed hi-hat → pedal or open hat, then ride; crash → another cymbal; a tom → the nearest tom
+the kit has; `DrumMap`), and stand-ins count when choosing the kit's part. With `polyphony`, no
+more notes sound at once than the instrument has actuators: a note holds one for its `pulseMs`
+(else `safety.maxOnMs`, else its length). Chords keep the top voice, then the bass; drum hits
+keep kick, snare, hi-hat/ride, crashes, toms, in that order. Only notes are kept. Every change
+is counted in the table ("on a stand-in", "over polyphony N"). Played to note-limited `virtual` instruments, an arranged song skips nothing.
 
 ## What a virtual instrument does
 

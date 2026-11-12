@@ -44,7 +44,13 @@ Fields:
 - `minIntervalMs` (optional, top level or per note): the Conductor uses one interval per
   instrument today, the largest given, so no note is refused.
 - No `notes` array means the instrument plays any note (software instruments).
-- `midi.channel` (1-16) is where the [auto band](auto-band.md) puts the instrument when it isn't assigned.
+- `midi.channel` (1-16) is where the [auto band](auto-band.md) puts the instrument when it isn't
+  assigned, and the channel `-i NAME@profile.json` plays on.
+- The Conductor reads profile files from the command line where a latency would go
+  (`-i xylo@profile.json`, `-o "PORT@profile.json"`, [virtual band](virtual-band.md)); a file
+  beats what the instrument sends.
+- The arranger uses `polyphony` (with `pulseMs`/`maxOnMs` as how long each note holds an
+  actuator) so it never hands an instrument more notes at once than it can strike.
 - Not read by the Conductor yet: `midi.identity`, `velocity`, `safety.watchdogMs`, `firmwareVersion`.
   Whether an instrument is MetroDom comes from its Identity Reply, never from the profile.
   The [brain firmware](../../Instruments/metrodom_brain/README.md) enforces `polyphony`, `safety` and

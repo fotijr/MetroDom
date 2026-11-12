@@ -21,11 +21,13 @@ internal sealed record SessionOutput(IMidiOutputPort Port, IReadOnlyList<int> Ch
     /// The profile for <paramref name="name"/>: what the command line says, with anything it left
     /// out taken from the profile the instrument sent. <c>@LATENCY</c> replaces the instrument's
     /// latencies (per note too); <c>/NOTES</c> replaces its notes. The minimum interval always
-    /// comes from the instrument, since the command line can't set one.
+    /// comes from the instrument, since the command line can't set one. A profile file
+    /// (<c>@PROFILE.json</c>) stands in for what the instrument sent.
     /// </summary>
     public static InstrumentProfile Merge(string name, OutputSpec spec, InstrumentProfile? sent)
     {
         ArgumentNullException.ThrowIfNull(spec);
+        sent = spec.Profile ?? sent; // A profile file on the command line beats what the instrument sent.
         if (sent is null)
         {
             return new InstrumentProfile(name, spec.Latency ?? TimeSpan.Zero) { Notes = spec.Notes };
