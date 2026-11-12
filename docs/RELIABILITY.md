@@ -80,4 +80,6 @@ but is polled (1 ms full-speed frames).
 - Scheduler and governor are unit-tested with a **fake clock** and **fake instruments**.
 - Each firmware ships with a bench test sketch (the prototype has
   `Instruments/xylophone_servo/xylophone_servo - tester.ino` as an early example).
-- Latency is measured, not assumed. Record measurements in the instrument's README.
+- Latency is measured, not assumed: `metrodom calibrate` ([calibration](references/calibration.md))
+  measures it on the rig, and `--onsets` checks it before each set. Record bench measurements in
+  the instrument's README.

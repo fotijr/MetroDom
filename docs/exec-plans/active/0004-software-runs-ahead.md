@@ -41,7 +41,8 @@ each phase closes its tech-debt rows and raises its row in [QUALITY_SCORE.md](..
 - [x] `profile.json` files, polyphony, drum-note substitution, per-piece drum seats
 
 ### Phase S5: Calibration flow (ADR 0004)
-- [ ] Quick check on boot and full on-demand calibration against simulated onsets
+- [x] Quick check on boot and full on-demand calibration against simulated onsets
+      ([calibration](../../references/calibration.md))
 
 ### Phase S6: Crowd jukebox mode (M7)
 - [ ] Guest requests, votes, cooldowns, rate limits on untrusted input
@@ -96,7 +97,19 @@ each phase closes its tech-debt rows and raises its row in [QUALITY_SCORE.md](..
   crashes, toms. Piece seats are `--seat ROLE=PLAYER/PIECES`; several may share a role when
   their notes don't overlap, which is how two people share one kit.
 
+- 2026-11-12: S5 shape. Onsets reach the Conductor as MIDI Note Ons (a trigger module, a
+  mic-to-MIDI box, `virtual --onsets`), not raw audio: MIDI stays the contract, and an audio
+  detector can come later as one more source. One strike in the air at a time, windows that
+  don't overlap and the median per note keep matching simple and robust to noise. The probe is
+  a state machine driven by the caller's clock, so the same code runs in tests on a virtual
+  clock and on real ports. Measurements live on the Conductor (`calibrations.json`, by port),
+  not in the instrument, because they include this rig's mic and cables. Measured beats declared,
+  and the command line beats both. The boot check only flags (ADR 0004); applying drift by
+  itself is left open below.
+
 ## Open questions
+- Should the boot check apply what it measured when an instrument drifted (rental boxes that
+  "self-calibrate"), or keep flagging until someone runs `calibrate`? Flagging only for now.
 - The shipped jukebox and rental values (limits, quiet hours, request rules, token lives) are
   guesses to try at the first party, not decisions.
 - TLS on the LAN, so phones can install the remote as an offline app: a self-signed certificate

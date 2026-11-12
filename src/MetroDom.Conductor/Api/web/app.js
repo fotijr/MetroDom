@@ -339,6 +339,16 @@
     loadTokens();
   }
 
+  function latencyCheck(check) {
+    if (!check) return "";
+    switch (check.status) {
+      case "ok": return " · latency ok";
+      case "drifted": return ` · drifted ${check.worstDriftMs > 0 ? "+" : ""}${check.worstDriftMs} ms, recalibrate`;
+      case "partial": return ` · not heard: note ${check.silentNotes.join(", ")}`;
+      default: return " · not heard";
+    }
+  }
+
   function when(iso) {
     return new Date(iso).toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" });
   }
@@ -350,7 +360,7 @@
       dot.className = `dot ${i.connected ? "ok" : "down"}`;
       dot.title = i.connected ? "Connected" : "Disconnected";
       const text = document.createElement("span");
-      text.textContent = `${i.name} · ch ${channels(i.channels)} · ${i.latencyMs} ms${i.connected ? "" : " · disconnected"}`;
+      text.textContent = `${i.name} · ch ${channels(i.channels)} · ${i.latencyMs} ms${i.connected ? "" : " · disconnected"}${latencyCheck(i.latencyCheck)}`;
       item.append(dot, text);
       return item;
     }));

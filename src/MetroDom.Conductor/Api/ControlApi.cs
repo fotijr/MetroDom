@@ -479,14 +479,26 @@ internal sealed class ControlApi : IAsyncDisposable
             ?.ToString();
 
     /// <summary>The instruments as the API shows them (GET /instruments, stream events).</summary>
-    internal static object[] Instruments(Session session) => [.. session.Outputs.Select(o => new
+    internal static object[] Instruments(Session session)
     {
-        name = o.Port.Name,
-        channels = o.Channels.Select(c => c + 1).ToArray(),
-        latencyMs = o.Profile.MaxLatency.TotalMilliseconds,
-        notes = o.Profile.Notes?.Order().ToArray(),
-        connected = o.IsConnected,
-    })];
+        var checks = session.LatencyChecks;
+        return [.. session.Outputs.Select(o => new
+        {
+            name = o.Port.Name,
+            channels = o.Channels.Select(c => c + 1).ToArray(),
+            latencyMs = o.Profile.MaxLatency.TotalMilliseconds,
+            notes = o.Profile.Notes?.Order().ToArray(),
+            connected = o.IsConnected,
+            latencyCheck = checks.GetValueOrDefault(o.Port.Name) is { } check
+                ? new
+                {
+                    status = check.Status.ToString().ToLowerInvariant(),
+                    worstDriftMs = check.Worst is { } worst ? Math.Round(worst.Delta.TotalMilliseconds, 1) : (double?)null,
+                    silentNotes = check.Silent,
+                }
+                : null,
+        })];
+    }
 
     /// <summary>The state as the API shows it (GET /state, stream events).</summary>
     internal static object State(LiveState s) => new

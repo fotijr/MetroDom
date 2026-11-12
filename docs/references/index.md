@@ -14,6 +14,7 @@ Protocol and format facts agents need while coding. Keep each file factual and t
 | [policy-profile.md](policy-profile.md) | `metrodom.policy/0`, foot-controller mapping, `play --control`, limits, roles, queue rules, sessions |
 | [beat-following.md](beat-following.md) | Human leads: `BeatTracker`, `BeatFollower`, `play --follow`, `beats`, `simulate --follow`, hit files |
 | [song-roles.md](song-roles.md) | Part roles (drums, bass, melody…), detection order, `song.roles.json`, `metrodom roles`, seats (`--seat`) |
+| [calibration.md](calibration.md) | Measuring latency: `metrodom calibrate`, onset inputs, the boot check (`--onsets`), `metrodom.calibrations/0` |
 | [virtual-band.md](virtual-band.md) | Prototyping without hardware: virtual instruments, `simulate`, `virtual` |
 | [legacy-serial-protocol.md](legacy-serial-protocol.md) | Touching or porting the 2017 firmware |
 | [lighting-essentials.md](lighting-essentials.md) | Planning lights: DMX, Art-Net/sACN, LED strips, matrices, MIDI-to-light |

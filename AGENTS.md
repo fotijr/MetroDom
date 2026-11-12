@@ -29,6 +29,7 @@ This file is a **map, not a manual**. Read the doc that matches your task, then 
 | Prototype without hardware (virtual band)      | [docs/references/virtual-band.md](docs/references/virtual-band.md) |
 | Detect instruments or other MIDI devices        | [ADR 0007](docs/design-docs/0007-instrument-discovery.md)   |
 | Run the Conductor as a service, queue, remote   | [conductor-service.md](docs/references/conductor-service.md) |
+| Measure instrument latency (calibration)        | [calibration.md](docs/references/calibration.md)            |
 
 ## Repository layout
 

@@ -132,7 +132,7 @@ next, tempo ±2%, tap, vamp, outro and a big **PANIC** button.
 | POST | `/queue/{id}/move` `{"to":2}` | Move a coming song (`queue.edit`) | `400`, `404`, `409` |
 | DELETE | `/queue/{id}` | Take a coming song out (`queue.edit`) | `404`, `409` up now or played |
 | GET | `/library` | Songs that can be queued: id, title, length, BPM (empty in `play`) | |
-| GET | `/instruments` | Name, channels (1-16), latency, notes, connected | |
+| GET | `/instruments` | Name, channels (1-16), latency, notes, connected, `latencyCheck` (boot check verdict, [calibration](calibration.md)) | |
 | POST | `/transport/start` | Start the song up next | `409` if playing |
 | POST | `/transport/stop` | Stop the song | `409` if waiting |
 | POST | `/transport/next` | Next song now (skips while waiting) | |
@@ -158,7 +158,7 @@ A WebSocket, subprotocol `metrodom.v0`, one JSON text frame per event. The contr
 | `state` | On connect, then whenever anything but the position changes (same shape as `GET /state`, `positionSeconds` null) |
 | `queue` | On connect, then whenever the queue changes: a song queued, moved or removed, or the set moved on (same shape as `GET /queue`) |
 | `position` | Every 250 ms while playing: `positionSeconds`, `durationSeconds` |
-| `instruments` | On connect, then when one connects or disconnects |
+| `instruments` | On connect, then when one connects or disconnects or its latency check changes |
 | `message` | Lines for people: vamp/outro, panic, unplug/replug, tempo set while waiting |
 
 - Every event has `seq`, counting up from 1 per connection.

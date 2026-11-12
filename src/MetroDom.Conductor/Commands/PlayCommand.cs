@@ -94,6 +94,12 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
                 session.Messages.Added += Console.WriteLine;
             }
 
+            // ADR 0004 boot check: before any input opens (the onset input may share a port with one).
+            if (settings.OnsetSource is { } onsets)
+            {
+                LatencyBootCheck.Run(session, onsets);
+            }
+
             using var live = new LiveControl(session, new SystemClock(), queue);
             using var tapInput = settings.Tap is null ? null : TapInput(settings, live.Tap);
             using var clockInput = settings.ClockIn is null ? null : ClockInput(settings, live.Clock, live.FollowClock);
@@ -675,6 +681,20 @@ internal class SetSettings : OutputSettings
     [Description("Let the arranger give each output the part it plays best, on its first channel, using its /NOTES (transposed, folded, thinned to fit). Without it, outputs get their channels as written in the file.")]
     public bool Arrange { get; init; }
 
+    [CommandOption("--onsets <PORT>")]
+    [Description(OnsetOptions.OnsetsHelp + " Before the first song, each instrument plays a short test and any drift from its calibration is flagged (nothing is changed; run [bold]metrodom calibrate[/]).")]
+    public string? Onsets { get; init; }
+
+    [CommandOption("--onsets-on <TRIGGER>")]
+    [Description(OnsetOptions.OnHelp)]
+    public string? OnsetsOn { get; init; }
+
+    [CommandOption("--onset-latency <MS>")]
+    [Description(OnsetOptions.LatencyHelp)]
+    public double? OnsetLatency { get; init; }
+
+    public OnsetSource? OnsetSource => OnsetOptions.Source(Onsets, OnsetsOn, OnsetLatency);
+
     [CommandOption("--tap <PORT>")]
     [Description("MIDI input that taps the tempo, e.g. a foot pedal or pad (index, name or part of a name from [bold]metrodom devices[/]). Works alongside the Space key.")]
     public string? Tap { get; init; }
@@ -775,6 +795,11 @@ internal class SetSettings : OutputSettings
         if (Follow is not null && (Tap is not null || ClockIn is not null))
         {
             return ValidationResult.Error("--follow sets the tempo from the player; drop --tap/--clock-in.");
+        }
+
+        if (OnsetOptions.Validate(Onsets, OnsetsOn, OnsetLatency) is { } onsetError)
+        {
+            return ValidationResult.Error(onsetError);
         }
 
         if (!TapTrigger.TryParse(FollowOn, out _, out var followError))

@@ -23,8 +23,10 @@ metrodom serve ~/songs --api 7890 --no-mdns                         # this compu
 3. Restores the songs that were still to play (those still in the library).
 4. Opens the band as `play` does, starts the API on `0.0.0.0:7890` (or `--api`), prints the
    owner's pairing link and, in a terminal, its QR code.
-5. Advertises itself over mDNS unless the API is loopback-only or `--no-mdns`.
-6. Waits for start before the first song, whatever the policy: a box that just booted (or
+5. With `--onsets PORT`, runs the [latency quick check](calibration.md) on every instrument and
+   flags drift (in the remote and the messages); it never blocks the set.
+6. Advertises itself over mDNS unless the API is loopback-only or `--no-mdns`.
+7. Waits for start before the first song, whatever the policy: a box that just booted (or
    rebooted) never starts the band by itself. With an empty queue it waits for songs.
 
 ## The set

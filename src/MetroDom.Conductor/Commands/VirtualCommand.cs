@@ -31,13 +31,35 @@ internal sealed class VirtualCommand : Command<VirtualCommand.Settings>
         [Description("A virtual instrument, NAME[[=CHANNELS]]@LATENCY_MS[[/NOTES]], repeatable (e.g. [bold]-i xylo=1@10 -i drums=10@35[/]). It only listens on its channels. Default: xylo on every channel but 10 at 10 ms, drums on 10 at 35 ms.")]
         public string[]? Instruments { get; init; }
 
+        [CommandOption("--onsets")]
+        [Description("Also create a [bold]MetroDom onsets[/] port that sends a Note On whenever a virtual instrument would be heard, like a piezo trigger or mic would: point [bold]calibrate --onsets[/] or [bold]play --onsets[/] at it.")]
+        public bool Onsets { get; init; }
+
+        [CommandOption("--drift <MS>")]
+        [Description("Strike this much later (or earlier, negative) than each instrument's profile says, to try the drift check. Default 0.")]
+        public double Drift { get; init; }
+
+        [CommandOption("--jitter <MS>")]
+        [Description("Each strike lands up to ± this much off its latency (random). Default 0.")]
+        public double Jitter { get; init; }
+
         public IReadOnlyList<InstrumentSpec> Band =>
             InstrumentSpec.TryParseAll(Instruments, out var specs, out _) && specs.Count > 0 ? specs : InstrumentSpec.DefaultBand;
 
-        public override ValidationResult Validate() =>
-            InstrumentSpec.TryParseAll(Instruments, out _, out var error)
-                ? ValidationResult.Success()
-                : ValidationResult.Error($"--instrument: {error}");
+        public override ValidationResult Validate()
+        {
+            if (!InstrumentSpec.TryParseAll(Instruments, out _, out var error))
+            {
+                return ValidationResult.Error($"--instrument: {error}");
+            }
+
+            if (Jitter is < 0 or > 100)
+            {
+                return ValidationResult.Error("--jitter must be 0-100 ms.");
+            }
+
+            return Drift is < -100 or > 500 ? ValidationResult.Error("--drift must be -100 to 500 ms.") : ValidationResult.Success();
+        }
     }
 
     public override int Execute(CommandContext context, Settings settings, CancellationToken cancellationToken)
@@ -45,6 +67,8 @@ internal sealed class VirtualCommand : Command<VirtualCommand.Settings>
         var clock = new SystemClock();
         var console = new Lock();
         var ports = new List<IVirtualPort>();
+        IVirtualPort? onsetPort = null;
+        OnsetEmitter? emitter = null;
         using var stop = new ManualResetEventSlim();
         void OnCancel(object? sender, ConsoleCancelEventArgs e)
         {
@@ -61,11 +85,34 @@ internal sealed class VirtualCommand : Command<VirtualCommand.Settings>
         });
         try
         {
+            if (settings.Onsets)
+            {
+                onsetPort = MidiDevices.CreateVirtualInput(OnsetsPort);
+                onsetPort.Start();
+                emitter = new OnsetEmitter(onsetPort, clock);
+            }
+
+            var drift = TimeSpan.FromMilliseconds(settings.Drift);
+            var seed = 0;
             foreach (var spec in settings.Band)
             {
                 var port = MidiDevices.CreateVirtualInput($"{PortPrefix} {spec.Name}");
                 ports.Add(port);
-                Wire(port, spec, new VirtualInstrument(spec.ToProfile(), clock), clock, console);
+                var declared = spec.ToProfile();
+
+                // --drift: it plays late (or early) but still declares the old latency, like a worn mechanism.
+                var actual = declared with
+                {
+                    Latency = Max0(declared.Latency + drift),
+                    NoteLatency = declared.NoteLatency.ToDictionary(kv => kv.Key, kv => Max0(kv.Value + drift)),
+                };
+                var instrument = new VirtualInstrument(actual, clock, TimeSpan.FromMilliseconds(settings.Jitter), seed++);
+                if (emitter is not null)
+                {
+                    instrument.Struck += (_, s) => emitter.Emit(s);
+                }
+
+                Wire(port, spec, declared, instrument, clock, console);
                 port.Start();
             }
 
@@ -75,6 +122,13 @@ internal sealed class VirtualCommand : Command<VirtualCommand.Settings>
                 AnsiConsole.MarkupLine(string.Create(
                     CultureInfo.InvariantCulture,
                     $"  [green]●[/] {Markup.Escape(port.Name)}  [grey]channels {ChannelList.Format(spec.Channels)}, latency {spec.Latency.TotalMilliseconds:0.#} ms[/]"));
+            }
+
+            if (onsetPort is not null)
+            {
+                AnsiConsole.MarkupLine(string.Create(CultureInfo.InvariantCulture,
+                    $"  [green]●[/] {OnsetsPort}  [grey]a Note On per strike, when it would be heard{(settings.Drift != 0 ? $" (drift {settings.Drift:+0.#;-0.#} ms)" : "")}[/]"));
+                AnsiConsole.MarkupLine($"[grey]Try:[/] metrodom calibrate -o \"{Markup.Escape(ports[0].Name)}\" --onsets \"{OnsetsPort}\"");
             }
 
             AnsiConsole.MarkupLine($"[grey]Try:[/] metrodom play song.mid -o \"{Markup.Escape(ports[0].Name)}\"   [grey]Ctrl+C to stop.[/]");
@@ -87,16 +141,24 @@ internal sealed class VirtualCommand : Command<VirtualCommand.Settings>
             {
                 port.Dispose();
             }
+
+            emitter?.Dispose();
+            onsetPort?.Dispose();
         }
 
         Ui.Success("Virtual instruments removed.");
         return 0;
     }
 
-    private static void Wire(IVirtualPort port, InstrumentSpec spec, VirtualInstrument instrument, SystemClock clock, Lock console)
+    /// <summary>The port <c>--onsets</c> creates.</summary>
+    public const string OnsetsPort = PortPrefix + " onsets";
+
+    private static TimeSpan Max0(TimeSpan t) => t < TimeSpan.Zero ? TimeSpan.Zero : t;
+
+    private static void Wire(IVirtualPort port, InstrumentSpec spec, InstrumentProfile declared, VirtualInstrument instrument, SystemClock clock, Lock console)
     {
         var channels = spec.Channels.ToHashSet();
-        var profileJson = InstrumentProfileJson.Write(instrument.Profile);
+        var profileJson = InstrumentProfileJson.Write(declared);
         TimeSpan? lastPanic = null;
         instrument.Struck += (_, s) => Print(console, s.ReceivedAt, spec.Name, string.Create(
             CultureInfo.InvariantCulture,
@@ -162,4 +224,77 @@ internal sealed class VirtualCommand : Command<VirtualCommand.Settings>
     }
 
     private static string NoteName(int number) => Note.Get((SevenBitNumber)(byte)number).ToString();
+}
+
+/// <summary>
+/// Sends a Note On on the onsets port at the moment each strike would be heard, as a piezo
+/// trigger or a mic-to-MIDI box would. One thread, sleeping until close and spinning the last
+/// millisecond, so onsets land within about a millisecond of when they're due.
+/// </summary>
+internal sealed class OnsetEmitter : IDisposable
+{
+    private readonly IVirtualPort _port;
+    private readonly IClock _clock;
+    private readonly PriorityQueue<Strike, TimeSpan> _due = new();
+    private readonly Lock _gate = new();
+    private readonly AutoResetEvent _wake = new(false);
+    private readonly Thread _thread;
+    private volatile bool _stopping;
+
+    public OnsetEmitter(IVirtualPort port, IClock clock)
+    {
+        _port = port;
+        _clock = clock;
+        _thread = new Thread(Run) { IsBackground = true, Name = "MetroDom onsets", Priority = ThreadPriority.AboveNormal };
+        _thread.Start();
+    }
+
+    public void Emit(Strike strike)
+    {
+        lock (_gate)
+        {
+            _due.Enqueue(strike, strike.SoundsAt);
+        }
+
+        _wake.Set();
+    }
+
+    private void Run()
+    {
+        while (!_stopping)
+        {
+            Strike? next = null;
+            TimeSpan wait;
+            lock (_gate)
+            {
+                wait = _due.TryPeek(out var strike, out var at) ? at - _clock.Now : Timeout.InfiniteTimeSpan;
+                if (wait != Timeout.InfiniteTimeSpan && wait <= TimeSpan.Zero)
+                {
+                    next = _due.Dequeue();
+                }
+            }
+
+            if (next is not null)
+            {
+                _port.Send(new NoteOnEvent((SevenBitNumber)next.Note, (SevenBitNumber)Math.Clamp(next.Velocity, 1, 127)) { Channel = (FourBitNumber)next.Channel });
+                _port.Send(new NoteOffEvent((SevenBitNumber)next.Note, SevenBitNumber.MinValue) { Channel = (FourBitNumber)next.Channel });
+            }
+            else if (wait == Timeout.InfiniteTimeSpan || wait > TimeSpan.FromMilliseconds(2))
+            {
+                _wake.WaitOne(wait == Timeout.InfiniteTimeSpan ? wait : wait - TimeSpan.FromMilliseconds(1));
+            }
+            else
+            {
+                Thread.SpinWait(50);
+            }
+        }
+    }
+
+    public void Dispose()
+    {
+        _stopping = true;
+        _wake.Set();
+        _thread.Join(TimeSpan.FromSeconds(1));
+        _wake.Dispose();
+    }
 }

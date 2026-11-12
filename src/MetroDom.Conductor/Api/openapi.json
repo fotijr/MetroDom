@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "MetroDom Control API",
-    "version": "0.3.0",
+    "version": "0.4.0",
     "summary": "The one front door for apps that control a MetroDom band (ADR 0003).",
     "description": "HTTP + JSON on the local network. Every path except this spec needs `Authorization: Bearer <token>`: the token the Conductor shows when it starts (or METRODOM_API_TOKEN). The token the Conductor shows is the owner's; the owner hands out operator and guest tokens that expire, and the policy's roles say what each may do (each operation's `x-metrodom-grant`; a 403 otherwise). v0 serves a running `metrodom play` set or the `metrodom serve` service (which adds a library to queue from). Safety lives below the API: no request can bypass the safety governor. See docs/references/control-api.md.",
     "license": { "name": "MIT", "identifier": "MIT" }
@@ -458,7 +458,17 @@
           "channels": { "type": "array", "items": { "type": "integer", "minimum": 1, "maximum": 16 } },
           "latencyMs": { "type": "number", "description": "Largest latency of any note (what the scheduler plans with)." },
           "notes": { "type": ["array", "null"], "items": { "type": "integer", "minimum": 0, "maximum": 127 }, "description": "Playable notes, or null for any." },
-          "connected": { "type": "boolean" }
+          "connected": { "type": "boolean" },
+          "latencyCheck": {
+            "type": ["object", "null"],
+            "description": "The boot latency check (play/serve --onsets), or null if none ran. Flags drift; never changes latencies.",
+            "required": ["status", "silentNotes"],
+            "properties": {
+              "status": { "type": "string", "enum": ["ok", "drifted", "partial", "silent"] },
+              "worstDriftMs": { "type": ["number", "null"], "description": "Measured minus stored latency of the note furthest off." },
+              "silentNotes": { "type": "array", "items": { "type": "integer" }, "description": "Notes struck but never heard." }
+            }
+          }
         }
       }
     }

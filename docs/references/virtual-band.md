@@ -41,6 +41,11 @@ takes the profile's `midi.channel` unless `=CHANNELS` says otherwise; a missing 
 a usage error naming it. Default band (roadmap S1): `xylo` on every channel except 10 at 10 ms,
 `drums` on 10 at 35 ms.
 
+`virtual --onsets` adds a `MetroDom onsets` port that sends a Note On whenever a strike would be
+heard, standing in for a piezo or mic ([calibration](calibration.md)). `--drift MS` makes every
+instrument strike that much later than its profile says, to try the boot check, and `--jitter MS`
+scatters strikes randomly.
+
 ## Arranging a song onto the band
 
 Real robots have few notes, so a song's channels rarely line up with them. `--arrange` (on

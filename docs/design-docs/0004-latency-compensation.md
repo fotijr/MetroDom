@@ -30,6 +30,7 @@ and velocity. Sending notes "on time" makes a band of robots sound sloppy.
 ## Open questions
 - ~~Calibration UX for a rental customer (automatic on boot?)~~ A quick check on boot plays a
   short test, compares against the stored latencies and flags drift. Full per-note calibration
-  runs on demand (owner, 2026-11-11).
+  runs on demand (owner, 2026-11-11). Built in plan 0004 S5 ([calibration](../references/calibration.md)):
+  onsets come in as MIDI Note Ons from a trigger or mic-to-MIDI input.
 - ~~Target jitter budget?~~ ≤ 5 ms between instruments for pre-composed material (owner,
   2026-11-11), as in [RELIABILITY.md](../RELIABILITY.md).

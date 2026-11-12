@@ -49,6 +49,9 @@ Fields:
 - The Conductor reads profile files from the command line where a latency would go
   (`-i xylo@profile.json`, `-o "PORT@profile.json"`, [virtual band](virtual-band.md)); a file
   beats what the instrument sends.
+- Measured beats declared: latencies from `metrodom calibrate` ([calibration](calibration.md))
+  replace the profile's `latencyMs` values on this rig, unless the command line gives a latency
+  or profile file.
 - The arranger uses `polyphony` (with `pulseMs`/`maxOnMs` as how long each note holds an
   actuator) so it never hands an instrument more notes at once than it can strike.
 - Not read by the Conductor yet: `midi.identity`, `velocity`, `safety.watchdogMs`, `firmwareVersion`.

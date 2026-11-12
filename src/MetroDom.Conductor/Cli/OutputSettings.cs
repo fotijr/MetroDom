@@ -24,6 +24,10 @@ internal class OutputSettings : CommandSettings
     [Description("Where remembered assignments live (see [bold]metrodom devices --assign[/]). Default: $METRODOM_ASSIGNMENTS, else metrodom/assignments.json in your app data folder. Without [bold]-o[/], the band is every assigned device plus every MetroDom instrument found.")]
     public string? Assignments { get; init; }
 
+    [CommandOption("--calibrations <FILE>")]
+    [Description("Where latencies measured by [bold]metrodom calibrate[/] live. Default: $METRODOM_CALIBRATIONS, else metrodom/calibrations.json in your app data folder. An output's measured latencies beat the ones it declares, unless [bold]-o[/] gives a latency or profile file.")]
+    public string? Calibrations { get; init; }
+
     [CommandOption("-m|--mute <CHANNELS>")]
     [Description("Channels to mute, 1-16, comma separated, ranges allowed (e.g. 10 for drums, 1-9).")]
     public string? Mute { get; init; }

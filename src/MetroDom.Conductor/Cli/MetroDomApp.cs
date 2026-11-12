@@ -38,6 +38,10 @@ internal static class MetroDomApp
                 .WithDescription("Run the Conductor as a service: a song library, a queue people edit from their phones, the remote always on, tokens and queue kept across restarts, mDNS on the LAN.")
                 .WithExample("serve", "~/songs")
                 .WithExample("serve", "~/songs", "--policy", "policies/crowd-jukebox.json", "-o", "\"MetroDom xylo\"");
+            config.AddCommand<CalibrateCommand>("calibrate")
+                .WithDescription("Measure each instrument's latency note by note from an onset input (a piezo trigger, a mic-to-MIDI box) and keep it for play, serve and route.")
+                .WithExample("calibrate", "-o", "\"MetroDom xylo\"", "--onsets", "\"trigger\"")
+                .WithExample("calibrate", "--onsets", "\"MetroDom onsets\"", "--quick");
             config.AddCommand<RouteCommand>("route")
                 .WithDescription("Route a live controller to an output. Ctrl+C stops and sends panic.")
                 .WithExample("route", "--input", "keystation", "--output", "1");
