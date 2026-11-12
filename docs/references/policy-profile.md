@@ -8,7 +8,7 @@ one architecture, many modes. Sections, all optional, each defaulting to the saf
 | `controls` | Foot-controller mapping ([ADR 0012](../design-docs/0012-humans-in-the-band.md) §4) | `play --control` |
 | `limits` | Velocity cap, notes per second, quiet hours for every instrument | The safety governors in `play` and `route` |
 | `roles` | What operators and guests may do over the Control API | The Control API, every route ([SECURITY](../SECURITY.md)) |
-| `queue` | The jukebox's rules for guest requests | Read and checked now; enforced once the queue takes requests (plan 0004 S3, S6) |
+| `queue` | Whether a song added to an empty queue starts by itself; the jukebox's rules for guest requests | `autoplay` enforced by `serve`; request rules read and checked, enforced once guests can request (plan 0004 S6) |
 | `sessions` | How long handed-out tokens may last | `POST /tokens` |
 | `lights` | What the venue lets the lights do ([ADR 0011](../design-docs/0011-visuals-are-part-of-the-band.md) §5) | `play --lights`, `lights` |
 
@@ -111,12 +111,13 @@ tokens from the owner (`POST /tokens`), and the policy lists what each may do:
 
 | Grant | Routes |
 | --- | --- |
-| `view` | `GET /state`, `/queue`, `/instruments`, `/stream` |
+| `view` | `GET /state`, `/queue`, `/library`, `/instruments`, `/stream` |
 | `transport` | `POST /transport/start`, `/stop`, `/next` |
 | `tempo` | `POST /tempo`, `/tap` |
 | `sections` | `POST /sections/vamp`, `/outro` |
 | `panic` | `POST /panic` |
-| `queue.request`, `queue.vote`, `queue.edit` | None yet (plan 0004 S3, S6) |
+| `queue.edit` | `POST /queue`, `POST /queue/{id}/move`, `DELETE /queue/{id}` |
+| `queue.request`, `queue.vote` | None yet (plan 0004 S6) |
 | `tokens` | `GET`/`POST /tokens`, `DELETE /tokens/{id}`: the owner's alone |
 
 Rules that hold whatever a file says ([SECURITY](../SECURITY.md)), refused with a reason:
@@ -125,16 +126,21 @@ Rules that hold whatever a file says ([SECURITY](../SECURITY.md)), refused with 
 - Nobody but the owner has `tokens`. `roles.owner` can't be set.
 
 Without a `roles` section: operators get `view`, `transport`, `tempo`, `sections`, `panic` (what
-every token could do in API v0) and guests get nothing.
+every token could do in API v0) and `queue.edit` (a bandmate reorders the set), and guests get
+nothing.
 
 ## Queue
 
 ```json
-"queue": { "requests": true, "votes": true, "maxPerGuest": 2, "cooldownSeconds": 300 }
+"queue": { "requests": true, "votes": true, "maxPerGuest": 2, "cooldownSeconds": 300, "autoplay": true }
 ```
 
-`requests` and `votes` (default false), `maxPerGuest` (1-20, default 1) and `cooldownSeconds`
-(0-3600, default 300). Checked when the file is read; enforced once the queue takes requests.
+- `autoplay` (default false): when the queue has run dry and someone queues a song, the band
+  plays it without anyone pressing start (a jukebox). Without it the band waits for start (a
+  band, a rental). Never after a restart: `serve` always waits for start before its first song,
+  so a box that rebooted doesn't start playing by itself.
+- `requests` and `votes` (default false), `maxPerGuest` (1-20, default 1) and `cooldownSeconds`
+  (0-3600, default 300). Checked when the file is read; enforced once guests can request (S6).
 
 ## Sessions
 
@@ -151,9 +157,10 @@ token request without `hours` gets this. A rental's should cover the booking; a 
 | --- | --- | --- | --- |
 | Pedals | All six | Start/stop, next, panic | None |
 | Limits | None | 16 notes/s, silent 01:00-10:00 | Velocity 100, 16 notes/s, silent 22:00-08:00 |
-| Operator | Default | Default + `queue.edit` | Default + `queue.edit` |
+| Operator | Default | Default | Default |
 | Guest | Nothing | View, request, vote | View, request |
 | Requests | Closed | 2 each, 5 min apart, votes | 1 each, 10 min apart |
+| Autoplay | No | Yes | No |
 | Tokens last | 24 h | 12 h | 72 h |
 | Lights | Defaults | Defaults | 80%, 30% from 22:00 |
 

@@ -343,7 +343,8 @@ public sealed record PolicyProfile(string Mode, IReadOnlyDictionary<ControlActio
             obj["requests"]?.GetValue<bool>() ?? false,
             obj["votes"]?.GetValue<bool>() ?? false,
             maxPerGuest,
-            TimeSpan.FromSeconds(cooldown));
+            TimeSpan.FromSeconds(cooldown),
+            obj["autoplay"]?.GetValue<bool>() ?? false);
         return true;
     }
 
@@ -457,6 +458,7 @@ public sealed record PolicyProfile(string Mode, IReadOnlyDictionary<ControlActio
                 ["votes"] = Queue.Votes,
                 ["maxPerGuest"] = Queue.MaxPerGuest,
                 ["cooldownSeconds"] = Queue.Cooldown.TotalSeconds,
+                ["autoplay"] = Queue.Autoplay,
             };
         }
 

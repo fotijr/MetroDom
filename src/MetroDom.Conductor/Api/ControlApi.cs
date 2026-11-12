@@ -3,7 +3,9 @@ using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using MetroDom.Conductor.Commands;
+using MetroDom.Conductor.Service;
 using MetroDom.Core.Policy;
+using MetroDom.Core.Setlist;
 using MetroDom.Core.Timing;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -95,6 +97,15 @@ internal sealed class ControlApi : IAsyncDisposable
     /// <summary>The checked-in JSON Schema of the stream's events.</summary>
     public static string EventSchema() => Resource("events.schema.json");
 
+    private static byte[] ResourceBytes(string name)
+    {
+        using var stream = typeof(ControlApi).Assembly.GetManifestResourceStream($"MetroDom.Conductor.Api.{name}")
+            ?? throw new InvalidOperationException($"{name} is not embedded.");
+        using var bytes = new MemoryStream();
+        stream.CopyTo(bytes);
+        return bytes.ToArray();
+    }
+
     private static string Resource(string name)
     {
         using var stream = typeof(ControlApi).Assembly.GetManifestResourceStream($"MetroDom.Conductor.Api.{name}")
@@ -111,8 +122,8 @@ internal sealed class ControlApi : IAsyncDisposable
     public static ControlApi Start(ApiEndpoint endpoint, string ownerToken, LiveControl live, Session session) =>
         Start(endpoint, new TokenStore(ownerToken), PolicyProfile.LiveBand, live, session);
 
-    /// <summary>Starts listening. Throws if the port is taken.</summary>
-    public static ControlApi Start(ApiEndpoint endpoint, TokenStore tokens, PolicyProfile policy, LiveControl live, Session session)
+    /// <summary>Starts listening. With a <paramref name="library"/> (serve), songs can be queued from it. Throws if the port is taken.</summary>
+    public static ControlApi Start(ApiEndpoint endpoint, TokenStore tokens, PolicyProfile policy, LiveControl live, Session session, SongLibrary? library = null)
     {
         ArgumentNullException.ThrowIfNull(endpoint);
         ArgumentNullException.ThrowIfNull(tokens);
@@ -131,7 +142,7 @@ internal sealed class ControlApi : IAsyncDisposable
             options.AddServerHeader = false;
         });
         var app = builder.Build();
-        Map(app, tokens, policy, live, session);
+        Map(app, endpoint, tokens, policy, live, session, library);
         app.StartAsync().GetAwaiter().GetResult();
 
         var bound = app.Urls.Select(u => new Uri(u)).First();
@@ -172,7 +183,7 @@ internal sealed class ControlApi : IAsyncDisposable
             .Where(r => r.Item2.StartsWith(Prefix + "/", StringComparison.Ordinal))
             .Select(r => (r.m, r.Item2[Prefix.Length..]));
 
-    internal static void Map(WebApplication app, TokenStore tokens, PolicyProfile policy, LiveControl live, Session session)
+    internal static void Map(WebApplication app, ApiEndpoint endpoint, TokenStore tokens, PolicyProfile policy, LiveControl live, Session session, SongLibrary? library)
     {
         var spec = Spec();
         var schema = EventSchema();
@@ -226,10 +237,63 @@ internal sealed class ControlApi : IAsyncDisposable
             var holder = Holder(context);
             return stream.Accept(context, () => tokens.IsValid(holder), app.Lifetime.ApplicationStopping);
         })).Needs(Grant.View);
-        guarded.MapGet("/queue", () =>
+        guarded.MapGet("/queue", () => Results.Json(Queue(live.Queue.Snapshot()))).Needs(Grant.View);
+        guarded.MapPost("/queue", (HttpContext context, QueueRequest? request) =>
         {
-            var state = live.Snapshot();
-            return Results.Json(new { current = state.Index, songs = state.Setlist.Select((title, index) => new { index, title }) });
+            if (library is null)
+            {
+                return Conflict("This set plays the files it was started with: run metrodom serve to queue songs from a library.");
+            }
+
+            if (string.IsNullOrWhiteSpace(request?.Song))
+            {
+                return BadRequest("song is required: a library id from GET /library.");
+            }
+
+            if (library.Find(request.Song) is not { } song)
+            {
+                return NotFound($"No song \"{request.Song}\" in the library: GET {Prefix}/library lists them.");
+            }
+
+            var holder = Holder(context);
+            if (!live.Queue.TryAdd(song.Id, song.Title, holder.Label ?? RolePermissions.NameOf(holder.Role), request.At, out var added, out var error))
+            {
+                return Conflict(Capitalize(error!));
+            }
+
+            session.Messages.Add($"Queued {song.Title}.");
+            return Results.Json(new { message = $"Queued {song.Title}.", song = Entry(added, live.Queue.Snapshot()) }, statusCode: StatusCodes.Status201Created);
+        }).Needs(Grant.QueueEdit);
+        guarded.MapPost("/queue/{id}/move", (string id, MoveRequest? request) =>
+        {
+            if (request?.To is not { } to)
+            {
+                return BadRequest("to is required: the index to move the song to.");
+            }
+
+            if (!live.Queue.Snapshot().Songs.Any(s => s.Id == id))
+            {
+                return NotFound($"No song {id} in the queue.");
+            }
+
+            return live.Queue.TryMove(id, to, out var error) ? Results.Json(new { message = "Moved." }) : Conflict(Capitalize(error!));
+        }).Needs(Grant.QueueEdit);
+        guarded.MapDelete("/queue/{id}", (string id) =>
+        {
+            if (live.Queue.Snapshot().Songs.FirstOrDefault(s => s.Id == id) is not { } song)
+            {
+                return NotFound($"No song {id} in the queue.");
+            }
+
+            return live.Queue.TryRemove(id, out var error) ? Results.Json(new { message = $"Took {song.Title} out of the queue." }) : Conflict(Capitalize(error!));
+        }).Needs(Grant.QueueEdit);
+        guarded.MapGet("/library", () =>
+        {
+            var songs = library?.Fresh() ?? [];
+            return Results.Json(new
+            {
+                songs = songs.Select(s => new { id = s.Id, title = s.Title, durationSeconds = Math.Round(s.Duration.TotalSeconds, 1), bpm = Math.Round(s.Bpm, 1) }),
+            });
         }).Needs(Grant.View);
         guarded.MapGet("/instruments", () => Results.Json(Instruments(session))).Needs(Grant.View);
 
@@ -296,8 +360,8 @@ internal sealed class ControlApi : IAsyncDisposable
                 return BadRequest(error!);
             }
 
-            var pairing = $"{context.Request.Scheme}://{context.Request.Host}/#token={Uri.EscapeDataString(secret)}";
-            return Results.Json(new { token = secret, pairingUrl = pairing, holder = Describe(holder) }, statusCode: StatusCodes.Status201Created);
+            var pairing = $"{PairingRoot(context, endpoint)}#token={Uri.EscapeDataString(secret)}";
+            return Results.Json(new { token = secret, pairingUrl = pairing, pairingQr = PairingQr.Svg(pairing), holder = Describe(holder) }, statusCode: StatusCodes.Status201Created);
         }).Needs(Grant.Tokens);
         guarded.MapDelete("/tokens/{id}", (string id) => tokens.Revoke(id)
             ? Results.Json(new { message = $"Token {id} revoked." })
@@ -307,6 +371,36 @@ internal sealed class ControlApi : IAsyncDisposable
     private const string HolderKey = "metrodom.holder";
 
     private static TokenHolder Holder(HttpContext context) => (TokenHolder)context.Items[HolderKey]!;
+
+    /// <summary>
+    /// Where a phone should open the remote: the address the owner used, unless that's this
+    /// computer's loopback while the API is on the LAN, which no guest's phone could reach.
+    /// </summary>
+    private static string PairingRoot(HttpContext context, ApiEndpoint endpoint)
+    {
+        var host = context.Request.Host;
+        var loopback = host.Host is "localhost" || (IPAddress.TryParse(host.Host.Trim('[', ']'), out var ip) && IPAddress.IsLoopback(ip));
+        return loopback && !endpoint.IsLoopback
+            ? PairingUrl(new Uri($"http://localhost:{host.Port ?? endpoint.Port}/"), endpoint, null).ToString()
+            : $"{context.Request.Scheme}://{host}/";
+    }
+
+    /// <summary>The queue as the API shows it (GET /queue, stream events). Never file paths.</summary>
+    internal static object Queue(QueueSnapshot queue) => new
+    {
+        current = queue.Current,
+        editableFrom = queue.EditableFrom,
+        version = queue.Version,
+        songs = queue.Songs.Select(s => Entry(s, queue)),
+    };
+
+    private static object Entry(QueuedSong song, QueueSnapshot queue)
+    {
+        var index = queue.Songs.ToList().FindIndex(s => s.Id == song.Id);
+        return new { index, id = song.Id, title = song.Title, addedBy = song.AddedBy, editable = index >= queue.EditableFrom };
+    }
+
+    private static string Capitalize(string text) => text.Length == 0 ? text : char.ToUpperInvariant(text[0]) + text[1..];
 
     private static object Describe(TokenHolder holder) => new
     {
@@ -326,22 +420,29 @@ internal sealed class ControlApi : IAsyncDisposable
         ("/", "web.index.html", "text/html; charset=utf-8"),
         ("/app.js", "web.app.js", "text/javascript; charset=utf-8"),
         ("/app.css", "web.app.css", "text/css; charset=utf-8"),
+        ("/sw.js", "web.sw.js", "text/javascript; charset=utf-8"),
+        ("/manifest.webmanifest", "web.manifest.webmanifest", "application/manifest+json"),
+        ("/icon.svg", "web.icon.svg", "image/svg+xml"),
+        ("/icon-192.png", "web.icon-192.png", "image/png"),
+        ("/icon-512.png", "web.icon-512.png", "image/png"),
     ];
 
     /// <summary>
     /// Locks the page down: only its own files and this server's API (HTTP and WebSocket), no
     /// inline script, no framing, no referrer (the token lives in a fragment and local storage).
+    /// Its manifest and service worker are its own files too; <c>blob:</c> images are the invite
+    /// QR codes the page draws from the API's reply.
     /// </summary>
     internal const string ContentSecurityPolicy =
-        "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; " +
-        "base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+        "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' blob:; " +
+        "manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 
     /// <summary>Serves the web remote at <c>/</c>. Public: it holds no secrets, and every call it makes needs the token.</summary>
     private static void MapWebApp(WebApplication app)
     {
         foreach (var (path, resource, contentType) in WebFiles)
         {
-            var bytes = Encoding.UTF8.GetBytes(Resource(resource));
+            var bytes = ResourceBytes(resource);
             app.MapGet(path, (HttpContext context) =>
             {
                 var headers = context.Response.Headers;
@@ -427,6 +528,12 @@ internal sealed class ControlApi : IAsyncDisposable
     private static IResult Accepted(string message) => Results.Json(new { message }, statusCode: StatusCodes.Status202Accepted);
 
     private static IResult Conflict(string error) => Results.Json(new { error }, statusCode: StatusCodes.Status409Conflict);
+
+    private static IResult NotFound(string error) => Results.Json(new { error }, statusCode: StatusCodes.Status404NotFound);
+
+    private sealed record QueueRequest(string? Song, int? At);
+
+    private sealed record MoveRequest(int? To);
 
     private sealed record TempoRequest(double? Bpm);
 

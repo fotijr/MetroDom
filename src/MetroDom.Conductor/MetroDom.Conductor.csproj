@@ -13,6 +13,7 @@
     <InternalsVisibleTo Include="MetroDom.Conductor.Tests" />
     <ProjectReference Include="..\MetroDom.Core\MetroDom.Core.csproj" />
     <PackageReference Include="Melanchall.DryWetMidi" />
+    <PackageReference Include="QRCoder" />
     <PackageReference Include="Spectre.Console" />
     <PackageReference Include="Spectre.Console.Cli" />
   </ItemGroup>

@@ -18,7 +18,8 @@
     "requests": true,
     "votes": true,
     "maxPerGuest": 2,
-    "cooldownSeconds": 300
+    "cooldownSeconds": 300,
+    "autoplay": true
   },
   "sessions": { "maxTokenHours": 12 }
 }

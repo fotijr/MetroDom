@@ -9,17 +9,21 @@ also served at `/api/v0/openapi.json`, and the stream's event schema. A test fai
 ## Starting it
 
 ```bash
-metrodom play set1.mid set2.mid -o "MetroDom xylo" --api 7890          # this computer only
-METRODOM_API_TOKEN=… metrodom play song.mid -o 0 --api 0.0.0.0:7890    # the LAN, fixed token
+metrodom serve ~/songs                                                  # the service: LAN, library, saved tokens
+metrodom play set1.mid set2.mid -o "MetroDom xylo" --api 7890          # one set, this computer only
+METRODOM_API_TOKEN=… metrodom play song.mid -o 0 --api 0.0.0.0:7890    # one set, the LAN, fixed token
 ```
 
-- v0 lives inside a running `play` set: the API controls that set (its songs are the queue).
+- `metrodom serve` ([Conductor service](conductor-service.md)) runs it always, on the LAN by
+  default, with a library to queue from, tokens and the queue kept across restarts, and mDNS.
+- `play --api` serves one set: its files are the queue (they can be reordered and removed, but
+  nothing can be added: there is no library). The API ends with the set.
 - `PORT` binds loopback only. A LAN address needs `HOST:PORT` and prints a warning (plain HTTP).
 - The token shown at start is the **owner's**: `METRODOM_API_TOKEN`, or 128 random bits shown
   on the Conductor's screen (pairing by looking at the box, [SECURITY](../SECURITY.md)). Not a CLI
   flag, so it doesn't land in shell history or `ps`.
-- `--policy FILE` picks the [policy](policy-profile.md) whose `roles` and `sessions` apply.
-  Default: live-band.
+- `--policy FILE` picks the [policy](policy-profile.md) whose `roles`, `queue` and `sessions`
+  apply. Default: live-band.
 
 ## Roles and tokens
 
@@ -31,8 +35,10 @@ METRODOM_API_TOKEN=… metrodom play song.mid -o 0 --api 0.0.0.0:7890    # the L
     -d '{"role":"operator","hours":48,"label":"Smith party"}'
   ```
 
-  The reply has the secret (shown once), a `pairingUrl` for the web remote, and the holder (`id`,
-  `role`, `label`, `issuedAt`, `expiresAt`). `hours` defaults to, and may not exceed, the policy's
+  The reply has the secret (shown once), a `pairingUrl` for the web remote, `pairingQr` (that link
+  as an SVG QR code), and the holder (`id`, `role`, `label`, `issuedAt`, `expiresAt`). Asked from
+  the box itself (localhost) while the API is on the LAN, the link uses the LAN address, since
+  a guest's phone can't open localhost. `hours` defaults to, and may not exceed, the policy's
   `sessions.maxTokenHours`. Labels: at most 60 characters.
 - Each route needs one grant (`x-metrodom-grant` in the spec); the policy's `roles` say which
   role has it. A working token without it gets `403` naming the grant. A route that declares no
@@ -42,20 +48,49 @@ METRODOM_API_TOKEN=… metrodom play song.mid -o 0 --api 0.0.0.0:7890    # the L
 - `GET /tokens` lists the tokens out now (never the secrets); `DELETE /tokens/{id}` revokes one
   at once, and its open streams close with `1008` "Your token expired or was revoked." An
   expired token is `401` like a wrong one.
-- Handed-out tokens are kept only as SHA-256 hashes, compared in constant time, in memory: they
-  end with the `play` run (persisting them comes with the service, plan 0004 S3). At most 256 out.
+- Handed-out tokens are kept only as SHA-256 hashes, compared in constant time. In `play` they
+  live in memory and end with the run; `serve` saves the hashes (never the secrets) so phones stay
+  paired across restarts, and drops tokens that expired while it was off. At most 256 out.
 - Measured on macOS against a live set under `crowd-jukebox`: a guest token read `/session`,
   `/state`, `/queue` (200) and was refused panic, next, tap and both token routes (403); the web
   remote opened with its pairing link showed the band with no buttons and "table 4 · guest ·
   crowd-jukebox · until …"; revoking it sent the open page back to pairing; the owner link
   showed every control.
 
+## Queue and library
+
+- `GET /queue` is the set as an editable queue: recent history (up to 20 played songs), the song
+  playing or waiting for start (`current`), then what's coming. Each song has an `id` that stays
+  put while indexes move, its `title`, `addedBy` (the token's label, else its role) and `editable`.
+- Only what's coming can change (`index >= editableFrom`): the song up now is skipped with
+  `POST /transport/next`, never deleted, and history stays history. Edits need `queue.edit`.
+- `POST /queue {"song": "<library id>", "at": 3}` queues a song from `GET /library` (at the end
+  without `at`). Only ids from the library's last scan resolve, so a request can't name a file
+  outside the folder. `play` has no library: `409`.
+- `POST /queue/{id}/move {"to": 2}` and `DELETE /queue/{id}`: `404` for an unknown id, `409` for a
+  song that has played or is up now. At most 200 songs.
+- `GET /library` (grant `view`): `id` (its path under the library folder), `title`, length and
+  starting BPM, by title. Rescanned at most every 5 s. Never file paths on disk.
+- What happens when a queue that ran dry gets a song is the policy's `queue.autoplay`
+  ([policy profile](policy-profile.md)).
+
 ## Web remote
 
-`play --api` also serves a phone-sized remote at `/` (`src/MetroDom.Conductor/Api/web/`: plain
-HTML, CSS and JS embedded in the binary, no framework or build step). It shows the song, progress,
-section, tempo, setlist, instruments and messages live from `/stream`, and has start/stop, next,
-tempo ±2%, tap, vamp, outro and a big **PANIC** button.
+`play --api` and `serve` also serve a phone-sized remote at `/` (`src/MetroDom.Conductor/Api/web/`:
+plain HTML, CSS and JS embedded in the binary, no framework or build step). It shows the song,
+progress, section, tempo, queue, instruments and messages live from `/stream`, and has start/stop,
+next, tempo ±2%, tap, vamp, outro and a big **PANIC** button.
+
+- **Queue and library** (with `queue.edit`): ↑ ↓ ✕ on each coming song, and a searchable library
+  with an Add button per song. Everyone with `view` sees the queue and who added what.
+- **Invite** (owner): pick operator or guest, a name and hours; the page shows the QR code to scan
+  with a phone camera, a Copy link (and Share where the phone has it) button, and the tokens out
+  now with Revoke.
+- **Installable app:** a web manifest, icons and a service worker that keeps the app's own files
+  (never the API) so it opens, showing "Disconnected", when the box is out of reach. Browsers only
+  run service workers on HTTPS or localhost, so on the LAN over plain HTTP a phone gets a
+  home-screen shortcut, not an offline app (TD-27). Checked with headless Chrome on localhost:
+  worker active, shell cached, no installability errors, opened from cache with the box stopped.
 
 - **Roles:** the page asks `/session` first and shows only the buttons the token's role may use
   (panic too), with the role, label and end under the song title.
@@ -68,7 +103,7 @@ tempo ±2%, tap, vamp, outro and a big **PANIC** button.
   Opening a new pairing link in an open tab switches to it without a reload.
 - The page is public (it holds no secrets); every call it makes needs the token.
 - Locked down: `Content-Security-Policy` allows only its own files and this server (no inline
-  script or style, no framing), `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`.
+  script or style, no framing; its own manifest and worker; `blob:` images for invite QR codes), `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`.
   Song titles and messages are inserted as text, never HTML.
 - Checked in a browser against a live set: pairing, tap tempo while waiting, start, tempo +, vamp,
   panic, wrong and stale tokens, phone width (375 px, no sideways scroll), light and dark.
@@ -89,10 +124,14 @@ tempo ±2%, tap, vamp, outro and a big **PANIC** button.
 
 | Method | Path | Does | Errors |
 | --- | --- | --- | --- |
-| GET | `/` (outside `/api/v0`) | The web remote (no token), plus `/app.js`, `/app.css` | |
+| GET | `/` (outside `/api/v0`) | The web remote (no token), plus `/app.js`, `/app.css`, `/sw.js`, `/manifest.webmanifest`, icons | |
 | GET | `/openapi.json` | The spec (no token) | |
 | GET | `/state` | `waiting`/`playing`, song, position, duration, tempo (bpm, speed, pending, source), section, following | |
-| GET | `/queue` | Setlist titles and the current index | |
+| GET | `/queue` | History, current, coming: ids, titles, who added them, what's editable | |
+| POST | `/queue` `{"song":"covers/Late Night.mid","at":3}` | Queue a library song (`queue.edit`) | `400`, `404` unknown song, `409` no library, full or not editable |
+| POST | `/queue/{id}/move` `{"to":2}` | Move a coming song (`queue.edit`) | `400`, `404`, `409` |
+| DELETE | `/queue/{id}` | Take a coming song out (`queue.edit`) | `404`, `409` up now or played |
+| GET | `/library` | Songs that can be queued: id, title, length, BPM (empty in `play`) | |
 | GET | `/instruments` | Name, channels (1-16), latency, notes, connected | |
 | POST | `/transport/start` | Start the song up next | `409` if playing |
 | POST | `/transport/stop` | Stop the song | `409` if waiting |
@@ -103,7 +142,7 @@ tempo ±2%, tap, vamp, outro and a big **PANIC** button.
 | POST | `/panic` | Stop every actuator; the band then waits | |
 | GET | `/session` | This token: role, label, end, mode, grants (any working token) | |
 | GET | `/tokens` | Operator and guest tokens out now (owner) | |
-| POST | `/tokens` `{"role":"guest","hours":6,"label":"…"}` | Hand out a token: secret once, pairing link (owner) | `400` |
+| POST | `/tokens` `{"role":"guest","hours":6,"label":"…"}` | Hand out a token: secret once, pairing link and its QR code (owner) | `400` |
 | DELETE | `/tokens/{id}` | Revoke it now; its streams close (owner) | `404` |
 | GET | `/stream` | Live state over a WebSocket (below) | `400` not a WebSocket, `503` over 16 streams |
 | GET | `/events.schema.json` | JSON Schema of the stream's events (no token) | |
@@ -117,6 +156,7 @@ A WebSocket, subprotocol `metrodom.v0`, one JSON text frame per event. The contr
 | --- | --- |
 | `hello` | First, with `api: "v0"` and `positionEveryMs` |
 | `state` | On connect, then whenever anything but the position changes (same shape as `GET /state`, `positionSeconds` null) |
+| `queue` | On connect, then whenever the queue changes: a song queued, moved or removed, or the set moved on (same shape as `GET /queue`) |
 | `position` | Every 250 ms while playing: `positionSeconds`, `durationSeconds` |
 | `instruments` | On connect, then when one connects or disconnects |
 | `message` | Lines for people: vamp/outro, panic, unplug/replug, tempo set while waiting |
@@ -126,7 +166,7 @@ A WebSocket, subprotocol `metrodom.v0`, one JSON text frame per event. The contr
   subprotocol `token.<token>`. The server answers with `metrodom.v0` only, never echoing the token.
 - Clients only listen in v0; anything they send is ignored. Each stream polls the same snapshot as
   `GET /state` every 100 ms and sends only changes, so the band's threads never wait on a socket.
-- When the set ends (Ctrl+C, SIGTERM, last song) streams get close `1001` "The set has ended."
+- When the set ends (Ctrl+C, SIGTERM, the last song of a `play` set) streams get close `1001` "The set has ended."
 - Measured on macOS: a separate client with the subprotocol token saw hello, state, instruments,
   start → playing, positions, the vamp message, panic → waiting, then the close on SIGTERM.
 

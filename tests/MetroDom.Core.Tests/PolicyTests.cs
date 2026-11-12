@@ -96,6 +96,16 @@ public class PolicyTests
     }
 
     [Fact]
+    public void OnlyTheJukebox_StartsQueuedSongsByItself()
+    {
+        Assert.True(PolicyProfile.TryParse(File.ReadAllText(RepoFile("policies/crowd-jukebox.json")), out var jukebox, out _));
+        Assert.True(PolicyProfile.TryParse(File.ReadAllText(RepoFile("policies/rental.json")), out var rental, out _));
+        Assert.True(jukebox.Queue.Autoplay);
+        Assert.False(rental.Queue.Autoplay);
+        Assert.False(PolicyProfile.LiveBand.Queue.Autoplay);
+    }
+
+    [Fact]
     public void Rental_IsTheStrictest_AndOpensRequestsToGuests()
     {
         Assert.True(PolicyProfile.TryParse(File.ReadAllText(RepoFile("policies/rental.json")), out var rental, out var error), error);
@@ -115,7 +125,7 @@ public class PolicyTests
         Assert.Equal(SafetyLimits.None, live.Limits);
         Assert.Equal(QueueRules.Closed, live.Queue);
         Assert.Empty(live.Roles.For(Role.Guest));
-        Assert.Equal([Grant.View, Grant.Transport, Grant.Tempo, Grant.Sections, Grant.Panic], live.Roles.For(Role.Operator));
+        Assert.Equal([Grant.View, Grant.Transport, Grant.Tempo, Grant.Sections, Grant.Panic, Grant.QueueEdit], live.Roles.For(Role.Operator));
         Assert.True(live.Roles.Allows(Role.Owner, Grant.Tokens));
     }
 

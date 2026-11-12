@@ -18,8 +18,9 @@ internal sealed record TokenHolder(string Id, Role Role, string? Label, DateTime
 /// <summary>
 /// The Control API's tokens (docs/SECURITY.md): one owner token for the run, and operator or
 /// guest tokens the owner hands out, each ending when its booking or night does. Handed-out
-/// tokens are kept only as SHA-256 hashes and compared in constant time; they live in memory
-/// (API v0 lives inside one <c>play</c> set). Thread-safe.
+/// tokens are kept only as SHA-256 hashes and compared in constant time. In <c>play</c> they
+/// live in memory; <c>serve</c> saves them (<see cref="Export"/>, <see cref="Changed"/>) so a
+/// restart doesn't log every phone out. Thread-safe.
 /// </summary>
 internal sealed class TokenStore
 {
@@ -39,6 +40,38 @@ internal sealed class TokenStore
         ArgumentException.ThrowIfNullOrWhiteSpace(ownerToken);
         _owner = Encoding.UTF8.GetBytes(ownerToken);
         _time = time ?? TimeProvider.System;
+    }
+
+    /// <summary>After a token is handed out or revoked (not when one expires), outside the lock.</summary>
+    public event Action? Changed;
+
+    /// <summary>Handed-out tokens still working, with their hashes, for saving.</summary>
+    public IReadOnlyList<(TokenHolder Holder, byte[] Hash)> Export()
+    {
+        lock (_gate)
+        {
+            Prune();
+            return [.. _issued.Values.OrderBy(v => v.Holder.Expires)];
+        }
+    }
+
+    /// <summary>Takes back saved tokens (expired ones, owner ones and bad hashes are dropped).</summary>
+    public void Import(IEnumerable<(TokenHolder Holder, byte[] Hash)> saved)
+    {
+        ArgumentNullException.ThrowIfNull(saved);
+        lock (_gate)
+        {
+            foreach (var (holder, hash) in saved)
+            {
+                if (holder.Role != Role.Owner && holder.Expires is not null && hash.Length == SHA256.HashSizeInBytes
+                    && holder.Id != TokenHolder.OwnerId && _issued.Count < MaxIssued)
+                {
+                    _issued[holder.Id] = (holder, hash);
+                }
+            }
+
+            Prune();
+        }
     }
 
     /// <summary>The token's holder, or null if it's wrong, revoked or expired.</summary>
@@ -140,16 +173,25 @@ internal sealed class TokenStore
         }
 
         error = null;
+        Changed?.Invoke();
         return true;
     }
 
     /// <summary>Stops a handed-out token working now. False if there's no such token.</summary>
     public bool Revoke(string id)
     {
+        bool removed;
         lock (_gate)
         {
-            return _issued.Remove(id);
+            removed = _issued.Remove(id);
         }
+
+        if (removed)
+        {
+            Changed?.Invoke();
+        }
+
+        return removed;
     }
 
     /// <summary>Tokens out now, soonest to end first.</summary>

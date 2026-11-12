@@ -102,6 +102,26 @@ li.current { font-weight: 700; }
 #instruments li { display: flex; align-items: center; gap: .5rem; }
 
 form { display: grid; gap: .5rem; }
-input { font: inherit; padding: .7rem; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--fg); }
+input, select { font: inherit; padding: .7rem; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--fg); min-width: 0; }
+label { display: grid; gap: .25rem; font-size: .9rem; color: var(--muted); }
+h3 { font-size: .8rem; font-weight: 600; margin: 1rem 0 .4rem; }
+
+button.small { min-height: 2.5rem; min-width: 2.5rem; padding: .2rem .6rem; }
+
+.queue, .library, .tokens { list-style: none; padding: 0; }
+.queue { counter-reset: song; }
+.queue li, .library li, .tokens li { display: flex; align-items: center; gap: .5rem; border-bottom: 1px solid var(--line); padding: .35rem 0; }
+.queue li::before { counter-increment: song; content: counter(song) "."; color: var(--muted); min-width: 1.6rem; font-variant-numeric: tabular-nums; }
+.queue li.played { opacity: .5; }
+.song { flex: 1; min-width: 0; }
+.tools { display: flex; gap: .3rem; flex: none; }
+.library { max-height: 22rem; overflow-y: auto; }
+.search { display: flex; gap: .5rem; margin-bottom: .5rem; }
+.search input { flex: 1; }
+
+.invite { grid-template-columns: 1fr; }
+.invite-result { text-align: center; margin-top: 1rem; }
+.invite-result img { width: min(18rem, 100%); aspect-ratio: 1; background: #fff; border-radius: 8px; padding: .5rem; image-rendering: pixelated; }
+.invite-result .row { justify-content: center; }
 
 [hidden] { display: none !important; }

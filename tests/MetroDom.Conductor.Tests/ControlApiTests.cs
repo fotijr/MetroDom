@@ -279,7 +279,7 @@ public sealed class ControlApiTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task Stream_says_hello_then_state_and_instruments()
+    public async Task Stream_says_hello_then_state_queue_and_instruments()
     {
         using var socket = await Connect();
         var hello = await Next(socket);
@@ -288,6 +288,10 @@ public sealed class ControlApiTests : IAsyncDisposable
         var state = await Next(socket);
         Assert.Equal(("state", 2), (state.GetProperty("type").GetString(), state.GetProperty("seq").GetInt32()));
         Assert.Equal("waiting", state.GetProperty("state").GetProperty("state").GetString());
+
+        var queue = await Next(socket);
+        Assert.Equal("queue", queue.GetProperty("type").GetString());
+        Assert.Equal(["one.mid", "two.mid"], queue.GetProperty("queue").GetProperty("songs").EnumerateArray().Select(s => s.GetProperty("title").GetString()));
 
         var instruments = await Next(socket);
         Assert.Equal("instruments", instruments.GetProperty("type").GetString());
@@ -414,13 +418,16 @@ public sealed class ControlApiTests : IAsyncDisposable
     {
         using var schema = JsonDocument.Parse(ControlApi.EventSchema());
         var types = schema.RootElement.GetProperty("properties").GetProperty("type").GetProperty("enum").EnumerateArray().Select(t => t.GetString());
-        Assert.Equal(["hello", "state", "position", "instruments", "message"], types);
+        Assert.Equal(["hello", "state", "queue", "position", "instruments", "message"], types);
     }
 
     [Theory]
     [InlineData("/", "text/html", "<script src=\"app.js\" defer>")]
     [InlineData("/app.js", "text/javascript", "api/v0/")]
     [InlineData("/app.css", "text/css", "--panic")]
+    [InlineData("/sw.js", "text/javascript", "/api/")]
+    [InlineData("/manifest.webmanifest", "application/manifest+json", "\"display\": \"standalone\"")]
+    [InlineData("/icon.svg", "image/svg+xml", "<svg")]
     public async Task Web_remote_is_served_without_a_token_and_locked_down(string path, string contentType, string contains)
     {
         using var client = new HttpClient();
@@ -435,6 +442,26 @@ public sealed class ControlApiTests : IAsyncDisposable
         Assert.DoesNotContain("unsafe", csp, StringComparison.Ordinal);
         Assert.Equal("nosniff", response.Headers.GetValues("X-Content-Type-Options").Single());
         Assert.Equal("no-referrer", response.Headers.GetValues("Referrer-Policy").Single());
+    }
+
+    [Fact]
+    public async Task Web_remote_is_an_installable_app()
+    {
+        using var client = new HttpClient();
+        using var manifest = JsonDocument.Parse(await client.GetStringAsync(new Uri(_api.Address, "/manifest.webmanifest"), Ct));
+        var icons = manifest.RootElement.GetProperty("icons").EnumerateArray().Select(i => i.GetProperty("src").GetString()!).ToArray();
+        Assert.Contains("icon-512.png", icons);
+        foreach (var icon in icons)
+        {
+            var bytes = await client.GetByteArrayAsync(new Uri(_api.Address, "/" + icon), Ct);
+            Assert.True(icon.EndsWith(".svg", StringComparison.Ordinal) || bytes.AsSpan(0, 8).SequenceEqual((byte[])[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]), icon);
+        }
+
+        using var page = await client.GetAsync(new Uri(_api.Address, "/"), Ct);
+        var csp = page.Headers.GetValues("Content-Security-Policy").Single();
+        Assert.Contains("worker-src 'self'", csp, StringComparison.Ordinal);
+        Assert.Contains("manifest-src 'self'", csp, StringComparison.Ordinal);
+        Assert.Contains("<link rel=\"manifest\"", await page.Content.ReadAsStringAsync(Ct), StringComparison.Ordinal);
     }
 
     [Fact]

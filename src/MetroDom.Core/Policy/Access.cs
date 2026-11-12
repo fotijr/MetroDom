@@ -37,7 +37,7 @@ public enum Grant
     /// <summary>Vote on queued songs (jukebox). No route yet.</summary>
     QueueVote,
 
-    /// <summary>Add, reorder and remove queued songs directly. No route yet.</summary>
+    /// <summary>Add, reorder and remove queued songs directly (POST/DELETE /queue).</summary>
     QueueEdit,
 
     /// <summary>Hand out and revoke tokens. The owner's alone.</summary>
@@ -72,11 +72,11 @@ public sealed record RolePermissions
     public static readonly IReadOnlySet<Grant> OperatorFloor = new HashSet<Grant> { Grant.View, Grant.Panic };
 
     /// <summary>
-    /// Without a <c>roles</c> section: an operator runs the show (as every token did in API v0),
-    /// guests get nothing.
+    /// Without a <c>roles</c> section: an operator runs the show and its queue (as every token did
+    /// in API v0), guests get nothing.
     /// </summary>
     public static readonly RolePermissions Default = new(
-        new HashSet<Grant> { Grant.View, Grant.Transport, Grant.Tempo, Grant.Sections, Grant.Panic },
+        new HashSet<Grant> { Grant.View, Grant.Transport, Grant.Tempo, Grant.Sections, Grant.Panic, Grant.QueueEdit },
         new HashSet<Grant>());
 
     public RolePermissions(IReadOnlySet<Grant> operatorCan, IReadOnlySet<Grant> guestCan)
@@ -157,7 +157,11 @@ public sealed record RolePermissions
 /// <param name="Votes">Whether guests may vote queued songs up.</param>
 /// <param name="MaxPerGuest">Most songs one guest may have waiting.</param>
 /// <param name="Cooldown">Least time between one guest's requests.</param>
-public sealed record QueueRules(bool Requests, bool Votes, int MaxPerGuest, TimeSpan Cooldown)
+/// <param name="Autoplay">
+/// Whether a song added to a queue that ran dry starts by itself (a jukebox), instead of waiting
+/// for start. Never after a restart: a box that rebooted waits for someone to press start.
+/// </param>
+public sealed record QueueRules(bool Requests, bool Votes, int MaxPerGuest, TimeSpan Cooldown, bool Autoplay = false)
 {
     /// <summary>No requests, no votes: the band plays its own setlist.</summary>
     public static readonly QueueRules Closed = new(false, false, 1, TimeSpan.FromMinutes(5));

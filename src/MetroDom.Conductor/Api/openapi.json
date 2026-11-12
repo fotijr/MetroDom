@@ -2,9 +2,9 @@
   "openapi": "3.1.0",
   "info": {
     "title": "MetroDom Control API",
-    "version": "0.2.0",
+    "version": "0.3.0",
     "summary": "The one front door for apps that control a MetroDom band (ADR 0003).",
-    "description": "HTTP + JSON on the local network. Every path except this spec needs `Authorization: Bearer <token>`: the token the Conductor shows when it starts (or METRODOM_API_TOKEN). The token the Conductor shows is the owner's; the owner hands out operator and guest tokens that expire, and the policy's roles say what each may do (each operation's `x-metrodom-grant`; a 403 otherwise). v0 serves a running `metrodom play` set. Safety lives below the API: no request can bypass the safety governor. See docs/references/control-api.md.",
+    "description": "HTTP + JSON on the local network. Every path except this spec needs `Authorization: Bearer <token>`: the token the Conductor shows when it starts (or METRODOM_API_TOKEN). The token the Conductor shows is the owner's; the owner hands out operator and guest tokens that expire, and the policy's roles say what each may do (each operation's `x-metrodom-grant`; a 403 otherwise). v0 serves a running `metrodom play` set or the `metrodom serve` service (which adds a library to queue from). Safety lives below the API: no request can bypass the safety governor. See docs/references/control-api.md.",
     "license": { "name": "MIT", "identifier": "MIT" }
   },
   "servers": [{ "url": "http://127.0.0.1:7890/api/v0", "description": "Default when started with --api 7890" }],
@@ -57,9 +57,73 @@
       "get": {
         "operationId": "getQueue",
         "x-metrodom-grant": "view",
-        "summary": "The setlist and which song is playing or up next.",
+        "summary": "The queue: recent history, the song playing or up next, and what's coming.",
         "responses": {
           "200": { "description": "The queue.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Queue" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      },
+      "post": {
+        "operationId": "queueSong",
+        "x-metrodom-grant": "queue.edit",
+        "summary": "Queue a song from the library, at the end or at an index (only what's coming can change). metrodom serve only.",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/QueueRequest" } } } },
+        "responses": {
+          "201": {
+            "description": "Queued.",
+            "content": { "application/json": { "schema": { "type": "object", "required": ["message", "song"], "properties": { "message": { "type": "string" }, "song": { "$ref": "#/components/schemas/QueuedSong" } } } } }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" }
+        }
+      }
+    },
+    "/queue/{id}/move": {
+      "post": {
+        "operationId": "moveQueuedSong",
+        "x-metrodom-grant": "queue.edit",
+        "summary": "Move a coming song to another index.",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["to"], "properties": { "to": { "type": "integer", "minimum": 0 } } } } } },
+        "responses": {
+          "200": { "$ref": "#/components/responses/Message" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" }
+        }
+      }
+    },
+    "/queue/{id}": {
+      "delete": {
+        "operationId": "removeQueuedSong",
+        "x-metrodom-grant": "queue.edit",
+        "summary": "Take a coming song out of the queue (the one playing is skipped with next instead).",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": {
+          "200": { "$ref": "#/components/responses/Message" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" }
+        }
+      }
+    },
+    "/library": {
+      "get": {
+        "operationId": "getLibrary",
+        "x-metrodom-grant": "view",
+        "summary": "Songs that can be queued (metrodom serve; empty in play). Rescanned at most every few seconds.",
+        "responses": {
+          "200": {
+            "description": "The library, by title.",
+            "content": { "application/json": { "schema": { "type": "object", "required": ["songs"], "properties": { "songs": { "type": "array", "items": { "$ref": "#/components/schemas/LibrarySong" } } } } } }
+          },
           "401": { "$ref": "#/components/responses/Unauthorized" },
           "403": { "$ref": "#/components/responses/Forbidden" }
         }
@@ -247,7 +311,8 @@
       "BadRequest": { "description": "The request is malformed or out of range.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
       "Forbidden": { "description": "The token works, but its role may not do this under the policy (or the route declares no grant).", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
       "Unauthorized": { "description": "Missing, wrong, revoked or expired bearer token.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
-      "Conflict": { "description": "Not possible in the current state (e.g. stop while waiting).", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+      "Conflict": { "description": "Not possible in the current state (e.g. stop while waiting).", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+      "NotFound": { "description": "No such song or token.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
     },
     "schemas": {
       "Message": {
@@ -295,10 +360,11 @@
       },
       "IssuedToken": {
         "type": "object",
-        "required": ["token", "pairingUrl", "holder"],
+        "required": ["token", "pairingUrl", "pairingQr", "holder"],
         "properties": {
           "token": { "type": "string", "description": "The secret, shown once." },
           "pairingUrl": { "type": "string", "description": "The web remote with the token in the fragment." },
+          "pairingQr": { "type": "string", "description": "pairingUrl as a QR code (an SVG document) to show for scanning." },
           "holder": { "$ref": "#/components/schemas/TokenHolder" }
         }
       },
@@ -312,12 +378,43 @@
         "required": ["index", "title"],
         "properties": { "index": { "type": "integer", "minimum": 0 }, "title": { "type": "string" } }
       },
+      "QueuedSong": {
+        "type": "object",
+        "required": ["index", "id", "title", "editable"],
+        "properties": {
+          "index": { "type": "integer", "minimum": 0 },
+          "id": { "type": "string", "description": "Stable while queued: moves and removes name it." },
+          "title": { "type": "string" },
+          "addedBy": { "type": ["string", "null"], "description": "The label (or role) of the token that queued it; null for the set it started with." },
+          "editable": { "type": "boolean", "description": "Whether it can still be moved or removed (it's coming, not played or playing)." }
+        }
+      },
       "Queue": {
         "type": "object",
-        "required": ["current", "songs"],
+        "required": ["current", "editableFrom", "version", "songs"],
         "properties": {
-          "current": { "type": "integer", "minimum": -1, "description": "Index of the song playing or up next; -1 before the set." },
-          "songs": { "type": "array", "items": { "$ref": "#/components/schemas/Song" } }
+          "current": { "type": "integer", "minimum": -1, "description": "Index of the song playing or up next; -1 before the set; songs.length when the queue ran dry." },
+          "editableFrom": { "type": "integer", "minimum": 0, "description": "First index that can be moved, removed or inserted at." },
+          "version": { "type": "integer", "description": "Counts changes." },
+          "songs": { "type": "array", "items": { "$ref": "#/components/schemas/QueuedSong" } }
+        }
+      },
+      "QueueRequest": {
+        "type": "object",
+        "required": ["song"],
+        "properties": {
+          "song": { "type": "string", "description": "A library id from GET /library." },
+          "at": { "type": "integer", "minimum": 0, "description": "Index to insert at; the end when omitted." }
+        }
+      },
+      "LibrarySong": {
+        "type": "object",
+        "required": ["id", "title", "durationSeconds", "bpm"],
+        "properties": {
+          "id": { "type": "string", "description": "Its path under the library folder." },
+          "title": { "type": "string" },
+          "durationSeconds": { "type": "number" },
+          "bpm": { "type": "number", "description": "The file's starting tempo." }
         }
       },
       "State": {

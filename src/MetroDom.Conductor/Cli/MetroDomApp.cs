@@ -34,6 +34,10 @@ internal static class MetroDomApp
                 .WithExample("play", "song.mid", "-o", "fluid", "--mute", "10")
                 .WithExample("play", "song.mid", "-o", "\"MetroDom xylo=1-9,11-16@10\"", "-o", "\"MetroDom drums=10@35\"", "--tempo", "92")
                 .WithExample("play", "song.mid", "-o", "0", "--follow", "\"e-kit\"", "--follow-on", "note:38");
+            config.AddCommand<ServeCommand>("serve")
+                .WithDescription("Run the Conductor as a service: a song library, a queue people edit from their phones, the remote always on, tokens and queue kept across restarts, mDNS on the LAN.")
+                .WithExample("serve", "~/songs")
+                .WithExample("serve", "~/songs", "--policy", "policies/crowd-jukebox.json", "-o", "\"MetroDom xylo\"");
             config.AddCommand<RouteCommand>("route")
                 .WithDescription("Route a live controller to an output. Ctrl+C stops and sends panic.")
                 .WithExample("route", "--input", "keystation", "--output", "1");

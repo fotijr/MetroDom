@@ -2,11 +2,11 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://metrodom.dev/schemas/control-api/v0/events.json",
   "title": "MetroDom Control API v0 stream events",
-  "description": "One JSON text frame per event on GET /api/v0/stream (a WebSocket, subprotocol metrodom.v0). `seq` counts up from 1 per connection. On connect the server sends `hello`, then `state` and `instruments`. See docs/references/control-api.md.",
+  "description": "One JSON text frame per event on GET /api/v0/stream (a WebSocket, subprotocol metrodom.v0). `seq` counts up from 1 per connection. On connect the server sends `hello`, then `state`, `queue` and `instruments`. See docs/references/control-api.md.",
   "type": "object",
   "required": ["type", "seq"],
   "properties": {
-    "type": { "enum": ["hello", "state", "position", "instruments", "message"] },
+    "type": { "enum": ["hello", "state", "queue", "position", "instruments", "message"] },
     "seq": { "type": "integer", "minimum": 1 }
   },
   "oneOf": [
@@ -25,6 +25,14 @@
         "state": { "type": "object", "description": "The State schema from openapi.json." }
       },
       "required": ["state"]
+    },
+    {
+      "description": "Sent on connect and whenever the queue changes (a song queued, moved, removed, or the set moved on). Same shape as GET /queue.",
+      "properties": {
+        "type": { "const": "queue" },
+        "queue": { "type": "object", "description": "The Queue schema from openapi.json." }
+      },
+      "required": ["queue"]
     },
     {
       "description": "While playing: the song moment being heard.",

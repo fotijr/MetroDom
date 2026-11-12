@@ -32,8 +32,10 @@ each phase closes its tech-debt rows and raises its row in [QUALITY_SCORE.md](..
 - [x] Web remote shows only what the token's role may use
 
 ### Phase S3: Conductor service and PWA (TD-27)
-- [ ] Long-running service with library and editable queue, mDNS
-- [ ] Installable PWA with queue editing and a QR join code
+- [x] Long-running service with library and editable queue, mDNS (`metrodom serve`,
+      [Conductor service](../../references/conductor-service.md))
+- [x] Installable PWA with queue editing and a QR join code (offline install needs HTTPS on the
+      LAN: TD-27)
 
 ### Phase S4: Arranger (TD-21)
 - [ ] `profile.json` files, polyphony, drum-note substitution, per-piece drum seats
@@ -68,6 +70,24 @@ each phase closes its tech-debt rows and raises its row in [QUALITY_SCORE.md](..
   The enum is `Grant`, not `Permission` (the .NET analyzer reserves that suffix); files and docs
   still say permissions.
 
+- 2026-11-12: S3 shape. `serve` is `play`'s set loop (`PlayCommand.RunSet`) driven by a
+  `SetQueue` that never runs out, not a second engine: outputs, safety, policy, pedals and lights
+  stay one code path (ADR 0005). Only what's coming can be edited; the song up now is skipped
+  with next, never deleted from under the band. Songs are named by their path under the library
+  folder (stable across restarts, and only ids from the last scan resolve). A service always
+  waits for start before its first song, so a reboot never starts the band, and `queue.autoplay`
+  (crowd-jukebox only) applies only once the queue has run dry and someone adds a song. The
+  owner token is kept at rest (`0600`) because re-pairing every phone after a power blip is
+  worse than a file only the box's user can read; handed-out tokens stay hashes. mDNS is a small
+  built-in responder rather than a dependency or a call to the OS (`dns-sd`, Avahi), so it works
+  the same on macOS, Linux and Windows; it answers AAAA with NSEC because macOS otherwise waited
+  5 s per lookup. QR codes come from QRCoder (MIT), drawn as SVG for the remote and half blocks
+  for the terminal. The default operator gains `queue.edit` (a bandmate reorders the set).
+  `CA1711` is suppressed for `SetQueue`: it is a queue, and that's the word the API uses.
+
 ## Open questions
 - The shipped jukebox and rental values (limits, quiet hours, request rules, token lives) are
   guesses to try at the first party, not decisions.
+- TLS on the LAN, so phones can install the remote as an offline app: a self-signed certificate
+  phones must trust, a real one for a domain the box doesn't own, or accept the home-screen
+  shortcut. Needs a decision before the rental mode ships.

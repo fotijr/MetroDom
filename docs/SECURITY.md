@@ -20,8 +20,15 @@ guests only view, request and vote, only the owner hands out tokens.
 ## Rules
 - **Authenticate every Control API session.** A bearer token, loopback by default ([control API](references/control-api.md)). The owner's token is shown on the box; operator and guest
   tokens are handed out by the owner, end with the booking or night, and can be revoked at
-  once. Never "anyone on the Wi-Fi". Pairing links carry the token in the URL fragment; a QR code
-  for them comes with the PWA (plan 0004 S3).
+  once. Never "anyone on the Wi-Fi". Pairing links carry the token in the URL fragment; the
+  owner's remote turns each into a QR code to scan. `serve` listens on the LAN by default (the
+  box's own access point) over plain HTTP, and warns: TLS is TD-27.
+- **Secrets at rest.** `serve` keeps the owner token in `state.json` (folder `0700`, file `0600`)
+  so paired phones survive a restart; handed-out tokens are stored as SHA-256 hashes only. The
+  file is never replaced silently; deleting it re-pairs everyone ([Conductor service](references/conductor-service.md)).
+- **Say only what's needed on the LAN.** mDNS announces the service, port, API path and policy
+  mode, never a token. Clients name library songs by id; only ids from the last scan resolve, and
+  the API never shows file paths.
 - **Guests are untrusted input.** Validate and rate-limit everything: request floods, vote
   stuffing, oversized payloads, offensive free text (avoid free text where possible).
 - **No live MIDI from the network for guests.** Live note input is operator-only.

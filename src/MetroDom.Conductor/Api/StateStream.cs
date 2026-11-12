@@ -81,6 +81,7 @@ internal sealed class StateStream(LiveControl live, Session session)
             await Send(socket, new { type = "hello", seq = ++seq, api = "v0", positionEveryMs = (int)PositionEvery.TotalMilliseconds }, done.Token).ConfigureAwait(false);
             string? lastState = null;
             string? lastInstruments = null;
+            var lastQueue = -1L;
             var lastPosition = DateTime.MinValue;
             while (!done.IsCancellationRequested && socket.State == WebSocketState.Open)
             {
@@ -96,6 +97,13 @@ internal sealed class StateStream(LiveControl live, Session session)
                 {
                     lastState = state;
                     await SendRaw(socket, $"{{\"type\":\"state\",\"seq\":{++seq},\"state\":{state}}}", done.Token).ConfigureAwait(false);
+                }
+
+                var queue = live.Queue.Snapshot();
+                if (queue.Version != lastQueue)
+                {
+                    lastQueue = queue.Version;
+                    await Send(socket, new { type = "queue", seq = ++seq, queue = ControlApi.Queue(queue) }, done.Token).ConfigureAwait(false);
                 }
 
                 var instruments = JsonSerializer.Serialize(ControlApi.Instruments(session), Json);

@@ -70,7 +70,7 @@ but is polled (1 ms full-speed frames).
 | Instrument USB unplugged mid-song | Firmware watchdog silences it. Conductor drops that port's events (found within ~1 s, or at once if a send fails), song continues on others. On replug it reconnects by port name and sends panic before resuming. Built in `ResilientPorts.cs` (firmware watchdog still TD-03) |
 | Conductor crash | Firmware watchdogs silence everything. Service supervisor restarts the Conductor. Resume is optional |
 | Wi-Fi / internet loss | Playback and queue continue. Apps reconnect and resync state over WebSocket |
-| Power brownout | Instruments boot to all-off. Conductor boots to "ready, not playing" |
+| Power brownout | Instruments boot to all-off. Conductor boots to "ready, not playing": `serve` restores the queue but always waits for start before its first song, even under a policy with `queue.autoplay` |
 | (Long-term) Transport: vibration, heat, bumped connectors | Mechanisms locked for travel, strain-relieved leads, PETG/ASA prints. Self-check sweep after setup flags anything out of adjustment ([ADR 0010](design-docs/0010-road-ready-instruments.md)) |
 | Light node or fixture fails | Logged and shown in health. Music keeps playing. Panic sends lights to a steady safe look, not blackout ([ADR 0011](design-docs/0011-visuals-are-part-of-the-band.md)) |
 | Tempo tracker loses a human player (fill, pause, wrong hit) | Hold the last stable tempo, never lurch. Operator can switch to band-leads by foot ([ADR 0012](design-docs/0012-humans-in-the-band.md)) |

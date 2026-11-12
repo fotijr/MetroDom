@@ -15,6 +15,11 @@
   let retry = 0;
   let state = null;
   let duration = 0;
+  let queue = null;
+  let grants = new Set();
+  let library = [];
+  let inviteUrl = "";
+  let inviteQr = "";
   const messages = [];
 
   function storage(action, value) {
@@ -61,20 +66,36 @@
     $("band").hidden = false;
   }
 
-  async function call(path, body) {
-    const response = await fetch(new URL(path, API), {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}`, ...(body ? { "Content-Type": "application/json" } : {}) },
-      body: body ? JSON.stringify(body) : undefined,
-      cache: "no-store",
-    });
+  // One API call. Returns the reply (or null when the Conductor can't be reached or refused the token).
+  async function request(method, path, body) {
+    let response;
+    try {
+      response = await fetch(new URL(path, API), {
+        method,
+        headers: { Authorization: `Bearer ${token}`, ...(body ? { "Content-Type": "application/json" } : {}) },
+        body: body ? JSON.stringify(body) : undefined,
+        cache: "no-store",
+      });
+    } catch {
+      note("Can't reach the Conductor.");
+      return null;
+    }
     if (response.status === 401) {
       reject();
-      return;
+      return null;
     }
     const reply = await response.json().catch(() => ({}));
+    reply.ok = response.ok;
+    return reply;
+  }
+
+  // An intent: say what the Conductor answered.
+  async function call(path, body, method = "POST") {
+    const reply = await request(method, path, body);
+    if (!reply) return null;
     if (reply.message) note(reply.message);
     else if (reply.error) note(reply.error);
+    return reply;
   }
 
   async function tokenWorks() {
@@ -100,16 +121,18 @@
     }
     if (!response.ok) return true;
     const session = await response.json();
-    const grants = new Set(session.grants);
+    grants = new Set(session.grants);
     document.querySelectorAll("[data-grant]").forEach((element) => {
       element.hidden = !grants.has(element.dataset.grant);
     });
-    const until = session.expiresAt ? ` · until ${new Date(session.expiresAt).toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" })}` : "";
+    const until = session.expiresAt ? ` · until ${when(session.expiresAt)}` : "";
     $("role").textContent = `${session.label ? `${session.label} · ` : ""}${session.role} · ${session.mode}${until}`;
     if (!grants.has("view")) {
       $("status").textContent = `This ${session.role} link can't see the band under the ${session.mode} policy.`;
       return false;
     }
+    if (grants.has("queue.edit")) loadLibrary();
+    if (grants.has("tokens")) loadTokens();
     return true;
   }
 
@@ -153,6 +176,10 @@
         duration = event.durationSeconds;
         renderPosition(event.positionSeconds, event.durationSeconds);
         break;
+      case "queue":
+        queue = event.queue;
+        renderQueue();
+        break;
       case "instruments":
         renderInstruments(event.instruments);
         break;
@@ -168,7 +195,7 @@
     const s = state;
     const playing = s.state === "playing";
     $("song").textContent = s.song ? s.song.title : "No song";
-    $("status").textContent = playing ? "Playing" : "Waiting to start";
+    $("status").textContent = playing ? "Playing" : s.song ? "Waiting to start" : "The queue is empty";
     const startstop = $("startstop");
     startstop.textContent = playing ? "Stop" : "Start";
     startstop.dataset.action = playing ? "transport/stop" : "transport/start";
@@ -190,7 +217,6 @@
       : "";
     if (!playing) renderPosition(0, s.durationSeconds || 0);
     if (s.durationSeconds) duration = s.durationSeconds;
-    renderSetlist();
   }
 
   function renderPosition(position, total) {
@@ -198,20 +224,123 @@
     $("time").textContent = `${clock(position)} / ${clock(total || duration)}`;
   }
 
-  async function renderSetlist() {
-    const response = await fetch(new URL("queue", API), { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" }).catch(() => null);
-    if (!response || !response.ok) return;
-    const queue = await response.json();
-    const list = $("setlist");
-    list.replaceChildren(...queue.songs.map((song) => {
+  function button(text, label, onClick, disabled = false) {
+    const element = document.createElement("button");
+    element.type = "button";
+    element.className = "ghost small";
+    element.textContent = text;
+    element.setAttribute("aria-label", label);
+    element.disabled = disabled;
+    element.addEventListener("click", onClick);
+    return element;
+  }
+
+  // The queue from the stream: what's played (dimmed), what's up now, and what's coming (editable).
+  function renderQueue() {
+    const canEdit = grants.has("queue.edit");
+    const last = queue.songs.length - 1;
+    $("queue").replaceChildren(...queue.songs.map((song) => {
       const item = document.createElement("li");
-      item.textContent = song.title;
+      if (song.index < queue.current) item.className = "played";
       if (song.index === queue.current) {
         item.className = "current";
         item.setAttribute("aria-current", "true");
       }
+      const text = document.createElement("span");
+      text.className = "song";
+      text.textContent = song.title;
+      if (song.addedBy) {
+        const who = document.createElement("span");
+        who.className = "muted";
+        who.textContent = ` · ${song.addedBy}`;
+        text.append(who);
+      }
+      item.append(text);
+      if (canEdit && song.editable) {
+        const tools = document.createElement("span");
+        tools.className = "tools";
+        tools.append(
+          button("↑", `Move ${song.title} up`, () => call(`queue/${song.id}/move`, { to: song.index - 1 }), song.index <= queue.editableFrom),
+          button("↓", `Move ${song.title} down`, () => call(`queue/${song.id}/move`, { to: song.index + 1 }), song.index >= last),
+          button("✕", `Take ${song.title} out`, () => call(`queue/${song.id}`, null, "DELETE")),
+        );
+        item.append(tools);
+      }
       return item;
     }));
+    $("queue-empty").hidden = queue.songs.length > 0;
+  }
+
+  async function loadLibrary() {
+    const reply = await request("GET", "library");
+    if (!reply || !reply.ok) return;
+    library = reply.songs;
+    renderLibrary();
+  }
+
+  function renderLibrary() {
+    const filter = $("library-filter").value.trim().toLowerCase();
+    const shown = library.filter((song) => !filter || song.title.toLowerCase().includes(filter) || song.id.toLowerCase().includes(filter)).slice(0, 100);
+    $("library").replaceChildren(...shown.map((song) => {
+      const item = document.createElement("li");
+      const text = document.createElement("span");
+      text.className = "song";
+      text.textContent = song.title;
+      const detail = document.createElement("span");
+      detail.className = "muted";
+      detail.textContent = ` · ${clock(song.durationSeconds)} · ${Math.round(song.bpm)} BPM`;
+      text.append(detail);
+      const add = button("Add", `Queue ${song.title}`, () => call("queue", { song: song.id }));
+      add.classList.add("add");
+      item.append(text, add);
+      return item;
+    }));
+    const empty = $("library-empty");
+    empty.hidden = shown.length > 0;
+    empty.textContent = library.length === 0 ? "No songs in the library folder." : "No song matches.";
+  }
+
+  async function loadTokens() {
+    const reply = await request("GET", "tokens");
+    if (!reply || !reply.ok) return;
+    $("tokens").replaceChildren(...reply.tokens.map((holder) => {
+      const item = document.createElement("li");
+      const text = document.createElement("span");
+      text.className = "song";
+      text.textContent = `${holder.label || holder.id} · ${holder.role} · until ${when(holder.expiresAt)}`;
+      const revoke = button("Revoke", `Revoke ${holder.label || holder.id}`, async () => {
+        await call(`tokens/${holder.id}`, null, "DELETE");
+        loadTokens();
+      });
+      item.append(text, revoke);
+      return item;
+    }));
+  }
+
+  async function invite(event) {
+    event.preventDefault();
+    const hours = parseFloat($("invite-hours").value);
+    const body = { role: $("invite-role").value, label: $("invite-label").value.trim() || undefined };
+    if (hours > 0) body.hours = hours;
+    const reply = await request("POST", "tokens", body);
+    if (!reply) return;
+    if (!reply.ok) {
+      note(reply.error || "Couldn't make the invite.");
+      return;
+    }
+    inviteUrl = reply.pairingUrl;
+    if (inviteQr) URL.revokeObjectURL(inviteQr);
+    inviteQr = URL.createObjectURL(new Blob([reply.pairingQr], { type: "image/svg+xml" }));
+    $("invite-qr").src = inviteQr;
+    $("invite-who").textContent = `${reply.holder.label || "Someone"} · ${reply.holder.role} · until ${when(reply.holder.expiresAt)}. Scan with a phone camera.`;
+    $("invite-share").hidden = !navigator.share;
+    $("invite-result").hidden = false;
+    $("invite-label").value = "";
+    loadTokens();
+  }
+
+  function when(iso) {
+    return new Date(iso).toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" });
   }
 
   function renderInstruments(instruments) {
@@ -292,6 +421,24 @@
   $("vamp").addEventListener("click", () => call("sections/vamp"));
   $("outro").addEventListener("click", () => call("sections/outro"));
   $("panic").addEventListener("click", () => call("panic"));
+  $("library-filter").addEventListener("input", renderLibrary);
+  $("library-refresh").addEventListener("click", loadLibrary);
+  $("invite-form").addEventListener("submit", invite);
+  $("invite-copy").addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(inviteUrl);
+      note("Link copied.");
+    } catch {
+      window.prompt("Copy this link:", inviteUrl);
+    }
+  });
+  $("invite-share").addEventListener("click", () => navigator.share({ title: "MetroDom", url: inviteUrl }).catch(() => {}));
+
+  // Installable app: the service worker keeps the app's own files for when the box is out of
+  // reach. Browsers only allow it on https or this computer (localhost).
+  if ("serviceWorker" in navigator && window.isSecureContext) {
+    navigator.serviceWorker.register("sw.js").catch(() => {});
+  }
 
   // A new pairing link opened in this tab only changes the fragment, which doesn't reload the page.
   window.addEventListener("hashchange", () => {

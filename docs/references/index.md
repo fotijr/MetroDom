@@ -9,8 +9,9 @@ Protocol and format facts agents need while coding. Keep each file factual and t
 | [midi-identity.md](midi-identity.md) | Identity Request/Reply bytes, MetroDom's identity, `devices --identify` |
 | [midi-profile-exchange.md](midi-profile-exchange.md) | MetroDom SysEx profile request/reply, discovery step 3 |
 | [auto-band.md](auto-band.md) | `play` without `-o`, hot-plug, `devices --assign/--forget`, `metrodom.assignments/0` (discovery step 4) |
-| [control-api.md](control-api.md) | Control API v0: `play --api`, token, routes, the `openapi.json` contract |
-| [policy-profile.md](policy-profile.md) | `metrodom.policy/0`, foot-controller mapping, `play --control`, setlists |
+| [control-api.md](control-api.md) | Control API v0: tokens and roles, routes, queue and library, the web remote, the `openapi.json` contract |
+| [conductor-service.md](conductor-service.md) | `metrodom serve`: library, editable queue, `state.json`, mDNS, restart behavior |
+| [policy-profile.md](policy-profile.md) | `metrodom.policy/0`, foot-controller mapping, `play --control`, limits, roles, queue rules, sessions |
 | [beat-following.md](beat-following.md) | Human leads: `BeatTracker`, `BeatFollower`, `play --follow`, `beats`, `simulate --follow`, hit files |
 | [song-roles.md](song-roles.md) | Part roles (drums, bass, melody…), detection order, `song.roles.json`, `metrodom roles`, seats (`--seat`) |
 | [virtual-band.md](virtual-band.md) | Prototyping without hardware: virtual instruments, `simulate`, `virtual` |

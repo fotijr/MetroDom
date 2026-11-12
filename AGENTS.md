@@ -28,6 +28,7 @@ This file is a **map, not a manual**. Read the doc that matches your task, then 
 | Plan lights, LED strips, matrix displays        | [ADR 0011](docs/design-docs/0011-visuals-are-part-of-the-band.md) |
 | Prototype without hardware (virtual band)      | [docs/references/virtual-band.md](docs/references/virtual-band.md) |
 | Detect instruments or other MIDI devices        | [ADR 0007](docs/design-docs/0007-instrument-discovery.md)   |
+| Run the Conductor as a service, queue, remote   | [conductor-service.md](docs/references/conductor-service.md) |
 
 ## Repository layout
 

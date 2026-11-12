@@ -10,6 +10,7 @@ using MetroDom.Core;
 using MetroDom.Core.Arranging;
 using MetroDom.Core.Lighting;
 using MetroDom.Core.Policy;
+using MetroDom.Core.Setlist;
 using MetroDom.Core.Timing;
 using Spectre.Console;
 using Spectre.Console.Cli;
@@ -30,81 +31,11 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
     /// <summary>How often the band re-aims at a followed player between hits.</summary>
     private static readonly TimeSpan FollowTick = TimeSpan.FromMilliseconds(50);
 
-    public sealed class Settings : OutputSettings
+    public sealed class Settings : SetSettings
     {
         [CommandArgument(0, "<SONGS>")]
         [Description("Standard MIDI File(s) to play (.mid). Several make a setlist: each starts when the last ends, or on the start pedal when a controller maps one.")]
         public string[] Paths { get; init; } = [];
-
-        [CommandOption("-c|--control <PORT>")]
-        [Description("MIDI input of a foot controller (or any control surface) that drives the set: start/stop, next, tap, vamp, outro, panic, mapped by the policy (see [bold]--policy[/]). With start/stop mapped, each song waits for the pedal.")]
-        public string? Control { get; init; }
-
-        [CommandOption("-a|--arrange")]
-        [Description("Let the arranger give each output the part it plays best, on its first channel, using its /NOTES (transposed, folded, thinned to fit). Without it, outputs get their channels as written in the file.")]
-        public bool Arrange { get; init; }
-
-        [CommandOption("--tap <PORT>")]
-        [Description("MIDI input that taps the tempo, e.g. a foot pedal or pad (index, name or part of a name from [bold]metrodom devices[/]). Works alongside the Space key.")]
-        public string? Tap { get; init; }
-
-        [CommandOption("--tap-on <TRIGGER>")]
-        [Description("Which messages from [bold]--tap[/] count: [bold]any[/] (default: Note On or a pedal press), [bold]note[/][[:N]], [bold]cc[/][[:N]] (press = value ≥ 64), [bold]pc[/][[:N]], optionally @CHANNEL (e.g. [bold]cc:64[/], [bold]note:36@10[/]).")]
-        public string? TapOn { get; init; }
-
-        [CommandOption("--clock-in <PORT>")]
-        [Description("Follow the tempo of MIDI Clock from this input (a drum machine, a DAW). When the clock stops, the band holds its tempo.")]
-        public string? ClockIn { get; init; }
-
-        public TapTrigger Trigger => TapTrigger.TryParse(TapOn, out var trigger, out _) ? trigger : new TapTrigger();
-
-        [CommandOption("--follow <PORT>")]
-        [Description("Follow a human player's beat from this input (drum triggers, a pad, an e-kit): the band locks onto their tempo [bold]and[/] phase, predicts their next beats, holds tempo through a stop, and starts each song when they count in (4 steady hits). See [bold]--follow-on[/].")]
-        public string? Follow { get; init; }
-
-        [CommandOption("--follow-on <TRIGGER>")]
-        [Description("Which messages from [bold]--follow[/] are hits, as [bold]--tap-on[/] (default [bold]any[/]). E.g. [bold]note:38[/] to follow the snare only, [bold]note@10[/] for any drum.")]
-        public string? FollowOn { get; init; }
-
-        public TapTrigger FollowTrigger => TapTrigger.TryParse(FollowOn, out var trigger, out _) ? trigger : new TapTrigger();
-
-        [CommandOption("-s|--seat <ROLE>")]
-        [Description(SeatList.Help)]
-        public string[]? Seat { get; init; }
-
-        public IReadOnlyList<Core.Arranging.Seat> Seats => SeatList.TryParse(Seat, out var seats, out _) ? seats : [];
-
-        [CommandOption("--count-in <BARS>")]
-        [Description("Count in this many bars (1-8) on a real instrument before the song, first beat of each bar accented. See [bold]--click[/].")]
-        [DefaultValue(0)]
-        public int CountInBars { get; init; }
-
-        [CommandOption("--click <CHANNEL/NOTE>")]
-        [Description("What plays the count-in: a channel (1-16) and note, e.g. [bold]10/76[/] (default: woodblock on the drums channel) or [bold]1/C6[/]. The output on that channel strikes it, through the safety governor.")]
-        public string? Click { get; init; }
-
-        public (int Channel, int Note) ClickNote => TryParseClick(Click, out var click, out _) ? click : (9, 76);
-
-        [CommandOption("--api <ADDRESS>")]
-        [Description("Serve the Control API (HTTP + JSON at /api/v0) for apps: [bold]PORT[/] on this computer only (e.g. [bold]7890[/]) or [bold]HOST:PORT[/] (e.g. [bold]0.0.0.0:7890[/] for the LAN). The token shown at start (or METRODOM_API_TOKEN) is the owner's; the owner hands out expiring operator and guest tokens, and the policy's [bold]roles[/] say what each may do.")]
-        public string? Api { get; init; }
-
-        public ApiEndpoint? ApiAt => Api is not null && MetroDom.Conductor.Api.ApiEndpoint.TryParse(Api, out var endpoint, out _) ? endpoint : null;
-
-        [CommandOption("--lights <RIG>")]
-        [Description("Light profile (metrodom.light-profile/0) to drive over sACN: reactive lights, each instrument's fixtures pulse in its color with its notes, timed to land with the sound. Panic and the end of the set show the rig's safe look. Check a rig first with [bold]metrodom lights[/].")]
-        public string? Lights { get; init; }
-
-        [CommandOption("--lights-pad <PORT>")]
-        [Description("MIDI input for live light cues: its notes recall the rig's scenes and its master CC dims, on any channel, overriding reactive lights (a 4×4 pad grid sends notes 36-51). Needs [bold]--lights[/].")]
-        public string? LightsPad { get; init; }
-
-        public LightProfile? LightProfile =>
-            Lights is not null && File.Exists(Lights) && LightProfileJson.TryParse(File.ReadAllText(Lights), out var rig, out _) ? rig : null;
-
-        [CommandOption("-t|--tempo <BPM>")]
-        [Description("Start at this tempo instead of the file's. Tempo changes in the file scale with it.")]
-        public double? Tempo { get; init; }
 
         public override ValidationResult Validate()
         {
@@ -113,91 +44,8 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
                 return ValidationResult.Error("give at least one SONG.");
             }
 
-            if (Api is not null && !MetroDom.Conductor.Api.ApiEndpoint.TryParse(Api, out _, out var apiError))
-            {
-                return ValidationResult.Error($"--api: {apiError}");
-            }
-
-            if (Lights is not null)
-            {
-                if (!File.Exists(Lights))
-                {
-                    return ValidationResult.Error($"--lights: file not found: {Lights}");
-                }
-
-                if (!LightProfileJson.TryParse(File.ReadAllText(Lights), out _, out var lightsError))
-                {
-                    return ValidationResult.Error($"--lights: {lightsError}");
-                }
-            }
-
-            if (Paths.FirstOrDefault(p => !File.Exists(p)) is { } missing)
-            {
-                return ValidationResult.Error($"file not found: {missing}");
-            }
-
-            if (LightsPad is not null && Lights is null)
-            {
-                return ValidationResult.Error("--lights-pad needs --lights <RIG>.");
-            }
-
-            if (LightsPad is not null && (LightsPad == Control || LightsPad == Tap || LightsPad == ClockIn || LightsPad == Follow))
-            {
-                return ValidationResult.Error("--lights-pad needs a port of its own.");
-            }
-
-            if (Control is not null && (Control == Tap || Control == ClockIn || Control == Follow))
-            {
-                return ValidationResult.Error("--control and --tap/--clock-in/--follow can't share a port: map tap in the policy instead.");
-            }
-
-            if (Follow is not null && (Tap is not null || ClockIn is not null))
-            {
-                return ValidationResult.Error("--follow sets the tempo from the player; drop --tap/--clock-in.");
-            }
-
-            if (!TapTrigger.TryParse(FollowOn, out _, out var followError))
-            {
-                return ValidationResult.Error($"--follow-on: {followError}");
-            }
-
-            if (FollowOn is not null && Follow is null)
-            {
-                return ValidationResult.Error("--follow-on needs --follow <PORT>.");
-            }
-
-            if (!SeatList.TryParse(Seat, out _, out var seatError))
-            {
-                return ValidationResult.Error($"--seat: {seatError}");
-            }
-
-            if (Tempo is not (null or (>= TapTempo.MinBpm and <= TapTempo.MaxBpm)))
-            {
-                return ValidationResult.Error($"--tempo must be {TapTempo.MinBpm:0}-{TapTempo.MaxBpm:0} BPM.");
-            }
-
-            if (CountInBars is < 0 or > 8)
-            {
-                return ValidationResult.Error("--count-in must be 0-8 bars.");
-            }
-
-            if (!TryParseClick(Click, out _, out var clickError))
-            {
-                return ValidationResult.Error($"--click: {clickError}");
-            }
-
-            if (!TapTrigger.TryParse(TapOn, out _, out var error))
-            {
-                return ValidationResult.Error($"--tap-on: {error}");
-            }
-
-            if (TapOn is not null && Tap is null)
-            {
-                return ValidationResult.Error("--tap-on needs --tap <PORT>.");
-            }
-
-            return Tap is not null && ClockIn is not null
-                ? ValidationResult.Error("--tap and --clock-in both set the tempo; pick one.")
+            return Paths.FirstOrDefault(p => !File.Exists(p)) is { } missing
+                ? ValidationResult.Error($"file not found: {missing}")
                 : base.Validate();
         }
     }
@@ -226,8 +74,16 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
 
     public override int Execute(CommandContext context, Settings settings, CancellationToken cancellationToken)
     {
+        var queue = new SetQueue();
+        queue.Replace(settings.Paths.Select(p => (p, System.IO.Path.GetFileName(p))));
+        return RunSet(settings, new SetOptions(queue, song => song.Song, KeepRunning: false, (live, session) => StartApi(settings, live, session)));
+    }
+
+    /// <summary>Runs a set until its queue is done (or, for <c>serve</c>, until Ctrl+C).</summary>
+    internal static int RunSet(SetSettings settings, SetOptions options)
+    {
         var policy = settings.PolicyProfile;
-        var songs = settings.Paths;
+        var queue = options.Queue;
         string output;
         string[] heldBack;
         using (var session = new Session(settings))
@@ -238,18 +94,20 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
                 session.Messages.Added += Console.WriteLine;
             }
 
-            using var live = new LiveControl(session, new SystemClock());
+            using var live = new LiveControl(session, new SystemClock(), queue);
             using var tapInput = settings.Tap is null ? null : TapInput(settings, live.Tap);
             using var clockInput = settings.ClockIn is null ? null : ClockInput(settings, live.Clock, live.FollowClock);
             using var followInput = settings.Follow is null ? null : FollowInput(settings, live.Beat);
             using var controlInput = settings.Control is null ? null : ControlInput(settings.Control, policy, live.Control);
             var startPedal = controlInput is not null && policy.Controls.ContainsKey(ControlAction.StartStop);
             var following = followInput is not null;
-            var canRestart = startPedal || following || Ui.IsInteractive;
-            var wait = startPedal || following;
+            var canRestart = options.KeepRunning || startPedal || following || Ui.IsInteractive;
+
+            // A service always waits for start before its first song, even with autoplay: a box
+            // that just booted (or rebooted) never starts the band by itself.
+            var wait = startPedal || following || options.KeepRunning;
             var inputs = TempoFrom(tapInput, clockInput, followInput) + (controlInput is null ? "" : $" · controls from {controlInput.Name}");
-            live.UseSetlist([.. songs.Select((_, i) => SongTitle(songs, i))]);
-            using var api = StartApi(settings, live, session);
+            using var api = options.StartApi(live, session);
             using var lights = StartLights(settings, session, live);
             using var padInput = lights is null || settings.LightsPad is null ? null : PadInput(settings.LightsPad, lights);
             if (lights is not null)
@@ -258,23 +116,44 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
             }
 
             session.WatchForDevices(MidiDevices.Backend.Value);
-            if (api is not null)
+            if (api is ApiHandle handle)
             {
-                inputs += $" · API {api.Address}";
+                inputs += $" · API {handle.Address}";
             }
 
-            for (var i = 0; i < songs.Length && !session.IsStopping;)
+            live.Cue(0);
+            var over = false;
+            while (!over && !session.IsStopping)
             {
-                live.Cue(i);
+                if (queue.Now is not { } entry)
+                {
+                    if (!options.KeepRunning || !WaitForSongs(session, live))
+                    {
+                        break;
+                    }
+
+                    // Someone queued a song: a jukebox plays it, a band waits for start.
+                    wait = startPedal || following || !policy.Queue.Autoplay;
+                    continue;
+                }
+
+                var title = SongTitle(entry, queue.Snapshot(), options.KeepRunning);
+                if (options.Resolve(entry) is not { } path || !File.Exists(path))
+                {
+                    session.Messages.Add($"Skipping {entry.Title}: it's no longer in the library.");
+                    queue.Advance();
+                    continue;
+                }
+
                 if (wait)
                 {
                     live.Begin(null);
                     if (following)
                     {
-                        live.ListenForBeat(settings.Tempo ?? FileBpm(MidiFile.Read(songs[i]).GetTempoMap(), TimeSpan.Zero));
+                        live.ListenForBeat(settings.Tempo ?? FileBpm(MidiFile.Read(path).GetTempoMap(), TimeSpan.Zero));
                     }
 
-                    var signal = WaitForStart(session, live, songs, i, policy, controlInput, followInput);
+                    var signal = WaitForStart(session, live, title, policy, controlInput, followInput, remote: api is not null);
                     if (signal is null)
                     {
                         break; // Ctrl+C
@@ -282,38 +161,38 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
 
                     if (signal == LiveSignal.Next)
                     {
-                        i++;
+                        queue.Advance();
                         continue;
                     }
                 }
 
                 // Hot-plugged devices join here, between songs, so the scheduler plans for their latency.
                 session.AdmitPending();
-                var end = PlaySong(session, live, settings, songs, i, inputs, lights);
+                var set = queue.Snapshot();
+                var end = PlaySong(session, live, settings, path, title, inputs, lights, hasNext: options.KeepRunning || set.Current + 1 < set.Songs.Count);
+                if (end is null)
+                {
+                    break; // Ctrl+C or the scheduler failed: stop the set.
+                }
+
                 switch (end)
                 {
-                    case null:
-                        i = songs.Length; // Ctrl+C or the scheduler failed: stop the set.
-                        break;
                     case LiveSignal.Panic:
                         wait = true; // Same song again, but only when someone says so.
-                        if (!canRestart)
-                        {
-                            i = songs.Length;
-                        }
+                        over = !canRestart;
 
                         break;
                     case LiveSignal.Stopped:
                         wait = canRestart;
-                        i++;
+                        queue.Advance();
                         break;
                     case LiveSignal.Next:
                         wait = false;
-                        i++;
+                        queue.Advance();
                         break;
                     default:
                         wait = startPedal || following;
-                        i++;
+                        queue.Advance();
                         break;
                 }
             }
@@ -331,11 +210,49 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
         return 0;
     }
 
+    /// <summary>Holds while the queue is empty (serve): until a song is queued (true) or Ctrl+C (false).</summary>
+    private static bool WaitForSongs(Session session, LiveControl live)
+    {
+        using var queued = new ManualResetEventSlim();
+        void OnChanged()
+        {
+            if (!live.Queue.IsDry)
+            {
+                queued.Set();
+            }
+        }
+
+        live.Queue.Changed += OnChanged;
+        try
+        {
+            live.Begin(null);
+            if (!live.Queue.IsDry)
+            {
+                return true;
+            }
+
+            if (!Ui.IsInteractive)
+            {
+                Console.WriteLine("The queue is empty. Waiting for songs.");
+            }
+
+            LiveStatus.Run(
+                session,
+                () => LiveStatus.Panel("⏹ The queue is empty", session, progress: null, new Markup("[grey]Add songs from the remote.[/]")),
+                until: queued);
+            return !session.IsStopping;
+        }
+        finally
+        {
+            live.Queue.Changed -= OnChanged;
+        }
+    }
+
     /// <summary>
     /// Starts the rig in reactive mode when <c>--lights</c> is given. Fixtures the profile doesn't
     /// assign are shared out across the band as it is at the start of the set.
     /// </summary>
-    private static LightShow? StartLights(Settings settings, Session session, LiveControl live)
+    private static LightShow? StartLights(SetSettings settings, Session session, LiveControl live)
     {
         if (settings.LightProfile is not { } rig)
         {
@@ -364,15 +281,19 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
     }
 
     /// <summary>Holds until start (pedal or Enter), next (skip) or Ctrl+C (null).</summary>
-    private static LiveSignal? WaitForStart(Session session, LiveControl live, string[] songs, int index, PolicyProfile policy, IMidiInputPort? controls, IMidiInputPort? follow)
+    private static LiveSignal? WaitForStart(Session session, LiveControl live, string song, PolicyProfile policy, IMidiInputPort? controls, IMidiInputPort? follow, bool remote)
     {
-        var song = SongTitle(songs, index);
         var how = controls is not null && policy.Controls.TryGetValue(ControlAction.StartStop, out var trigger)
             ? $"start pedal ({trigger} on {controls.Name})"
             : "Enter";
         if (follow is not null)
         {
             how += $" or a count-in on {follow.Name}";
+        }
+
+        if (remote)
+        {
+            how += " or Start on the remote";
         }
         if (!Ui.IsInteractive)
         {
@@ -402,13 +323,11 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
     }
 
     /// <summary>Plays one song of the set until it ends. Returns why, or null to stop the set.</summary>
-    private static LiveSignal? PlaySong(Session session, LiveControl live, Settings settings, string[] songs, int index, string inputs, LightShow? lights)
+    private static LiveSignal? PlaySong(Session session, LiveControl live, SetSettings settings, string path, string song, string inputs, LightShow? lights, bool hasNext)
     {
-        var path = songs[index];
         var roles = SongRoles.Load(path);
         var midiFile = SeatList.Apply(MidiFile.Read(path), settings.Seats, roles);
         var tempoMap = midiFile.GetTempoMap();
-        var song = SongTitle(songs, index);
         var fileBpm = FileBpm(tempoMap, TimeSpan.Zero);
         var pendingBpm = live.TakePendingBpm(out var pendingSource);
         var startBpm = pendingBpm ?? settings.Tempo;
@@ -507,7 +426,7 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
                     ? new Rows(TempoLine(scheduler, FileBpm(tempoMap, SongPosition()), TempoSource(live)), new Markup($"[grey]Section[/] {Markup.Escape(where)}"))
                     : TempoLine(scheduler, FileBpm(tempoMap, SongPosition()), TempoSource(live)),
                 "Space tap · +/- tempo · 0 file tempo" + (sections.Sections.Count > 0 ? " · V vamp · O outro" : "")
-                    + (songs.Length > 1 ? " · N next" : "") + " · Enter stop · Esc panic" + inputs),
+                    + (hasNext ? " · N next" : "") + " · Enter stop · Esc panic" + inputs),
             key =>
             {
                 if (key.Key == ConsoleKey.Enter)
@@ -556,7 +475,7 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
     }
 
     /// <summary>Starts <c>--api</c>, if asked, and says where and with which token.</summary>
-    private static ApiHandle? StartApi(Settings settings, LiveControl live, Session session)
+    private static ApiHandle? StartApi(SetSettings settings, LiveControl live, Session session)
     {
         if (settings.ApiAt is not { } endpoint)
         {
@@ -580,17 +499,26 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
     }
 
     /// <summary>Stops the API synchronously at the end of the set.</summary>
-    private sealed class ApiHandle(ControlApi api) : IDisposable
+    internal sealed class ApiHandle(ControlApi api, params IDisposable?[] alongside) : IDisposable
     {
         public Uri Address => api.Address;
 
-        public void Dispose() => api.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        public void Dispose()
+        {
+            foreach (var other in alongside)
+            {
+                other?.Dispose();
+            }
+
+            api.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        }
     }
 
-    private static string SongTitle(string[] songs, int index) =>
-        songs.Length == 1
-            ? System.IO.Path.GetFileName(songs[index])
-            : string.Create(CultureInfo.InvariantCulture, $"{System.IO.Path.GetFileName(songs[index])} ({index + 1}/{songs.Length})");
+    /// <summary>"song.mid (2/5)" for a set of files; a service's queue keeps changing, so just the title there.</summary>
+    private static string SongTitle(QueuedSong song, QueueSnapshot queue, bool service) =>
+        service || queue.Songs.Count + queue.Dropped == 1
+            ? song.Title
+            : string.Create(CultureInfo.InvariantCulture, $"{song.Title} ({queue.Current + 1 + queue.Dropped}/{queue.Songs.Count + queue.Dropped})");
 
     /// <summary>Opens <c>--control</c>: every message goes through the policy's control map.</summary>
     internal static IMidiInputPort ControlInput(string port, PolicyProfile policy, Action<ControlAction> act)
@@ -632,7 +560,7 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
             $"[grey]Tempo[/]   [bold]{fileBpm * scheduler.Speed:0.#} BPM[/] [grey](file {fileBpm:0.#} × {scheduler.Speed:0.00}{(source is null ? "" : ", " + Markup.Escape(source))}) · lookahead {scheduler.Lookahead.TotalMilliseconds:0.#} ms[/]"));
 
     /// <summary>Opens <c>--tap</c>: every message matching <c>--tap-on</c> is a tap.</summary>
-    internal static IMidiInputPort TapInput(Settings settings, Action<string> tapped)
+    internal static IMidiInputPort TapInput(SetSettings settings, Action<string> tapped)
     {
         var input = PortPicker.Input(settings.Tap, "--tap");
         Listen(input, settings.Trigger, () => tapped("pedal"));
@@ -669,7 +597,7 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
     }
 
     /// <summary>Opens <c>--clock-in</c> and reports tempo changes worth following.</summary>
-    internal static IMidiInputPort ClockInput(Settings settings, IClock clock, Action<double> tempo)
+    internal static IMidiInputPort ClockInput(SetSettings settings, IClock clock, Action<double> tempo)
     {
         var input = PortPicker.Input(settings.ClockIn, "--clock-in");
         Follow(input, new ClockTempo(), clock, tempo);
@@ -704,7 +632,7 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
         };
     }
 
-    private static string CountInNote(Settings settings) =>
+    private static string CountInNote(SetSettings settings) =>
         settings.CountInBars == 0 ? "" : string.Create(
             CultureInfo.InvariantCulture,
             $", {settings.CountInBars}-bar count-in on ch {settings.ClickNote.Channel + 1} note {settings.ClickNote.Note}");
@@ -724,7 +652,7 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
     };
 
     /// <summary>Opens <c>--follow</c>: every message matching <c>--follow-on</c> is a hit.</summary>
-    internal static IMidiInputPort FollowInput(Settings settings, Action hit)
+    internal static IMidiInputPort FollowInput(SetSettings settings, Action hit)
     {
         var input = PortPicker.Input(settings.Follow, "--follow");
         Listen(input, settings.FollowTrigger, hit);
@@ -735,3 +663,169 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
     private static string Muted(OutputSettings settings) =>
         settings.MutedChannels.Count > 0 ? $" (muted: {ChannelList.Format(settings.MutedChannels)})" : "";
 }
+
+/// <summary>Everything about running a set, shared by <c>play</c> (a list of files) and <c>serve</c> (a library and a queue).</summary>
+internal class SetSettings : OutputSettings
+{
+    [CommandOption("-c|--control <PORT>")]
+    [Description("MIDI input of a foot controller (or any control surface) that drives the set: start/stop, next, tap, vamp, outro, panic, mapped by the policy (see [bold]--policy[/]). With start/stop mapped, each song waits for the pedal.")]
+    public string? Control { get; init; }
+
+    [CommandOption("-a|--arrange")]
+    [Description("Let the arranger give each output the part it plays best, on its first channel, using its /NOTES (transposed, folded, thinned to fit). Without it, outputs get their channels as written in the file.")]
+    public bool Arrange { get; init; }
+
+    [CommandOption("--tap <PORT>")]
+    [Description("MIDI input that taps the tempo, e.g. a foot pedal or pad (index, name or part of a name from [bold]metrodom devices[/]). Works alongside the Space key.")]
+    public string? Tap { get; init; }
+
+    [CommandOption("--tap-on <TRIGGER>")]
+    [Description("Which messages from [bold]--tap[/] count: [bold]any[/] (default: Note On or a pedal press), [bold]note[/][[:N]], [bold]cc[/][[:N]] (press = value ≥ 64), [bold]pc[/][[:N]], optionally @CHANNEL (e.g. [bold]cc:64[/], [bold]note:36@10[/]).")]
+    public string? TapOn { get; init; }
+
+    [CommandOption("--clock-in <PORT>")]
+    [Description("Follow the tempo of MIDI Clock from this input (a drum machine, a DAW). When the clock stops, the band holds its tempo.")]
+    public string? ClockIn { get; init; }
+
+    public TapTrigger Trigger => TapTrigger.TryParse(TapOn, out var trigger, out _) ? trigger : new TapTrigger();
+
+    [CommandOption("--follow <PORT>")]
+    [Description("Follow a human player's beat from this input (drum triggers, a pad, an e-kit): the band locks onto their tempo [bold]and[/] phase, predicts their next beats, holds tempo through a stop, and starts each song when they count in (4 steady hits). See [bold]--follow-on[/].")]
+    public string? Follow { get; init; }
+
+    [CommandOption("--follow-on <TRIGGER>")]
+    [Description("Which messages from [bold]--follow[/] are hits, as [bold]--tap-on[/] (default [bold]any[/]). E.g. [bold]note:38[/] to follow the snare only, [bold]note@10[/] for any drum.")]
+    public string? FollowOn { get; init; }
+
+    public TapTrigger FollowTrigger => TapTrigger.TryParse(FollowOn, out var trigger, out _) ? trigger : new TapTrigger();
+
+    [CommandOption("-s|--seat <ROLE>")]
+    [Description(SeatList.Help)]
+    public string[]? Seat { get; init; }
+
+    public IReadOnlyList<Core.Arranging.Seat> Seats => SeatList.TryParse(Seat, out var seats, out _) ? seats : [];
+
+    [CommandOption("--count-in <BARS>")]
+    [Description("Count in this many bars (1-8) on a real instrument before the song, first beat of each bar accented. See [bold]--click[/].")]
+    [DefaultValue(0)]
+    public int CountInBars { get; init; }
+
+    [CommandOption("--click <CHANNEL/NOTE>")]
+    [Description("What plays the count-in: a channel (1-16) and note, e.g. [bold]10/76[/] (default: woodblock on the drums channel) or [bold]1/C6[/]. The output on that channel strikes it, through the safety governor.")]
+    public string? Click { get; init; }
+
+    public (int Channel, int Note) ClickNote => PlayCommand.TryParseClick(Click, out var click, out _) ? click : (9, 76);
+
+    [CommandOption("--api <ADDRESS>")]
+    [Description("Serve the Control API (HTTP + JSON at /api/v0) for apps: [bold]PORT[/] on this computer only (e.g. [bold]7890[/]) or [bold]HOST:PORT[/] (e.g. [bold]0.0.0.0:7890[/] for the LAN). The token shown at start (or METRODOM_API_TOKEN) is the owner's; the owner hands out expiring operator and guest tokens, and the policy's [bold]roles[/] say what each may do.")]
+    public string? Api { get; init; }
+
+    public ApiEndpoint? ApiAt => Api is not null && MetroDom.Conductor.Api.ApiEndpoint.TryParse(Api, out var endpoint, out _) ? endpoint : null;
+
+    [CommandOption("--lights <RIG>")]
+    [Description("Light profile (metrodom.light-profile/0) to drive over sACN: reactive lights, each instrument's fixtures pulse in its color with its notes, timed to land with the sound. Panic and the end of the set show the rig's safe look. Check a rig first with [bold]metrodom lights[/].")]
+    public string? Lights { get; init; }
+
+    [CommandOption("--lights-pad <PORT>")]
+    [Description("MIDI input for live light cues: its notes recall the rig's scenes and its master CC dims, on any channel, overriding reactive lights (a 4×4 pad grid sends notes 36-51). Needs [bold]--lights[/].")]
+    public string? LightsPad { get; init; }
+
+    public LightProfile? LightProfile =>
+        Lights is not null && File.Exists(Lights) && LightProfileJson.TryParse(File.ReadAllText(Lights), out var rig, out _) ? rig : null;
+
+    [CommandOption("-t|--tempo <BPM>")]
+    [Description("Start at this tempo instead of the file's. Tempo changes in the file scale with it.")]
+    public double? Tempo { get; init; }
+
+    public override ValidationResult Validate()
+    {
+        if (Api is not null && !MetroDom.Conductor.Api.ApiEndpoint.TryParse(Api, out _, out var apiError))
+        {
+            return ValidationResult.Error($"--api: {apiError}");
+        }
+
+        if (Lights is not null)
+        {
+            if (!File.Exists(Lights))
+            {
+                return ValidationResult.Error($"--lights: file not found: {Lights}");
+            }
+
+            if (!LightProfileJson.TryParse(File.ReadAllText(Lights), out _, out var lightsError))
+            {
+                return ValidationResult.Error($"--lights: {lightsError}");
+            }
+        }
+
+        if (LightsPad is not null && Lights is null)
+        {
+            return ValidationResult.Error("--lights-pad needs --lights <RIG>.");
+        }
+
+        if (LightsPad is not null && (LightsPad == Control || LightsPad == Tap || LightsPad == ClockIn || LightsPad == Follow))
+        {
+            return ValidationResult.Error("--lights-pad needs a port of its own.");
+        }
+
+        if (Control is not null && (Control == Tap || Control == ClockIn || Control == Follow))
+        {
+            return ValidationResult.Error("--control and --tap/--clock-in/--follow can't share a port: map tap in the policy instead.");
+        }
+
+        if (Follow is not null && (Tap is not null || ClockIn is not null))
+        {
+            return ValidationResult.Error("--follow sets the tempo from the player; drop --tap/--clock-in.");
+        }
+
+        if (!TapTrigger.TryParse(FollowOn, out _, out var followError))
+        {
+            return ValidationResult.Error($"--follow-on: {followError}");
+        }
+
+        if (FollowOn is not null && Follow is null)
+        {
+            return ValidationResult.Error("--follow-on needs --follow <PORT>.");
+        }
+
+        if (!SeatList.TryParse(Seat, out _, out var seatError))
+        {
+            return ValidationResult.Error($"--seat: {seatError}");
+        }
+
+        if (Tempo is not (null or (>= TapTempo.MinBpm and <= TapTempo.MaxBpm)))
+        {
+            return ValidationResult.Error($"--tempo must be {TapTempo.MinBpm:0}-{TapTempo.MaxBpm:0} BPM.");
+        }
+
+        if (CountInBars is < 0 or > 8)
+        {
+            return ValidationResult.Error("--count-in must be 0-8 bars.");
+        }
+
+        if (!PlayCommand.TryParseClick(Click, out _, out var clickError))
+        {
+            return ValidationResult.Error($"--click: {clickError}");
+        }
+
+        if (!TapTrigger.TryParse(TapOn, out _, out var error))
+        {
+            return ValidationResult.Error($"--tap-on: {error}");
+        }
+
+        if (TapOn is not null && Tap is null)
+        {
+            return ValidationResult.Error("--tap-on needs --tap <PORT>.");
+        }
+
+        return Tap is not null && ClockIn is not null
+            ? ValidationResult.Error("--tap and --clock-in both set the tempo; pick one.")
+            : base.Validate();
+    }
+}
+
+/// <summary>How a set runs: its queue, how a queued song becomes a file, and whether it outlives its songs.</summary>
+/// <param name="Queue">The set.</param>
+/// <param name="Resolve">The file to play for a queued song, or null when it's gone (skipped with a message).</param>
+/// <param name="KeepRunning">Wait for more songs when the queue runs dry (<c>serve</c>), instead of ending.</param>
+/// <param name="StartApi">Starts the Control API (and whatever goes with it) once the band is up, or returns null.</param>
+internal sealed record SetOptions(SetQueue Queue, Func<QueuedSong, string?> Resolve, bool KeepRunning, Func<LiveControl, Session, IDisposable?> StartApi);

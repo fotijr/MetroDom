@@ -5,14 +5,20 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="light dark">
   <meta name="referrer" content="no-referrer">
+  <meta name="theme-color" content="#111214">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="MetroDom">
   <title>MetroDom</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="stylesheet" href="app.css">
   <script src="app.js" defer></script>
 </head>
 <body>
   <main id="pair" hidden>
     <h1>MetroDom</h1>
-    <p>Open the link the Conductor printed, or paste its token.</p>
+    <p>Scan the QR code you were given, open the link the Conductor printed, or paste its token.</p>
     <form id="pair-form">
       <label for="token">Token</label>
       <input id="token" name="token" autocomplete="off" autocapitalize="off" spellcheck="false" required>
@@ -52,9 +58,46 @@
     <button id="panic" type="button" class="panic" data-grant="panic">PANIC</button>
 
     <section>
-      <h2>Setlist</h2>
-      <ol id="setlist"></ol>
+      <h2>Queue</h2>
+      <ol id="queue" class="queue"></ol>
+      <p id="queue-empty" class="muted" hidden>Nothing queued.</p>
     </section>
+
+    <section id="library-panel" data-grant="queue.edit" hidden>
+      <h2>Library</h2>
+      <div class="search">
+        <input id="library-filter" type="search" placeholder="Find a song" aria-label="Find a song" autocomplete="off">
+        <button id="library-refresh" type="button" class="ghost">Refresh</button>
+      </div>
+      <ul id="library" class="library"></ul>
+      <p id="library-empty" class="muted" hidden></p>
+    </section>
+
+    <section id="invite-panel" data-grant="tokens" hidden>
+      <h2>Invite</h2>
+      <form id="invite-form" class="invite">
+        <label>Who
+          <select id="invite-role">
+            <option value="guest">Guest</option>
+            <option value="operator">Operator</option>
+          </select>
+        </label>
+        <label>Name <input id="invite-label" maxlength="60" placeholder="Table 4, Sam…" autocomplete="off"></label>
+        <label>Hours <input id="invite-hours" type="number" min="0.5" step="0.5" inputmode="decimal" placeholder="policy maximum"></label>
+        <button type="submit">Make a QR code</button>
+      </form>
+      <div id="invite-result" class="invite-result" hidden>
+        <img id="invite-qr" alt="QR code to join">
+        <p id="invite-who" class="muted"></p>
+        <div class="row">
+          <button id="invite-copy" type="button" class="ghost">Copy link</button>
+          <button id="invite-share" type="button" class="ghost" hidden>Share</button>
+        </div>
+      </div>
+      <h3 class="muted">Handed out</h3>
+      <ul id="tokens" class="tokens"></ul>
+    </section>
+
     <section>
       <h2>Instruments</h2>
       <ul id="instruments"></ul>

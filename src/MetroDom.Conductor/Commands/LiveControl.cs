@@ -1,5 +1,6 @@
 using MetroDom.Conductor.Midi;
 using MetroDom.Core.Policy;
+using MetroDom.Core.Setlist;
 using MetroDom.Core.Timing;
 
 namespace MetroDom.Conductor.Commands;
@@ -62,7 +63,7 @@ internal sealed record LiveState(
 /// is playing or the band is waiting, and signals the setlist loop when a song or wait ends.
 /// Inputs call it from their own threads.
 /// </summary>
-internal sealed class LiveControl(Session session, IClock clock) : IDisposable
+internal sealed class LiveControl(Session session, IClock clock, SetQueue? queue = null) : IDisposable
 {
     private readonly Lock _gate = new();
     private readonly TapTempo _tap = new();
@@ -71,12 +72,13 @@ internal sealed class LiveControl(Session session, IClock clock) : IDisposable
     private LiveSignal? _signal;
     private double? _pendingBpm;
     private string? _pendingSource;
-    private IReadOnlyList<string> _setlist = [];
-    private int _index = -1;
     private BeatTracker? _tracker;
     private BeatFollower? _follower;
 
     public IClock Clock => clock;
+
+    /// <summary>The set: what's played, playing or up next, and coming.</summary>
+    public SetQueue Queue { get; } = queue ?? new SetQueue();
 
     /// <summary>Set when the current wait or song has ended; see <see cref="Signal"/>.</summary>
     public ManualResetEventSlim Done => _done;
@@ -112,41 +114,31 @@ internal sealed class LiveControl(Session session, IClock clock) : IDisposable
         }
     }
 
-    /// <summary>The set's song titles, in order (for the Control API).</summary>
-    public void UseSetlist(IReadOnlyList<string> titles)
-    {
-        lock (_gate)
-        {
-            _setlist = titles;
-        }
-    }
+    /// <summary>Makes the set these titles (each also its song), before it starts.</summary>
+    public void UseSetlist(IReadOnlyList<string> titles) => Queue.Replace(titles.Select(t => (t, t)));
 
-    /// <summary>Marks song <paramref name="index"/> of the setlist as the one waiting or playing.</summary>
-    public void Cue(int index)
-    {
-        lock (_gate)
-        {
-            _index = index;
-        }
-    }
+    /// <summary>Marks song <paramref name="index"/> of the set as the one waiting or playing.</summary>
+    public void Cue(int index) => Queue.Cue(index);
 
     /// <summary>Everything a client needs to draw the band's state.</summary>
     public LiveState Snapshot()
     {
+        var set = Queue.Snapshot();
+        var titles = set.Songs.Select(s => s.Title).ToArray();
         lock (_gate)
         {
             var active = _active;
             var following = _tracker is null ? ((BeatState, double?)?)null : (_tracker.State, _tracker.Bpm);
             if (active is null)
             {
-                return new LiveState(false, _index, _setlist, null, null, null, null, _pendingBpm, TempoSource, null, following);
+                return new LiveState(false, set.Current, titles, null, null, null, null, _pendingBpm, TempoSource, null, following);
             }
 
             var speed = active.Scheduler.Speed;
             return new LiveState(
                 true,
-                _index,
-                _setlist,
+                set.Current,
+                titles,
                 active.Scheduler.Position,
                 active.Scheduler.Duration,
                 active.FileBpm is { } fileBpm ? fileBpm() * speed : null,
