@@ -41,6 +41,8 @@ Fields:
   instrument today, the largest given, so no note is refused.
 - No `notes` array means the instrument plays any note (software instruments).
 - `midi.channel` (1-16) is where the [auto band](auto-band.md) puts the instrument when it isn't assigned.
-- Not read yet: `midi.identity`, `polyphony`, `velocity`, `safety`, `firmwareVersion` (TD-22).
+- Not read by the Conductor yet: `midi.identity`, `polyphony`, `velocity`, `safety`, `firmwareVersion` (TD-22).
+  The [brain firmware](../../Instruments/metrodom_brain/README.md) enforces `polyphony`, `safety` and
+  each note's `minIntervalMs` itself, and builds the profile it sends from the same table.
 
 Example values above are illustrative, not measured.

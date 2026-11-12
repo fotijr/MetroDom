@@ -109,13 +109,15 @@ CLI (recover it from git history at commit `266b6b5` if needed).
 | `src/MetroDom.Conductor/Midi/` | OS MIDI device adapters behind `IMidiBackend`: `Alsa/` (Linux sequencer via P/Invoke) and DryWetMIDI (Windows/macOS). `ResilientPorts.cs` keeps ports alive across unplug/replug. Backends also create virtual ports (ALSA, CoreMIDI). `SchedulerLoop.cs` drives the scheduler in real time for `play`. `Identifier.cs` asks every output who it is and MetroDom instruments for their profile (`devices --identify`). `AutoBand.cs` plans the band from that plus remembered assignments, stores them, and watches for hot-plug ([auto-band](docs/references/auto-band.md)) |
 | `tests/MetroDom.Core.Tests/` | xUnit v3 tests for Core (Microsoft.Testing.Platform runner) |
 | `tests/MetroDom.Conductor.Tests/` | CLI exit codes and status panel rendering, port matching, and a real ALSA round trip (runs where `/dev/snd/seq` exists; required in CI when the runner can load `snd-seq-dummy`, TD-18) |
+| `Instruments/metrodom_brain/` | Generic brain firmware, first cut: `src/brain/` platform-free core (fixed pulses, interval/duty/polyphony limits, panic, Identity Reply, profile over SysEx), `metrodom_brain.ino` Arduino layer (TinyUSB MIDI, GPIO, watchdog), `config.h` body table, `test/` host tests (`make`, CI) |
 | `Instruments/xylophone_solenoid/` | 3 solenoids on pins 9–11, ASCII `'0' '4' '7'` triggers, 45 ms strike |
 | `Instruments/xylophone_servo/` | Spin + strike servo. `<digits>m` moves, `p` strikes, `?` identifies |
 
 Repo-wide build settings: `global.json` (SDK + test runner), `Directory.Build.props`
 (net10.0, nullable, warnings as errors, analyzers), `Directory.Packages.props` (central package
-versions), `.editorconfig`. The firmware still speaks the
-[legacy serial protocol](docs/references/legacy-serial-protocol.md). No host code drives it now.
+versions), `.editorconfig`. The legacy sketches still speak the
+[legacy serial protocol](docs/references/legacy-serial-protocol.md). No host code drives them now;
+they move onto the brain firmware.
 
 ## Migration path
 Prototype → target is planned in

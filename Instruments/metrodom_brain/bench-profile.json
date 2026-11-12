@@ -1,0 +1,1 @@
+{"schema":"metrodom.instrument-profile/0","id":"bench-solenoid","name":"Bench solenoid","firmwareVersion":"0.1.0","midi":{"identity":{"manufacturer":"7D","family":8781,"model":1}},"notes":[{"note":60,"minIntervalMs":60}],"polyphony":1,"velocity":{"supported":false},"safety":{"maxOnMs":45,"maxDutyPercent":30,"watchdogMs":500}}

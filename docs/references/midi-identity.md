@@ -20,7 +20,7 @@ Status: **Draft**, pending owner review. Implements step 2 of
 | --- | --- | --- |
 | Manufacturer | `7D` | The MIDI Association's ID for non-commercial / educational use. Anyone may use it, so the family is what marks MetroDom |
 | Family | `4D 44` (ASCII "MD", value 8781) | Readable in a SysEx dump. Change only with an ADR |
-| Model | `00 00` = software instrument (`metrodom virtual`). Hardware models not assigned yet | |
+| Model | `00 00` = software instrument (`metrodom virtual`). `01 00` = a brain running the generic firmware ([metrodom_brain](../../Instruments/metrodom_brain/README.md)); the body it drives is in its profile | |
 | Version | 4 bytes, firmware (or Conductor) `major.minor.build.revision` | |
 
 Example, `metrodom virtual` v1.0: `F0 7E 7F 06 02 7D 4D 44 00 00 01 00 00 00 F7`.
@@ -45,4 +45,4 @@ counts. `metrodom virtual` instruments answer as model 0.
 
 - Keys from USB serial or product strings (assignments use identity + port name, [auto-band](auto-band.md)).
 - MIDI 2.0 UMP Endpoint Discovery, mDNS network MIDI.
-- Model numbers for real instruments.
+- Model numbers beyond the brain (the profile says which body, so one may be enough).

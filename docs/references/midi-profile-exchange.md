@@ -56,5 +56,5 @@ Measured on macOS: two virtual instruments identified and described, whole comma
 - Profiles are fetched by `devices --identify` and by `play`/`route` at start, not on hot-plug.
   `arrange` and `simulate` take virtual `-i` specs, not ports, so they don't ask.
 - No remembered assignments or auto-adding instruments that weren't named with `-o` (step 4, TD-23).
-- Firmware side (Phase 1: read the profile from the body EEPROM and serve it).
+- Firmware reading the profile from the body EEPROM. The [brain firmware](../../Instruments/metrodom_brain/README.md) serves one built from its compiled-in config (host-tested, not yet flashed).
 - MIDI-CI Property Exchange.

@@ -21,6 +21,11 @@ but is polled (1 ms full-speed frames).
    - Duty-cycle / thermal limit per actuator. Refuse or thin notes when exceeded.
    - Watchdog: no host traffic or USB disconnect for N ms means all actuators off.
    - All-off on boot and on reset.
+   - Built in the generic brain ([metrodom_brain](../Instruments/metrodom_brain/README.md), host-tested, not
+     yet flashed): fixed pulse capped at `maxOnMs`, per-actuator minimum interval and a leaky-bucket
+     duty budget (refuse, never queue), polyphony cap, panic on CC 120/123 on any channel and System
+     Reset, all off when USB unmounts, hardware watchdog restart with all off at boot. The legacy
+     sketches have none of this (TD-03).
 2. **Conductor safety governor** (`SafetyGovernor`, one in front of every output in `play` and `route`)
    - Panic (CC 120/123 + MetroDom SysEx all-off) to every instrument, bypassing queues. Built:
      CC 120/123. Not yet: MetroDom SysEx all-off.

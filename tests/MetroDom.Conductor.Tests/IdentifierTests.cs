@@ -132,7 +132,7 @@ public class IdentifierTests
         var text = writer.ToString();
 
         Assert.Contains("xylo [1]", text, StringComparison.Ordinal);
-        Assert.Contains("MetroDom instrument model 1 v0.1.0.0", text, StringComparison.Ordinal);
+        Assert.Contains("MetroDom brain v0.1.0.0", text, StringComparison.Ordinal);
         Assert.Contains("profile: xylo · notes 60,64,67 (3) · 9-12 ms · repeat ≥ 60 ms", text, StringComparison.Ordinal);
         Assert.Contains("Yamaha · family 65 model 2", text, StringComparison.Ordinal);
         Assert.Contains("no reply", text, StringComparison.Ordinal);

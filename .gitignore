@@ -246,3 +246,6 @@ _Pvt_Extensions
 __pycache__/
 *.pyc
 *.suo
+# Brain firmware host test binary
+Instruments/metrodom_brain/test/brain_test
+Instruments/metrodom_brain/test/brain_test.dSYM/

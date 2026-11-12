@@ -26,6 +26,8 @@ That is the first milestone of the [live band spec](../../product-specs/live-ban
 ### Phase 1: Instruments speak MIDI
 - [ ] Accept brain/body split ([ADR 0006](../../design-docs/0006-swappable-instrument-brains.md)). Define body connector + EEPROM layout
 - [ ] Generic brain firmware (Pico, Arduino C++): USB-MIDI, Note On → fixed strike pulse, watchdog, all-off
+  - Logic built and host-tested: [metrodom_brain](../../../Instruments/metrodom_brain/README.md) (also Identity Reply
+    and profile over SysEx). Left: compile and flash on a Pico (plan 0002 H1), then tick this (TD-29)
 - [ ] Port solenoid xylophone to a body (PCA9685/MOSFET + ID EEPROM). Hardware side: [exec plan 0002](0002-hardware-bootstrap.md)
 - [ ] SysEx Identity Reply + [instrument profile](../../references/instrument-profile.md) read from body EEPROM
 - [ ] Bench-test with a stock DAW/keyboard (no MetroDom software)
@@ -240,6 +242,16 @@ That is the first milestone of the [live band spec](../../product-specs/live-ban
   cadence as reconnect) and asks each new port once. Found in passing: `--help` crashed on
   `virtual`, `arrange`, `simulate` and `play` (unescaped `[=X]` markup); fixed, with a test over
   every command. Headless `play` now prints the live panel's messages as plain lines.
+- 2026-11-11: Brain firmware first cut. Every decision is in a platform-free C++ core
+  (`src/brain/`) with host tests run by `make` in CI, and the sketch only moves bytes and pins:
+  there's no Pico toolchain here yet, and a laptop test with sanitizers catches more than a bench
+  ever would. Omni by default, because each instrument is its own USB port and a stock DAW sends
+  on channel 1. Over-limit notes are refused, not queued: a late strike is a wrong note, and the
+  Conductor already plans around the limits the profile states. Duty is a leaky bucket (a burst,
+  then the duty rate), not a sliding window, because it needs two numbers per actuator. The
+  profile is built from the config the brain enforces, and a committed bench profile is checked
+  by both the C++ and the .NET tests, so firmware and Conductor can't drift apart. Identity model
+  1 = brain: the body it drives is in its profile, so a model per instrument isn't needed yet.
 
 ## Open questions
 - Target box model (ADR 0002).
