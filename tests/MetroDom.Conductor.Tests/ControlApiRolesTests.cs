@@ -95,7 +95,14 @@ public sealed class ControlApiRolesTests : IAsyncDisposable
                 .Where(m => !(m.Value.TryGetProperty("security", out var s) && s.GetArrayLength() == 0))
                 .Select(m => (m.Name.ToUpperInvariant(), p.Name, m.Value.TryGetProperty("x-metrodom-grant", out var g) ? g.GetString() : "")))
             .Order().ToArray();
-        var served = _api.Grants().Where(g => g.Path is not ("/openapi.json" or "/events.schema.json")).Order().ToArray();
+        // Public routes (the spec, the join code's own routes) check what they need themselves.
+        var open = spec.RootElement.GetProperty("paths").EnumerateObject()
+            .SelectMany(p => p.Value.EnumerateObject()
+                .Where(m => m.Value.TryGetProperty("security", out var s) && s.GetArrayLength() == 0)
+                .Select(m => (m.Name.ToUpperInvariant(), p.Name)))
+            .ToHashSet();
+        var served = _api.Grants().Where(g => !open.Contains((g.Method, g.Path))).Order().ToArray();
+        Assert.Contains(("POST", "/join"), open);
 
         Assert.DoesNotContain(served, r => r.Grant is null); // a route without a grant is refused to everyone
         Assert.Equal(documented, served);
@@ -225,6 +232,134 @@ public sealed class ControlApiRolesTests : IAsyncDisposable
         while (result.MessageType != WebSocketMessageType.Close);
 
         Assert.Equal(WebSocketCloseStatus.PolicyViolation, result.CloseStatus);
+    }
+
+    private async Task<(string Code, string Id, JsonElement Reply)> JoinCode(string? label = "bar screen", double? hours = null)
+    {
+        var (status, reply) = await Send(HttpMethod.Post, "tokens", Owner, JsonSerializer.Serialize(new { role = "guest", join = true, label, hours }));
+        Assert.Equal(HttpStatusCode.Created, status);
+        return (reply.GetProperty("token").GetString()!, reply.GetProperty("holder").GetProperty("id").GetString()!, reply);
+    }
+
+    [Fact]
+    public async Task One_room_QR_gives_each_phone_its_own_guest_token()
+    {
+        var (code, door, reply) = await JoinCode();
+        Assert.Contains("#join=", reply.GetProperty("joinUrl").GetString(), StringComparison.Ordinal);
+        Assert.StartsWith("<svg", reply.GetProperty("joinQr").GetString(), StringComparison.Ordinal);
+        Assert.Contains("screen.html#join=", reply.GetProperty("screenUrl").GetString(), StringComparison.Ordinal);
+        Assert.True(reply.GetProperty("holder").GetProperty("join").GetBoolean());
+
+        var (s1, first) = await Send(HttpMethod.Post, "join", code);
+        var (s2, second) = await Send(HttpMethod.Post, "join", code);
+        Assert.Equal(HttpStatusCode.Created, s1);
+        Assert.Equal(HttpStatusCode.Created, s2);
+        var phone1 = first.GetProperty("token").GetString();
+        var phone2 = second.GetProperty("token").GetString();
+        Assert.NotEqual(phone1, phone2);
+        Assert.Equal("guest 1", first.GetProperty("holder").GetProperty("label").GetString());
+        Assert.Equal("guest 2", second.GetProperty("holder").GetProperty("label").GetString());
+        Assert.Equal(door, first.GetProperty("holder").GetProperty("via").GetString());
+
+        var (_, session) = await Send(HttpMethod.Get, "session", phone1);
+        Assert.Equal(["view", "queue.request", "queue.vote"], session.GetProperty("grants").EnumerateArray().Select(g => g.GetString()!));
+
+        var (_, list) = await Send(HttpMethod.Get, "tokens", Owner);
+        var listed = list.GetProperty("tokens").EnumerateArray().Single(t => t.GetProperty("id").GetString() == door);
+        Assert.Equal(2, listed.GetProperty("guests").GetInt32());
+    }
+
+    [Fact]
+    public async Task A_join_code_only_shows_the_band()
+    {
+        var (code, _, _) = await JoinCode();
+
+        var (_, session) = await Send(HttpMethod.Get, "session", code);
+        Assert.True(session.GetProperty("join").GetBoolean());
+        Assert.Equal(["view"], session.GetProperty("grants").EnumerateArray().Select(g => g.GetString()!));
+        Assert.Equal(HttpStatusCode.OK, (await Send(HttpMethod.Get, "state", code)).Status);
+        Assert.Equal(HttpStatusCode.OK, (await Send(HttpMethod.Get, "queue", code)).Status);
+        foreach (var path in new[] { "requests", "queue/x/vote", "panic" })
+        {
+            var (status, body) = await Send(HttpMethod.Post, path, code, """{"song":"a"}""");
+            Assert.Equal(HttpStatusCode.Forbidden, status);
+            Assert.Contains("join code only shows the band", body.GetProperty("error").GetString(), StringComparison.Ordinal);
+        }
+
+        var (qrStatus, qr) = await Send(HttpMethod.Get, "join/qr", code);
+        Assert.Equal(HttpStatusCode.OK, qrStatus);
+        Assert.EndsWith($"#join={code}", qr.GetProperty("joinUrl").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Only_a_join_code_lets_a_phone_join()
+    {
+        var (guest, _) = await Issue("guest");
+        Assert.Equal(HttpStatusCode.Unauthorized, (await Send(HttpMethod.Post, "join", guest)).Status);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await Send(HttpMethod.Post, "join", Owner)).Status);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await Send(HttpMethod.Post, "join", null)).Status);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await Send(HttpMethod.Get, "join/qr", guest)).Status);
+
+        var (status, body) = await Send(HttpMethod.Post, "tokens", Owner, """{"role":"operator","join":true}""");
+        Assert.Equal(HttpStatusCode.BadRequest, status);
+        Assert.Contains("lets guests in", body.GetProperty("error").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task One_phone_can_only_join_a_few_times_an_hour()
+    {
+        var (code, _, _) = await JoinCode();
+        for (var i = 0; i < JoinGate.PerAddress; i++)
+        {
+            Assert.Equal(HttpStatusCode.Created, (await Send(HttpMethod.Post, "join", code)).Status);
+        }
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "join");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", code);
+        using var refused = await _http.SendAsync(request, Ct);
+        Assert.Equal(HttpStatusCode.TooManyRequests, refused.StatusCode);
+        Assert.Equal(TimeSpan.FromHours(1), refused.Headers.RetryAfter?.Delta);
+
+        _time.Advance(TimeSpan.FromHours(1));
+        Assert.Equal(HttpStatusCode.Created, (await Send(HttpMethod.Post, "join", code)).Status);
+    }
+
+    [Fact]
+    public async Task Ending_a_join_code_ends_its_guests()
+    {
+        var (code, door, _) = await JoinCode();
+        var (_, joined) = await Send(HttpMethod.Post, "join", code);
+        var phone = joined.GetProperty("token").GetString();
+        var (other, _) = await Issue("guest", label: "table 4");
+
+        Assert.Equal(HttpStatusCode.OK, (await Send(HttpMethod.Delete, $"tokens/{door}", Owner)).Status);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await Send(HttpMethod.Get, "state", phone)).Status);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await Send(HttpMethod.Get, "state", code)).Status);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await Send(HttpMethod.Post, "join", code)).Status);
+        Assert.Equal(HttpStatusCode.OK, (await Send(HttpMethod.Get, "state", other)).Status);
+    }
+
+    [Fact]
+    public async Task Joined_guests_end_with_their_join_code()
+    {
+        var (code, _, _) = await JoinCode(hours: 2);
+        _time.Advance(TimeSpan.FromHours(1));
+        var (_, joined) = await Send(HttpMethod.Post, "join", code);
+        var phone = joined.GetProperty("token").GetString();
+        Assert.Equal(new DateTimeOffset(2026, 11, 12, 22, 0, 0, TimeSpan.Zero), joined.GetProperty("holder").GetProperty("expiresAt").GetDateTimeOffset());
+
+        _time.Advance(TimeSpan.FromHours(1));
+        Assert.Equal(HttpStatusCode.Unauthorized, (await Send(HttpMethod.Get, "state", phone)).Status);
+    }
+
+    [Fact]
+    public async Task No_join_code_where_guests_see_nothing()
+    {
+        await using var api = Start(PolicyProfile.LiveBand);
+        using var http = new HttpClient { BaseAddress = api.Address };
+        var (status, body) = await Send(HttpMethod.Post, "tokens", Owner, """{"role":"guest","join":true}""", http);
+        Assert.Equal(HttpStatusCode.Conflict, status);
+        Assert.Contains("nothing to join", body.GetProperty("error").GetString(), StringComparison.Ordinal);
     }
 
     private sealed class ManualTime : TimeProvider

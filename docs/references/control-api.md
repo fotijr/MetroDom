@@ -50,7 +50,8 @@ METRODOM_API_TOKEN=… metrodom play song.mid -o 0 --api 0.0.0.0:7890    # one s
   expired token is `401` like a wrong one.
 - Handed-out tokens are kept only as SHA-256 hashes, compared in constant time. In `play` they
   live in memory and end with the run; `serve` saves the hashes (never the secrets) so phones stay
-  paired across restarts, and drops tokens that expired while it was off. At most 256 out.
+  paired across restarts, and drops tokens that expired while it was off. At most 1024 out,
+  guests who joined with a room's QR included.
 - Measured on macOS against a live set under `crowd-jukebox`: a guest token read `/session`,
   `/state`, `/queue` (200) and was refused panic, next, tap and both token routes (403); the web
   remote opened with its pairing link showed the band with no buttons and "table 4 · guest ·
@@ -101,8 +102,38 @@ Under `serve`, guests ask for songs and vote on them, within the policy's `queue
   `nextRequestInSeconds`). `PUT /requests {"open": false}` (grant `queue.edit`) pauses requests
   and votes; the policy decides whether there are any at all. The queue's `requests.open` follows
   on the stream.
-- A guest token is the guest. One QR handed to a table is one guest for the limits.
+- A guest token is the guest. One invite QR handed to a table is one guest for the limits; a
+  room's [join QR](#join-qr-and-big-screen) gives each phone its own.
 - `play` takes no requests: `409`.
+
+## Join QR and big screen
+
+One QR code for a whole room, where each phone that scans it becomes its own guest, so the
+request limits hold per phone, not per table.
+
+- The owner makes a **join code**: `POST /tokens {"role":"guest","join":true,"label":"bar"}`
+  (or the remote's Invite → Everyone in the room). The reply has the code (once), `joinUrl`
+  (the remote with `#join=…`), `joinQr` (its QR code) and `screenUrl`. `409` if the policy gives
+  guests nothing to see.
+- A phone that opens the join link trades the code for its own guest token: `POST /join` with
+  the code as the bearer token. The token is labeled "guest N" (what the queue shows as who asked)
+  and ends with the join code, or sooner under `sessions.maxTokenHours`. A phone that already has
+  a working token keeps it.
+- Limits: one address may join 3 times an hour (`429` with `Retry-After`), so clearing a phone
+  doesn't buy fresh request limits; on the venue's network the box sees each phone's own
+  address. A join code lets in at most 300 guests (`409`).
+- **The big screen** (`screenUrl`, `/screen.html#join=…`) is a page for a TV in the venue: the
+  song playing with its section and progress, the next 6 songs with their votes and who asked,
+  the join QR (`GET /join/qr`), whether requests are open, and the curfew. It holds the join
+  code, which works as a token only for `view` routes (`/session` says `join: true`): anyone in
+  the room can scan it, so it never gets more than a guest would.
+- `GET /tokens` lists a join code with `join: true` and `guests` (how many are in), and each
+  joined guest with `via` (the code's id). Ending the join code (`DELETE /tokens/{id}`) ends its
+  guests too.
+- Checked in a browser against `serve` under `crowd-jukebox`: two phones joined with curl and
+  requested songs (shown as guest 1 and guest 2 with their votes on the screen), the browser
+  joined as guest 3, opening the link again kept that token, a fresh page from the same address
+  got "joined 3 times this hour", and the owner's Invite panel made a room QR with Open screen.
 
 ## Web remote
 
@@ -118,9 +149,10 @@ tonight's curfew and a Lift button; the curfew in force shows under the tempo.
   button ("Queued" once it's in), ▲ N on each coming request to vote or take a vote back, and
   "your request" on their own. Refusals show as messages ("try again in 5 min"). Operators get
   Pause requests / Open requests.
-- **Invite** (owner): pick operator or guest, a name and hours; the page shows the QR code to scan
-  with a phone camera, a Copy link (and Share where the phone has it) button, and the tokens out
-  now with Revoke.
+- **Invite** (owner): pick operator, guest or everyone in the room (a [join QR](#join-qr-and-big-screen)),
+  a name and hours; the page shows the QR code to scan with a phone camera, a Copy link (and
+  Share where the phone has it) button, Open screen for a join QR, and the tokens out now with
+  Revoke (join codes show how many joined, with End).
 - **Installable app:** a web manifest, icons and a service worker that keeps the app's own files
   (never the API) so it opens, showing "Disconnected", when the box is out of reach. Browsers only
   run service workers on HTTPS or localhost, so on the LAN over plain HTTP a phone gets a
@@ -179,8 +211,10 @@ tonight's curfew and a Lift button; the curfew in force shows under the tempo.
 | POST | `/panic` | Stop every actuator; the band then waits | |
 | GET | `/session` | This token: role, label, end, mode, grants (any working token) | |
 | GET | `/tokens` | Operator and guest tokens out now (owner) | |
-| POST | `/tokens` `{"role":"guest","hours":6,"label":"…"}` | Hand out a token: secret once, pairing link and its QR code (owner) | `400` |
-| DELETE | `/tokens/{id}` | Revoke it now; its streams close (owner) | `404` |
+| POST | `/tokens` `{"role":"guest","hours":6,"label":"…"}` | Hand out a token: secret once, pairing link and its QR code (owner). `"join":true`: a room's join code | `400`, `409` |
+| DELETE | `/tokens/{id}` | Revoke it now; its streams close; a join code takes its guests (owner) | `404` |
+| POST | `/join` | Trade a join code (the bearer) for this phone's own guest token | `401`, `409` full, `429` |
+| GET | `/join/qr` | The join link and QR for the join code presented (the big screen) | `401` |
 | GET | `/stream` | Live state over a WebSocket (below) | `400` not a WebSocket, `503` over 16 streams |
 | GET | `/events.schema.json` | JSON Schema of the stream's events (no token) | |
 

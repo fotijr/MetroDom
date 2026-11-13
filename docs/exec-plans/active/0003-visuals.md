@@ -51,7 +51,8 @@ phase is fun on its own and doesn't wait for the next one.
 
 ### Phase V4: LED matrix display (`matrix-hub75`)
 - [ ] One 64×32 HUB75 panel on an ESP32 or Pi: shows song title and tempo from the Control API
-- [ ] Jukebox mode: QR code to join + "up next" ([crowd jukebox](../../product-specs/crowd-jukebox.md))
+- [ ] Jukebox mode: QR code to join + "up next" ([crowd jukebox](../../product-specs/crowd-jukebox.md)).
+      The Control API side is built: `GET /join/qr` and the stream, as the browser big screen uses them
 - [ ] Beat-synced visualizer from the note stream
 - [ ] Chain panels for a bigger display, mounted on a frame
 

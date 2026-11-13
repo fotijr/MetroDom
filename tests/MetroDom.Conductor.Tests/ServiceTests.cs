@@ -105,6 +105,24 @@ public sealed class ServiceTests : IDisposable
     }
 
     [Fact]
+    public void State_KeepsJoinCodesAndTheGuestsTheyLetIn()
+    {
+        Assert.True(ServiceState.TryLoad(_dir, out var state, out _));
+        var before = new TokenStore(state.OwnerToken);
+        Assert.True(before.TryIssue(Role.Guest, TimeSpan.FromHours(4), "bar", SessionRules.Default, out var door, out var code, out _, door: true));
+        Assert.True(before.TryJoin(door, SessionRules.Default, out var guest, out var secret, out _));
+        state.Save(before.Export(), []);
+
+        Assert.True(ServiceState.TryLoad(_dir, out var restarted, out _));
+        var after = new TokenStore(restarted.OwnerToken);
+        after.Import(restarted.Tokens);
+        Assert.Equal(door, after.Find(code));
+        Assert.Equal(guest, after.Find(secret));
+        Assert.True(after.Revoke(door.Id));
+        Assert.Null(after.Find(secret));
+    }
+
+    [Fact]
     public void State_ThatCantBeRead_IsAnError_NotSilentlyReplaced()
     {
         File.WriteAllText(Path.Combine(_dir, ServiceState.FileName), "{ not json");

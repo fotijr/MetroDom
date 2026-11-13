@@ -34,7 +34,9 @@ guests only view, request and vote, only the owner hands out tokens.
   (`RequestDesk`): guests name library ids only (no free text), one vote per token per song,
   limits on songs waiting and time between requests, 20 tries a minute per token (refused ones
   count), and `429` with `Retry-After`. A guest is a token, so the owner decides how many guests
-  a table gets.
+  a table gets. A room's join QR gives each phone its own guest token; one address may join 3
+  times an hour and one code lets in 300. The join code itself only views (it hangs on a public
+  screen) ([join QR](references/control-api.md#join-qr-and-big-screen)).
 - **No live MIDI from the network for guests.** Live note input is operator-only.
 - **Song files are untrusted.** Enforce size, track and event-count limits when parsing SMF.
 - **Firmware updates are owner-only** and should be signed once there's a fleet (rental).

@@ -208,6 +208,12 @@ internal sealed class ControlApi : IAsyncDisposable
                 return Forbidden("This route declares no permission, so nobody may use it.");
             }
 
+            // A join code hangs on a public screen: it only shows the band. Phones scan it to join.
+            if (holder.Door && requires.Grant is not (null or Grant.View))
+            {
+                return Forbidden("A join code only shows the band: scan it with a phone to join as a guest.");
+            }
+
             if (requires.Grant is { } grant && !policy.Roles.Allows(holder.Role, grant))
             {
                 return Forbidden($"A{(holder.Role == Role.Operator ? "n" : "")} {RolePermissions.NameOf(holder.Role)} can't do this under the {policy.Mode} policy (needs \"{RolePermissions.NameOf(grant)}\").");
@@ -227,7 +233,8 @@ internal sealed class ControlApi : IAsyncDisposable
                 label = holder.Label,
                 expiresAt = holder.Expires,
                 mode = policy.Mode,
-                grants = policy.Roles.For(holder.Role).Select(RolePermissions.NameOf),
+                grants = policy.Roles.For(holder.Role).Where(g => !holder.Door || g == Grant.View).Select(RolePermissions.NameOf),
+                join = holder.Door,
             });
         }).Needs(null);
         guarded.MapGet("/state", () => Results.Json(State(live.Snapshot()))).Needs(Grant.View);
@@ -438,7 +445,11 @@ internal sealed class ControlApi : IAsyncDisposable
             return Results.Json(new { message = "PANIC: everything stopped." });
         }).Needs(Grant.Panic);
 
-        guarded.MapGet("/tokens", () => Results.Json(new { tokens = tokens.Issued().Select(Describe) })).Needs(Grant.Tokens);
+        guarded.MapGet("/tokens", () =>
+        {
+            var guests = tokens.GuestsByDoor();
+            return Results.Json(new { tokens = tokens.Issued().Select(h => Describe(h, guests.GetValueOrDefault(h.Id))) });
+        }).Needs(Grant.Tokens);
         guarded.MapPost("/tokens", (HttpContext context, TokenRequest? request) =>
         {
             if (request?.Role is not ("operator" or "guest"))
@@ -447,19 +458,86 @@ internal sealed class ControlApi : IAsyncDisposable
             }
 
             var role = request.Role == "operator" ? Role.Operator : Role.Guest;
+            var join = request.Join == true;
+            if (join && !policy.Roles.Allows(Role.Guest, Grant.View))
+            {
+                return Conflict($"Guests can't see the band under the {policy.Mode} policy, so there's nothing to join.");
+            }
+
             var life = request.Hours is { } hours ? TimeSpan.FromHours(hours) : policy.Sessions.MaxTokenLife;
-            if (!tokens.TryIssue(role, life, request.Label, policy.Sessions, out var holder, out var secret, out var error))
+            if (!tokens.TryIssue(role, life, request.Label, policy.Sessions, out var holder, out var secret, out var error, join))
             {
                 return BadRequest(error!);
             }
 
+            if (join)
+            {
+                var root = PairingRoot(context, endpoint);
+                var joinUrl = JoinUrl(root, secret);
+                return Results.Json(new
+                {
+                    token = secret,
+                    joinUrl,
+                    joinQr = PairingQr.Svg(joinUrl),
+                    screenUrl = $"{root}screen.html#join={Uri.EscapeDataString(secret)}",
+                    holder = Describe(holder, 0),
+                }, statusCode: StatusCodes.Status201Created);
+            }
+
             var pairing = $"{PairingRoot(context, endpoint)}#token={Uri.EscapeDataString(secret)}";
-            return Results.Json(new { token = secret, pairingUrl = pairing, pairingQr = PairingQr.Svg(pairing), holder = Describe(holder) }, statusCode: StatusCodes.Status201Created);
+            return Results.Json(new { token = secret, pairingUrl = pairing, pairingQr = PairingQr.Svg(pairing), holder = Describe(holder, 0) }, statusCode: StatusCodes.Status201Created);
         }).Needs(Grant.Tokens);
         guarded.MapDelete("/tokens/{id}", (string id) => tokens.Revoke(id)
             ? Results.Json(new { message = $"Token {id} revoked." })
             : Results.Json(new { error = $"No token {id} (it may have expired)." }, statusCode: StatusCodes.Status404NotFound)).Needs(Grant.Tokens);
+
+        // Public: the join code is the credential, so these sit outside the token guard.
+        var gate = new JoinGate(tokens.Time);
+        api.MapPost("/join", (HttpContext context) =>
+        {
+            var code = PresentedToken(context.Request);
+            if (tokens.Find(code) is not { Door: true } door)
+            {
+                context.Response.Headers.WWWAuthenticate = "Bearer";
+                return Results.Json(new { error = "That join code didn't work: it may have ended. Ask the staff for the QR code." }, statusCode: StatusCodes.Status401Unauthorized);
+            }
+
+            if (!policy.Roles.Allows(Role.Guest, Grant.View))
+            {
+                return Conflict($"Guests can't see the band under the {policy.Mode} policy.");
+            }
+
+            var address = context.Connection.RemoteIpAddress;
+            if (!gate.MayJoin(address, out var retry))
+            {
+                context.Response.Headers.RetryAfter = Math.Max(1, Math.Ceiling(retry.TotalSeconds)).ToString(CultureInfo.InvariantCulture);
+                return Results.Json(new { error = $"This phone has joined {JoinGate.PerAddress} times this hour: keep the page you have, or try again in {Math.Ceiling(retry.TotalMinutes)} min." }, statusCode: StatusCodes.Status429TooManyRequests);
+            }
+
+            if (!tokens.TryJoin(door, policy.Sessions, out var guest, out var secret, out var error))
+            {
+                return Conflict(Capitalize(error!));
+            }
+
+            gate.Joined(address);
+            return Results.Json(new { token = secret, holder = Describe(guest, 0) }, statusCode: StatusCodes.Status201Created);
+        });
+        api.MapGet("/join/qr", (HttpContext context) =>
+        {
+            var code = PresentedToken(context.Request);
+            if (tokens.Find(code) is not { Door: true })
+            {
+                context.Response.Headers.WWWAuthenticate = "Bearer";
+                return Unauthorized();
+            }
+
+            var joinUrl = JoinUrl(PairingRoot(context, endpoint), code!);
+            return Results.Json(new { joinUrl, joinQr = PairingQr.Svg(joinUrl) });
+        });
     }
+
+    /// <summary>The link a join code's QR holds: the remote, which trades the code for the phone's own guest token.</summary>
+    private static string JoinUrl(string root, string code) => $"{root}#join={Uri.EscapeDataString(code)}";
 
     private const string HolderKey = "metrodom.holder";
 
@@ -535,13 +613,16 @@ internal sealed class ControlApi : IAsyncDisposable
 
     private static string Capitalize(string text) => text.Length == 0 ? text : char.ToUpperInvariant(text[0]) + text[1..];
 
-    private static object Describe(TokenHolder holder) => new
+    private static object Describe(TokenHolder holder, int guests) => new
     {
         id = holder.Id,
         role = RolePermissions.NameOf(holder.Role),
         label = holder.Label,
         issuedAt = holder.Issued,
         expiresAt = holder.Expires,
+        join = holder.Door,
+        guests = holder.Door ? guests : (int?)null,
+        via = holder.Via,
     };
 
     private static IResult Navigate(LiveControl live, ControlAction action) =>
@@ -554,6 +635,9 @@ internal sealed class ControlApi : IAsyncDisposable
         ("/app.js", "web.app.js", "text/javascript; charset=utf-8"),
         ("/app.css", "web.app.css", "text/css; charset=utf-8"),
         ("/sw.js", "web.sw.js", "text/javascript; charset=utf-8"),
+        ("/screen.html", "web.screen.html", "text/html; charset=utf-8"),
+        ("/screen.js", "web.screen.js", "text/javascript; charset=utf-8"),
+        ("/screen.css", "web.screen.css", "text/css; charset=utf-8"),
         ("/manifest.webmanifest", "web.manifest.webmanifest", "application/manifest+json"),
         ("/icon.svg", "web.icon.svg", "image/svg+xml"),
         ("/icon-192.png", "web.icon-192.png", "image/png"),
@@ -687,7 +771,7 @@ internal sealed class ControlApi : IAsyncDisposable
 
     private sealed record CurfewRequest(string? At);
 
-    private sealed record TokenRequest(string? Role, double? Hours, string? Label);
+    private sealed record TokenRequest(string? Role, double? Hours, string? Label, bool? Join = null);
 
     /// <summary>A host lifetime that ignores process signals.</summary>
     private sealed class NoSignals : IHostLifetime

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="referrer" content="no-referrer">
+  <title>MetroDom screen</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="screen.css">
+  <script src="screen.js" defer></script>
+</head>
+<body>
+  <main id="screen">
+    <section class="now" aria-live="polite">
+      <p class="label">Now playing <span id="link" class="dot" title="Connecting"></span></p>
+      <h1 id="song">–</h1>
+      <p id="detail" class="muted"></p>
+      <div class="bar"><div id="progress"></div></div>
+      <p class="label next-label">Up next</p>
+      <ol id="next" class="next"></ol>
+      <p id="next-empty" class="muted" hidden>Nothing queued yet. Ask for a song!</p>
+    </section>
+    <aside id="join" class="join" hidden>
+      <img id="qr" alt="QR code to request songs">
+      <p class="call">Scan to ask for a song</p>
+      <p id="requests" class="muted"></p>
+    </aside>
+  </main>
+  <main id="setup" class="setup" hidden>
+    <h1>MetroDom screen</h1>
+    <p id="setup-text">Open this page with the Open screen link: in the remote, Invite → Everyone in the room.</p>
+  </main>
+</body>
+</html>

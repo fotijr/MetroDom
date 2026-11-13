@@ -91,6 +91,7 @@
           <select id="invite-role">
             <option value="guest">Guest</option>
             <option value="operator">Operator</option>
+            <option value="join">Everyone in the room (one QR, a guest per phone)</option>
           </select>
         </label>
         <label>Name <input id="invite-label" maxlength="60" placeholder="Table 4, Sam…" autocomplete="off"></label>
@@ -103,6 +104,7 @@
         <div class="row">
           <button id="invite-copy" type="button" class="ghost">Copy link</button>
           <button id="invite-share" type="button" class="ghost" hidden>Share</button>
+          <a id="invite-screen" class="button ghost" target="_blank" rel="noopener" hidden>Open screen</a>
         </div>
       </div>
       <h3 class="muted">Handed out</h3>

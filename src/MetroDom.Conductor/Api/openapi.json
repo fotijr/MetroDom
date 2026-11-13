@@ -378,11 +378,12 @@
       "post": {
         "operationId": "issueToken",
         "x-metrodom-grant": "tokens",
-        "summary": "Hand out an operator or guest token. The secret is returned once, with a pairing link. Owner only.",
+        "summary": "Hand out an operator or guest token, or (join: true) a room's join code. The secret is returned once, with a pairing or join link. Owner only.",
         "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/TokenRequest" } } } },
         "responses": {
-          "201": { "description": "The new token.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/IssuedToken" } } } },
+          "201": { "description": "The new token or join code.", "content": { "application/json": { "schema": { "oneOf": [{ "$ref": "#/components/schemas/IssuedToken" }, { "$ref": "#/components/schemas/IssuedJoinCode" }] } } } },
           "400": { "$ref": "#/components/responses/BadRequest" },
+          "409": { "description": "A join code under a policy that gives guests nothing to see.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
           "401": { "$ref": "#/components/responses/Unauthorized" },
           "403": { "$ref": "#/components/responses/Forbidden" }
         }
@@ -392,7 +393,7 @@
       "delete": {
         "operationId": "revokeToken",
         "x-metrodom-grant": "tokens",
-        "summary": "Stop a handed-out token working now; its open streams close. Owner only.",
+        "summary": "Stop a handed-out token working now; its open streams close. Ending a join code also ends the guests who joined with it. Owner only.",
         "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
         "responses": {
           "200": { "$ref": "#/components/responses/Message" },
@@ -401,11 +402,37 @@
           "404": { "description": "No such token (or it expired).", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
         }
       }
+    },
+    "/join": {
+      "post": {
+        "operationId": "join",
+        "summary": "A phone scanned a room's join QR: trade the join code (the bearer token here) for this phone's own guest token, so each phone is one guest for the request limits.",
+        "security": [],
+        "x-metrodom-auth": "joinCode",
+        "responses": {
+          "201": { "description": "This phone's guest token, shown once.", "content": { "application/json": { "schema": { "type": "object", "required": ["token", "holder"], "properties": { "token": { "type": "string" }, "holder": { "$ref": "#/components/schemas/TokenHolder" } } } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "409": { "description": "The join code has let in its most guests, the Conductor holds its most tokens, or the policy gives guests nothing to see.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "429": { "description": "This address joined 3 times in the last hour. Retry-After says when it may again.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
+        }
+      }
+    },
+    "/join/qr": {
+      "get": {
+        "operationId": "getJoinQr",
+        "summary": "The join link and its QR code for the join code presented as the bearer token: what the big screen shows.",
+        "security": [],
+        "x-metrodom-auth": "joinCode",
+        "responses": {
+          "200": { "description": "The join link and QR.", "content": { "application/json": { "schema": { "type": "object", "required": ["joinUrl", "joinQr"], "properties": { "joinUrl": { "type": "string" }, "joinQr": { "type": "string", "description": "joinUrl as a QR code (an SVG document)." } } } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
     }
   },
   "components": {
     "securitySchemes": {
-      "token": { "type": "http", "scheme": "bearer", "description": "The owner's: shown by the Conductor at start, or METRODOM_API_TOKEN. Operators and guests: handed out by the owner (POST /tokens), each with an end." }
+      "token": { "type": "http", "scheme": "bearer", "description": "The owner's: shown by the Conductor at start, or METRODOM_API_TOKEN. Operators and guests: handed out by the owner (POST /tokens), each with an end. A join code works here too, but only for view routes (the big screen)." }
     },
     "responses": {
       "Accepted": { "description": "Taken; the band acts on it now.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Message" } } } },
@@ -448,7 +475,8 @@
           "label": { "type": ["string", "null"] },
           "expiresAt": { "type": ["string", "null"], "format": "date-time", "description": "Null for the owner token (it lasts the run)." },
           "mode": { "type": "string", "description": "The policy's mode, e.g. live-band." },
-          "grants": { "type": "array", "items": { "$ref": "#/components/schemas/Grant" } }
+          "grants": { "type": "array", "items": { "$ref": "#/components/schemas/Grant" } },
+          "join": { "type": "boolean", "description": "The caller is a join code (the big screen): it may only view." }
         }
       },
       "Grant": { "type": "string", "enum": ["view", "transport", "tempo", "sections", "panic", "queue.request", "queue.vote", "queue.edit", "tokens", "curfew"] },
@@ -460,7 +488,10 @@
           "role": { "type": "string", "enum": ["operator", "guest"] },
           "label": { "type": ["string", "null"] },
           "issuedAt": { "type": "string", "format": "date-time" },
-          "expiresAt": { "type": "string", "format": "date-time" }
+          "expiresAt": { "type": "string", "format": "date-time" },
+          "join": { "type": "boolean", "description": "A room's join code, not one holder's token." },
+          "guests": { "type": ["integer", "null"], "description": "For a join code: guests in now who joined with it." },
+          "via": { "type": ["string", "null"], "description": "For a guest who joined with a join code: that code's id." }
         }
       },
       "TokenRequest": {
@@ -469,7 +500,8 @@
         "properties": {
           "role": { "type": "string", "enum": ["operator", "guest"] },
           "hours": { "type": "number", "exclusiveMinimum": 0, "description": "How long it lasts. Default and maximum: the policy's sessions.maxTokenHours." },
-          "label": { "type": "string", "maxLength": 60, "description": "e.g. \"Smith party\"." }
+          "label": { "type": "string", "maxLength": 60, "description": "e.g. \"Smith party\"." },
+          "join": { "type": "boolean", "description": "With role guest: a join code for a whole room. Each phone that scans its QR gets its own guest token (POST /join), at most 300 per code." }
         }
       },
       "IssuedToken": {
@@ -479,6 +511,17 @@
           "token": { "type": "string", "description": "The secret, shown once." },
           "pairingUrl": { "type": "string", "description": "The web remote with the token in the fragment." },
           "pairingQr": { "type": "string", "description": "pairingUrl as a QR code (an SVG document) to show for scanning." },
+          "holder": { "$ref": "#/components/schemas/TokenHolder" }
+        }
+      },
+      "IssuedJoinCode": {
+        "type": "object",
+        "required": ["token", "joinUrl", "joinQr", "screenUrl", "holder"],
+        "properties": {
+          "token": { "type": "string", "description": "The join code, shown once." },
+          "joinUrl": { "type": "string", "description": "The web remote with the join code in the fragment: phones that open it join as guests." },
+          "joinQr": { "type": "string", "description": "joinUrl as a QR code (an SVG document)." },
+          "screenUrl": { "type": "string", "description": "The big-screen page (now playing, up next, this QR) for a TV in the venue." },
           "holder": { "$ref": "#/components/schemas/TokenHolder" }
         }
       },

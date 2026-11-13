@@ -45,6 +45,36 @@
     return null;
   }
 
+  // A room's join QR holds http://host:port/#join=…: trade it for this phone's own guest token.
+  function takeJoinFromUrl() {
+    const code = new URLSearchParams(location.hash.slice(1)).get("join");
+    if (code) history.replaceState(null, "", location.pathname + location.search);
+    return code;
+  }
+
+  async function join(code) {
+    // Already in (scanned twice, reopened the link): keep the token this phone has.
+    if (token && (await tokenWorks())) {
+      start();
+      return;
+    }
+    let response;
+    try {
+      response = await fetch(new URL("join", API), { method: "POST", headers: { Authorization: `Bearer ${code}` }, cache: "no-store" });
+    } catch {
+      showPairing("Can't reach the band. Check you're on the venue's Wi-Fi and scan again.");
+      return;
+    }
+    const reply = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      showPairing(reply.error || "Couldn't join.");
+      return;
+    }
+    token = reply.token;
+    storage("set", token);
+    start();
+  }
+
   function showPairing(error) {
     if (socket) socket.close();
     socket = null;
@@ -331,12 +361,14 @@
   async function loadTokens() {
     const reply = await request("GET", "tokens");
     if (!reply || !reply.ok) return;
-    $("tokens").replaceChildren(...reply.tokens.map((holder) => {
+    // Guests who joined with a room's QR are counted on it, not listed one by one.
+    $("tokens").replaceChildren(...reply.tokens.filter((holder) => !holder.via).map((holder) => {
       const item = document.createElement("li");
       const text = document.createElement("span");
       text.className = "song";
-      text.textContent = `${holder.label || holder.id} · ${holder.role} · until ${when(holder.expiresAt)}`;
-      const revoke = button("Revoke", `Revoke ${holder.label || holder.id}`, async () => {
+      const kind = holder.join ? `join QR · ${holder.guests} joined` : holder.role;
+      text.textContent = `${holder.label || holder.id} · ${kind} · until ${when(holder.expiresAt)}`;
+      const revoke = button(holder.join ? "End" : "Revoke", `${holder.join ? "End" : "Revoke"} ${holder.label || holder.id}`, async () => {
         await call(`tokens/${holder.id}`, null, "DELETE");
         loadTokens();
       });
@@ -348,7 +380,9 @@
   async function invite(event) {
     event.preventDefault();
     const hours = parseFloat($("invite-hours").value);
-    const body = { role: $("invite-role").value, label: $("invite-label").value.trim() || undefined };
+    const room = $("invite-role").value === "join";
+    const body = { role: room ? "guest" : $("invite-role").value, label: $("invite-label").value.trim() || undefined };
+    if (room) body.join = true;
     if (hours > 0) body.hours = hours;
     const reply = await request("POST", "tokens", body);
     if (!reply) return;
@@ -356,11 +390,15 @@
       note(reply.error || "Couldn't make the invite.");
       return;
     }
-    inviteUrl = reply.pairingUrl;
+    inviteUrl = room ? reply.joinUrl : reply.pairingUrl;
     if (inviteQr) URL.revokeObjectURL(inviteQr);
-    inviteQr = URL.createObjectURL(new Blob([reply.pairingQr], { type: "image/svg+xml" }));
+    inviteQr = URL.createObjectURL(new Blob([room ? reply.joinQr : reply.pairingQr], { type: "image/svg+xml" }));
     $("invite-qr").src = inviteQr;
-    $("invite-who").textContent = `${reply.holder.label || "Someone"} · ${reply.holder.role} · until ${when(reply.holder.expiresAt)}. Scan with a phone camera.`;
+    $("invite-who").textContent = room
+      ? `${reply.holder.label || "Join QR"} · until ${when(reply.holder.expiresAt)}. Each phone that scans it joins as its own guest. Put it up on a big screen with Open screen.`
+      : `${reply.holder.label || "Someone"} · ${reply.holder.role} · until ${when(reply.holder.expiresAt)}. Scan with a phone camera.`;
+    $("invite-screen").hidden = !room;
+    if (room) $("invite-screen").href = reply.screenUrl;
     $("invite-share").hidden = !navigator.share;
     $("invite-result").hidden = false;
     $("invite-label").value = "";
@@ -486,6 +524,11 @@
 
   // A new pairing link opened in this tab only changes the fragment, which doesn't reload the page.
   window.addEventListener("hashchange", () => {
+    const code = takeJoinFromUrl();
+    if (code) {
+      join(code);
+      return;
+    }
     const fresh = takeTokenFromUrl();
     if (!fresh) return;
     token = fresh;
@@ -497,7 +540,9 @@
     start();
   });
 
+  const joinCode = takeJoinFromUrl();
   token = takeTokenFromUrl() || storage("get");
-  if (token) start();
+  if (joinCode) join(joinCode);
+  else if (token) start();
   else showPairing("");
 })();

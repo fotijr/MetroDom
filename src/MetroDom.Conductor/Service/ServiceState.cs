@@ -110,6 +110,8 @@ internal sealed class ServiceState
                 ["label"] = t.Holder.Label,
                 ["issuedAt"] = t.Holder.Issued?.ToString("O", CultureInfo.InvariantCulture),
                 ["expiresAt"] = t.Holder.Expires?.ToString("O", CultureInfo.InvariantCulture),
+                ["join"] = t.Holder.Door ? true : null,
+                ["via"] = t.Holder.Via,
                 ["sha256"] = Convert.ToHexStringLower(t.Hash),
             })]),
             ["queue"] = new JsonArray([.. queue.Select(id => (JsonNode)id)]),
@@ -151,6 +153,7 @@ internal sealed class ServiceState
         }
 
         DateTimeOffset? issued = DateTimeOffset.TryParse((string?)node["issuedAt"], CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var at) ? at : null;
-        return (new TokenHolder(id, role, (string?)node["label"], issued, expires), Convert.FromHexString(hash));
+        var door = role == Role.Guest && (bool?)node["join"] == true;
+        return (new TokenHolder(id, role, (string?)node["label"], issued, expires, door, (string?)node["via"]), Convert.FromHexString(hash));
     }
 }

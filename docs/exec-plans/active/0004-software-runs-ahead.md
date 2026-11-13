@@ -47,6 +47,8 @@ each phase closes its tech-debt rows and raises its row in [QUALITY_SCORE.md](..
 ### Phase S6: Crowd jukebox mode (M7)
 - [x] Guest requests, votes, cooldowns, rate limits on untrusted input
       ([requests and votes](../../references/control-api.md#requests-and-votes-jukebox))
+- [x] One room QR, a guest token per phone, and a big-screen now playing / up next page
+      ([join QR and big screen](../../references/control-api.md#join-qr-and-big-screen))
 
 ## Decisions log
 - 2026-11-12: Safety first, chosen by the owner. The all-off is its own MetroDom SysEx message
@@ -123,6 +125,13 @@ each phase closes its tech-debt rows and raises its row in [QUALITY_SCORE.md](..
   `songCooldownMinutes` and `fill` (the spec's per-song cooldown and auto-fill playlist). Found
   and fixed on the way: a service that booted with an empty queue would autoplay the first song
   added under a jukebox policy. It now waits for start, as RELIABILITY says.
+- 2026-11-12: Join QR. A QR on a public screen can't hold a guest token: everyone who scanned it
+  would be one guest for the limits. So the owner makes a join code (a guest token marked as a
+  door), and each phone trades it for its own guest token. The code itself only works for
+  `view`, which is what the big screen needs and nothing a scanner couldn't get by joining.
+  Rejoining for fresh limits is held back by address (3 an hour), not by device fingerprinting
+  (SECURITY.md privacy). Ending the code ends its guests: closing time is one tap. No new grant
+  and no new token type: it rides on `POST /tokens` and the owner's `tokens` grant.
 
 ## Open questions
 - Should the boot check apply what it measured when an instrument drifted (rental boxes that

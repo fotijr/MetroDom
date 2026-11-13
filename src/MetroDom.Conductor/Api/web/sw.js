@@ -4,7 +4,7 @@
 "use strict";
 
 const CACHE = "metrodom-shell-v2";
-const SHELL = ["./", "app.js", "app.css", "manifest.webmanifest", "icon.svg", "icon-192.png", "icon-512.png"];
+const SHELL = ["./", "app.js", "app.css", "manifest.webmanifest", "icon.svg", "icon-192.png", "icon-512.png", "screen.html", "screen.js", "screen.css"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)).then(() => self.skipWaiting()));
