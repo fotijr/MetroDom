@@ -21,39 +21,40 @@ public sealed record Curfew(TimeOnly? From, TimeOnly? To, DateTimeOffset? EndsAt
     /// <summary>No curfew and no end time.</summary>
     public static readonly Curfew None = new(null, null, null, DefaultGrace);
 
-    /// <summary>Whether anything is set.</summary>
-    public bool IsSet => From is not null || EndsAt is not null;
+    /// <summary>
+    /// Tonight's curfew, set live by the owner (<c>POST /curfew</c>): an extra stop on top of the
+    /// policy's, so it can only end the night sooner. In force from then until the owner lifts it.
+    /// </summary>
+    public DateTimeOffset? StopAt { get; init; }
 
-    /// <summary>Whether songs may not start now (inside the nightly window, or past the end).</summary>
-    public bool InForce(DateTimeOffset now) => InWindow(now) || now >= EndsAt;
+    /// <summary>Whether anything is set.</summary>
+    public bool IsSet => From is not null || EndsAt is not null || StopAt is not null;
+
+    /// <summary>Whether songs may not start now (inside the nightly window, or past the end or tonight's curfew).</summary>
+    public bool InForce(DateTimeOffset now) => InWindow(now) || now >= EndsAt || now >= StopAt;
 
     /// <summary>The next moment songs must have ended by, or null if nothing is coming (or the booking is over).</summary>
     public DateTimeOffset? NextStop(DateTimeOffset now)
     {
-        if (now >= EndsAt)
+        if (now >= EndsAt || now >= StopAt)
         {
             return null; // over: nothing more to stop
         }
 
-        DateTimeOffset? window = From is { } from && !InWindow(now) ? Next(now, from) : null;
-        DateTimeOffset? end = EndsAt > now ? EndsAt : null;
-        return (window, end) switch
-        {
-            ({ } w, { } e) => w < e ? w : e,
-            _ => window ?? end,
-        };
+        DateTimeOffset?[] stops = [From is { } from && !InWindow(now) ? Next(now, from) : null, EndsAt, StopAt];
+        return stops.Where(s => s > now).Min();
     }
 
     /// <summary>When songs may start again: the window's end, or null if never (past the end time) or not in force.</summary>
     public DateTimeOffset? LiftsAt(DateTimeOffset now)
     {
-        if (now >= EndsAt || !InWindow(now))
+        if (now >= EndsAt || now >= StopAt || !InWindow(now))
         {
             return null;
         }
 
         var lifts = Next(now, To!.Value);
-        return lifts >= EndsAt ? null : lifts;
+        return lifts >= EndsAt || lifts >= StopAt ? null : lifts;
     }
 
     /// <summary>Whether a song of <paramref name="length"/> may start now: not in force, and done by the next stop plus grace.</summary>
@@ -82,6 +83,11 @@ public sealed record Curfew(TimeOnly? From, TimeOnly? To, DateTimeOffset? EndsAt
             parts.Add(string.Create(CultureInfo.InvariantCulture, $"ends {end:yyyy-MM-dd HH\\:mm}"));
         }
 
+        if (StopAt is { } stop)
+        {
+            parts.Add(string.Create(CultureInfo.InvariantCulture, $"tonight's curfew {stop:HH\\:mm}"));
+        }
+
         parts.Add(string.Create(CultureInfo.InvariantCulture, $"{Grace.TotalMinutes:0.#} min grace"));
         return string.Join(" · ", parts);
     }
@@ -94,10 +100,21 @@ public sealed record Curfew(TimeOnly? From, TimeOnly? To, DateTimeOffset? EndsAt
             return string.Create(CultureInfo.InvariantCulture, $"The booking ended at {EndsAt:HH\\:mm}.");
         }
 
+        if (now >= StopAt)
+        {
+            return string.Create(CultureInfo.InvariantCulture, $"Curfew since {StopAt:HH\\:mm}, until the owner lifts it.");
+        }
+
         return InWindow(now) && LiftsAt(now) is { } lifts
             ? string.Create(CultureInfo.InvariantCulture, $"Curfew until {lifts:HH\\:mm}.")
             : InWindow(now) ? "Curfew." : null;
     }
+
+    /// <summary>
+    /// This curfew with tonight's at <paramref name="at"/>: the next time the wall clock reads it
+    /// after <paramref name="now"/> (so "01:00" set at 22:00 means after midnight).
+    /// </summary>
+    public Curfew Tonight(DateTimeOffset now, TimeOnly at) => this with { StopAt = Next(now, at) };
 
     private bool InWindow(DateTimeOffset now)
     {

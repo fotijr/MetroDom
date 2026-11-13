@@ -109,7 +109,8 @@ Under `serve`, guests ask for songs and vote on them, within the policy's `queue
 `play --api` and `serve` also serve a phone-sized remote at `/` (`src/MetroDom.Conductor/Api/web/`:
 plain HTML, CSS and JS embedded in the binary, no framework or build step). It shows the song,
 progress, section, tempo, queue, instruments and messages live from `/stream`, and has start/stop,
-next, tempo ±2%, tap, vamp, outro and a big **PANIC** button.
+next, tempo ±2%, tap, vamp, outro and a big **PANIC** button, and (with `curfew`) a time to set
+tonight's curfew and a Lift button; the curfew in force shows under the tempo.
 
 - **Queue and library** (with `queue.edit`): ↑ ↓ ✕ on each coming song, and a searchable library
   with an Add button per song. Everyone with `view` sees the queue and who added what.
@@ -173,6 +174,8 @@ next, tempo ±2%, tap, vamp, outro and a big **PANIC** button.
 | POST | `/tempo` `{"bpm": 96}` | Tempo now, or for the next song while waiting (30-300) | `400` |
 | POST | `/tap` | One tap (shared with keys and pedals) | |
 | POST | `/sections/vamp`, `/sections/outro` | Vamp toggle / outro after this section | `409` if waiting |
+| POST | `/curfew` `{"at":"23:30"}` | Tonight's curfew, the next time the clock reads it (`curfew`; [policy](policy-profile.md#limits)) | `400` not HH:mm |
+| DELETE | `/curfew` | Lift tonight's curfew (`curfew`); the policy's stay | `409` none set |
 | POST | `/panic` | Stop every actuator; the band then waits | |
 | GET | `/session` | This token: role, label, end, mode, grants (any working token) | |
 | GET | `/tokens` | Operator and guest tokens out now (owner) | |

@@ -459,6 +459,11 @@
   $("vamp").addEventListener("click", () => call("sections/vamp"));
   $("outro").addEventListener("click", () => call("sections/outro"));
   $("panic").addEventListener("click", () => call("panic"));
+  $("curfew-form").addEventListener("submit", (event) => {
+    event.preventDefault();
+    if ($("curfew-at").value) call("curfew", { at: $("curfew-at").value });
+  });
+  $("curfew-lift").addEventListener("click", () => call("curfew", undefined, "DELETE"));
   $("library-filter").addEventListener("input", renderLibrary);
   $("requests-toggle").addEventListener("click", () => call("requests", { open: !(queue && queue.requests && queue.requests.open) }, "PUT"));
   $("library-refresh").addEventListener("click", loadLibrary);

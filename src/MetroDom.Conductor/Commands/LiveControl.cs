@@ -100,8 +100,55 @@ internal sealed class LiveControl(Session session, IClock clock, SetQueue? queue
     /// <summary>"tapped", "pedal", "MIDI Clock", "nudged": what last set the tempo, for the status line.</summary>
     public string? TempoSource { get; set; }
 
-    /// <summary>When songs must stop (policy limits, <c>--curfew</c>).</summary>
-    public Curfew Curfew { get; init; } = Curfew.None;
+    private Curfew _curfew = Curfew.None;
+
+    /// <summary>When songs must stop: policy limits, <c>--curfew</c>, and tonight's curfew if one is set.</summary>
+    public Curfew Curfew
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _curfew;
+            }
+        }
+
+        init => _curfew = value;
+    }
+
+    /// <summary>
+    /// Sets tonight's curfew at the next <paramref name="at"/> on the wall clock (replacing an earlier
+    /// one). It only adds a stop: the policy's curfew and end time still hold. Returns when it is.
+    /// </summary>
+    public DateTimeOffset SetCurfewTonight(TimeOnly at)
+    {
+        DateTimeOffset stop;
+        lock (_gate)
+        {
+            _curfew = _curfew.Tonight(WallClock(), at);
+            stop = _curfew.StopAt!.Value;
+        }
+
+        session.Messages.Add(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Tonight's curfew: {stop:HH\\:mm}."));
+        return stop;
+    }
+
+    /// <summary>Lifts tonight's curfew. Returns false if none was set. The policy's still hold.</summary>
+    public bool LiftCurfewTonight()
+    {
+        lock (_gate)
+        {
+            if (_curfew.StopAt is null)
+            {
+                return false;
+            }
+
+            _curfew = _curfew with { StopAt = null };
+        }
+
+        session.Messages.Add("Tonight's curfew lifted.");
+        return true;
+    }
 
     /// <summary>Local wall-clock time, for the curfew. Tests replace it.</summary>
     public Func<DateTimeOffset> WallClock { get; init; } = () => DateTimeOffset.Now;
@@ -109,13 +156,14 @@ internal sealed class LiveControl(Session session, IClock clock, SetQueue? queue
     /// <summary>What the curfew means right now, for the status line and the API, or null.</summary>
     public string? CurfewNote()
     {
-        if (!Curfew.IsSet)
+        var curfew = Curfew;
+        if (!curfew.IsSet)
         {
             return null;
         }
 
         var now = WallClock();
-        return Curfew.Reason(now) ?? (Curfew.NextStop(now) is { } stop && stop - now < TimeSpan.FromHours(12)
+        return curfew.Reason(now) ?? (curfew.NextStop(now) is { } stop && stop - now < TimeSpan.FromHours(12)
             ? string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Set ends {stop:HH\\:mm}")
             : null);
     }

@@ -418,6 +418,20 @@ internal sealed class ControlApi : IAsyncDisposable
         }).Needs(Grant.Tempo);
         guarded.MapPost("/sections/vamp", () => Navigate(live, ControlAction.Vamp)).Needs(Grant.Sections);
         guarded.MapPost("/sections/outro", () => Navigate(live, ControlAction.Outro)).Needs(Grant.Sections);
+        guarded.MapPost("/curfew", (CurfewRequest? request) =>
+        {
+            if (!TimeOnly.TryParseExact(request?.At, ["H:mm", "HH:mm"], CultureInfo.InvariantCulture, DateTimeStyles.None, out var at))
+            {
+                return BadRequest("at must be a local time as HH:mm, e.g. \"23:30\".");
+            }
+
+            var stop = live.SetCurfewTonight(at);
+            return Accepted(string.Create(CultureInfo.InvariantCulture, $"Tonight's curfew: {stop:HH\\:mm}. No song starts that can't finish by then."));
+        }).Needs(Grant.Curfew);
+        guarded.MapDelete("/curfew", () => live.LiftCurfewTonight()
+            ? Accepted("Tonight's curfew lifted. The policy's curfew and end time still hold.")
+            : Results.Json(new { error = "No curfew was set tonight (the policy's can't be lifted from here)." }, statusCode: StatusCodes.Status409Conflict))
+            .Needs(Grant.Curfew);
         guarded.MapPost("/panic", () =>
         {
             live.Control(ControlAction.Panic);
@@ -670,6 +684,8 @@ internal sealed class ControlApi : IAsyncDisposable
     private sealed record OpenRequest(bool? Open);
 
     private sealed record TempoRequest(double? Bpm);
+
+    private sealed record CurfewRequest(string? At);
 
     private sealed record TokenRequest(string? Role, double? Hours, string? Label);
 

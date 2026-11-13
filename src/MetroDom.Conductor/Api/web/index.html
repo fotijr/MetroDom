@@ -58,6 +58,12 @@
 
     <button id="panic" type="button" class="panic" data-grant="panic">PANIC</button>
 
+    <form id="curfew-form" class="search" data-grant="curfew" hidden>
+      <input id="curfew-at" type="time" required aria-label="Tonight's curfew">
+      <button type="submit">Set curfew</button>
+      <button id="curfew-lift" type="button" class="ghost">Lift</button>
+    </form>
+
     <section>
       <h2>Queue</h2>
       <div id="requests-bar" class="row muted" hidden>

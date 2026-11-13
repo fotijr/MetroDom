@@ -311,6 +311,34 @@
         }
       }
     },
+    "/curfew": {
+      "post": {
+        "operationId": "setCurfewTonight",
+        "x-metrodom-grant": "curfew",
+        "summary": "Set tonight's curfew: no song starts that can't finish by then (plus the policy's grace). Only adds a stop; the policy's curfew and end time still hold. In force until lifted.",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CurfewRequest" } } }
+        },
+        "responses": {
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      },
+      "delete": {
+        "operationId": "liftCurfewTonight",
+        "x-metrodom-grant": "curfew",
+        "summary": "Lift tonight's curfew. The policy's curfew and end time can't be lifted from here.",
+        "responses": {
+          "202": { "$ref": "#/components/responses/Accepted" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "409": { "$ref": "#/components/responses/Conflict" }
+        }
+      }
+    },
     "/panic": {
       "post": {
         "operationId": "panic",
@@ -423,7 +451,7 @@
           "grants": { "type": "array", "items": { "$ref": "#/components/schemas/Grant" } }
         }
       },
-      "Grant": { "type": "string", "enum": ["view", "transport", "tempo", "sections", "panic", "queue.request", "queue.vote", "queue.edit", "tokens"] },
+      "Grant": { "type": "string", "enum": ["view", "transport", "tempo", "sections", "panic", "queue.request", "queue.vote", "queue.edit", "tokens", "curfew"] },
       "TokenHolder": {
         "type": "object",
         "required": ["id", "role", "issuedAt", "expiresAt"],
@@ -458,6 +486,11 @@
         "type": "object",
         "required": ["bpm"],
         "properties": { "bpm": { "type": "number", "minimum": 30, "maximum": 300 } }
+      },
+      "CurfewRequest": {
+        "type": "object",
+        "required": ["at"],
+        "properties": { "at": { "type": "string", "pattern": "^\\d{1,2}:\\d{2}$", "description": "Local time, HH:mm: the next time the clock reads it." } }
       },
       "Song": {
         "type": "object",
@@ -540,6 +573,7 @@
             }
           },
           "section": { "type": ["string", "null"], "description": "e.g. \"Chorus (2/3) · vamping\"." },
+          "curfew": { "type": ["string", "null"], "description": "\"Set ends 23:00\", \"Curfew until 10:00.\", or null when no stop is set or coming." },
           "following": {
             "oneOf": [
               { "type": "null" },

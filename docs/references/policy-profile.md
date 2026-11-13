@@ -100,7 +100,12 @@ grace (its length at the tempo it starts at), and a song still playing at that m
 down, vamping) is stopped. `play` then ends the set; `serve` waits ("Curfew until 10:00.") and
 needs Start again when it lifts. Past `endsAt` it never lifts. The remote and `GET /state` show
 `curfew`. Use both for a venue: the curfew ends the set cleanly, quiet hours make sure nothing
-sounds after it, whatever sends notes (`route`, a guest's request). Times are the Conductor's local
+sounds after it, whatever sends notes (`route`, a guest's request).
+
+**Tonight's curfew** is set live from the remote or `POST /curfew {"at": "23:30"}` (grant
+`curfew`): the next time the clock reads that, it's one more stop, on top of the policy's, so it
+can only end the night sooner. It holds until `DELETE /curfew` (the remote's Lift) or a restart;
+the policy's curfew and end time can't be lifted from the API. Times are the Conductor's local
 clock; a daylight-saving change on the night isn't handled (TD-25).
 
 **Flags on top:** `--max-velocity` and `--max-rate` can only tighten the policy (the lower
@@ -117,7 +122,7 @@ tokens from the owner (`POST /tokens`), and the policy lists what each may do:
 
 ```json
 "roles": {
-  "operator": ["view", "transport", "tempo", "sections", "panic", "queue.edit"],
+  "operator": ["view", "transport", "tempo", "sections", "panic", "queue.edit", "curfew"],
   "guest": ["view", "queue.request", "queue.vote"]
 }
 ```
@@ -133,6 +138,7 @@ tokens from the owner (`POST /tokens`), and the policy lists what each may do:
 | `queue.request` | `POST /requests` |
 | `queue.vote` | `POST`/`DELETE /queue/{id}/vote` |
 | `tokens` | `GET`/`POST /tokens`, `DELETE /tokens/{id}`: the owner's alone |
+| `curfew` | `POST`/`DELETE /curfew`: set or lift tonight's curfew (it can only end the night sooner) |
 
 Rules that hold whatever a file says ([SECURITY](../SECURITY.md)), refused with a reason:
 - An operator always has `view` and `panic`.
@@ -140,8 +146,8 @@ Rules that hold whatever a file says ([SECURITY](../SECURITY.md)), refused with 
 - Nobody but the owner has `tokens`. `roles.owner` can't be set.
 
 Without a `roles` section: operators get `view`, `transport`, `tempo`, `sections`, `panic` (what
-every token could do in API v0) and `queue.edit` (a bandmate reorders the set), and guests get
-nothing.
+every token could do in API v0), `queue.edit` (a bandmate reorders the set) and `curfew` (venue
+staff can call it a night early), and guests get nothing.
 
 ## Queue
 

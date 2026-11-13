@@ -100,8 +100,7 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
                 LatencyBootCheck.Run(session, onsets);
             }
 
-            var curfew = settings.Curfew;
-            using var live = new LiveControl(session, new SystemClock(), queue) { Curfew = curfew };
+            using var live = new LiveControl(session, new SystemClock(), queue) { Curfew = settings.Curfew };
             using var tapInput = settings.Tap is null ? null : TapInput(settings, live.Tap);
             using var clockInput = settings.ClockIn is null ? null : ClockInput(settings, live.Clock, live.FollowClock);
             using var followInput = settings.Follow is null ? null : FollowInput(settings, live.Beat);
@@ -128,7 +127,7 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
                 inputs += $" · API {handle.Address}";
             }
 
-            if (curfew.Describe() is { } stopping)
+            if (live.Curfew.Describe() is { } stopping)
             {
                 inputs += $" · {stopping}";
             }
@@ -183,6 +182,7 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
                 }
 
                 // Curfew or the booking's end: never start a song that can't finish in time.
+                var curfew = live.Curfew; // tonight's may have been set from the remote
                 if (curfew.IsSet && !curfew.Fits(live.WallClock(), SongLength(path, settings.Tempo)))
                 {
                     var now = live.WallClock();
@@ -257,14 +257,16 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
     /// </summary>
     private static bool WaitForCurfew(Session session, LiveControl live)
     {
-        var curfew = live.Curfew;
         var from = live.WallClock();
-        var until = curfew.InForce(from) ? from : curfew.NextStop(from) ?? from;
+        var until = live.Curfew.InForce(from) ? from : live.Curfew.NextStop(from) ?? from;
         using var lifted = new ManualResetEventSlim();
         using var check = new Timer(_ =>
         {
+            // Read each time: the owner may lift tonight's curfew while we wait.
+            var curfew = live.Curfew;
             var now = live.WallClock();
-            if (now >= until && !curfew.InForce(now))
+            // Over once it's no longer in force and the stop we waited for has passed, moved later or gone.
+            if (!curfew.InForce(now) && (now >= until || curfew.NextStop(now) is not { } stop || stop > until))
             {
                 lifted.Set();
             }
@@ -460,10 +462,11 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
         loop.Finished += () => live.End(LiveSignal.Finished);
 
         // Curfew: a song that runs past the stop time plus grace (slowed down, vamping) is stopped.
-        var deadline = live.Curfew.Deadline(live.WallClock());
-        using var curfewCheck = deadline is null ? null : new Timer(_ =>
+        var songStart = live.WallClock();
+        using var curfewCheck = new Timer(_ =>
         {
-            if (live.WallClock() >= deadline)
+            // Read each time: tonight's curfew can be set from the remote mid-song.
+            if (live.Curfew.Deadline(songStart) is { } deadline && live.WallClock() >= deadline)
             {
                 session.Messages.Add($"Curfew: stopping {song}.");
                 live.End(LiveSignal.Stopped);

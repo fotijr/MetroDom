@@ -73,4 +73,25 @@ public class CurfewTests
         Assert.Null(Curfew.None.Describe());
         Assert.Equal("curfew 23:00-10:00 · 5 min grace", Nightly.Describe());
     }
+
+    [Fact]
+    public void Tonight_AddsAStop_UntilLifted_AndNeverExtendsThePolicy()
+    {
+        var tonight = Nightly.Tonight(At(13, 21, 0), new TimeOnly(22, 30));
+        Assert.Equal(At(13, 22, 30), tonight.StopAt);
+        Assert.Equal(At(13, 22, 30), tonight.NextStop(At(13, 21, 0)));
+        Assert.True(tonight.InForce(At(13, 22, 30)));
+        Assert.True(tonight.InForce(At(14, 12, 0))); // past the morning: still, until the owner lifts it
+        Assert.Null(tonight.LiftsAt(At(13, 23, 30)));
+        Assert.Equal("Curfew since 22:30, until the owner lifts it.", tonight.Reason(At(13, 22, 45)));
+        Assert.Equal("curfew 23:00-10:00 · tonight's curfew 22:30 · 5 min grace", tonight.Describe());
+        Assert.Equal(Nightly, tonight with { StopAt = null });
+
+        // Later than the policy's curfew: the policy's still comes first.
+        var late = Nightly.Tonight(At(13, 21, 0), new TimeOnly(23, 30));
+        Assert.Equal(At(13, 23, 0), late.NextStop(At(13, 21, 0)));
+
+        // Set after midnight's time has passed: the next time the clock reads it.
+        Assert.Equal(At(14, 1, 0), Curfew.None.Tonight(At(13, 21, 0), new TimeOnly(1, 0)).StopAt);
+    }
 }

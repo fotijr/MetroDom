@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Http.Headers;
@@ -504,5 +505,22 @@ public sealed class ControlApiTests : IAsyncDisposable
         public void Dispose()
         {
         }
+    }
+
+    [Fact]
+    public async Task Curfew_SetTonight_ShowsInState_AndLiftsOnlyWhatWasSet()
+    {
+        Assert.Equal(HttpStatusCode.BadRequest, (await Post("curfew", """{"at":"late"}""")).Status);
+        Assert.Equal(HttpStatusCode.Conflict, (await Send(HttpMethod.Delete, "curfew")).Status);
+
+        var at = DateTime.Now.AddHours(2).ToString("HH:mm", CultureInfo.InvariantCulture);
+        var (status, body) = await Post("curfew", $$"""{"at":"{{at}}"}""");
+        Assert.Equal(HttpStatusCode.Accepted, status);
+        Assert.StartsWith($"Tonight's curfew: {at}.", body.GetProperty("message").GetString(), StringComparison.Ordinal);
+        Assert.Equal($"Set ends {at}", (await Get("state")).Body.GetProperty("curfew").GetString());
+
+        Assert.Equal(HttpStatusCode.Accepted, (await Send(HttpMethod.Delete, "curfew")).Status);
+        Assert.Equal(JsonValueKind.Null, (await Get("state")).Body.GetProperty("curfew").ValueKind);
+        Assert.False(_live.Curfew.IsSet);
     }
 }
