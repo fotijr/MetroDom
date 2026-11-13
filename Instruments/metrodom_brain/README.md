@@ -5,11 +5,12 @@ A Pico running it is a class-compliant USB-MIDI device: a stock DAW or keyboard 
 no MetroDom software, and `metrodom devices --identify` sees a **MetroDom brain** and reads its
 profile.
 
-Status: **version 0.1, host-tested, not yet flashed.** It stays 0.1 until a brain runs on real
+Status: **version 0.1, host-tested and compiled, not yet flashed.** It stays 0.1 until a brain runs on real
 hardware. The logic runs in `make -C test` on a
-laptop. `make build` and a CI job compile it against the pinned arduino-pico core
-(`sketch.yaml`), but neither has run yet; the first flash is plan 0002 H1 ("Pico blinks an
-LED"). Limits: TD-29 in the [tech-debt tracker](../../docs/exec-plans/tech-debt-tracker.md).
+laptop. `make build` compiles it against the pinned arduino-pico core (`sketch.yaml`): first
+done 2026-11-12 on macOS for both boards, with no warnings from our code even at `--warnings all`
+(Pico: 96 KB of 2 MB flash, 22 KB of 256 KB RAM; Pico 2: 94 KB, 22 KB of 512 KB). CI compiles
+it on every run. The first flash is plan 0002 H1 ("Pico blinks an LED"). Limits: TD-29 in the [tech-debt tracker](../../docs/exec-plans/tech-debt-tracker.md).
 
 At boot the brain reads the body's ID EEPROM and becomes that instrument
 ([body record](../../docs/references/body-record.md)). No EEPROM: the bench body in `config.h`.
@@ -90,7 +91,9 @@ make -C Instruments/metrodom_brain flash               # Pico; BOARD=pico2 for a
 
 `make build` compiles with the versions pinned in [sketch.yaml](sketch.yaml) (arduino-pico core
 6.3.1 with its Adafruit TinyUSB stack, MIDI Library 5.0.2, Adafruit NeoPixel 1.15.5). The first
-run downloads them, a few hundred MB. It uses `arduino-cli` from your PATH, or the one inside the
+run downloads them (about 1.7 GB on disk once unpacked: the core plus its ARM and RISC-V
+compilers, in `~/Library/Arduino15/internal` on macOS), and refreshes
+the library index whenever `sketch.yaml` changes. It uses `arduino-cli` from your PATH, or the one inside the
 Arduino IDE. `make flash` builds, then waits for a Pico held in BOOTSEL (plug it in with the
 button down: it shows up as an `RPI-RP2` or `RP2350` drive) and copies the UF2 to it
 (`flash.sh`). Every CI run compiles both boards and keeps the UF2s as build artifacts.

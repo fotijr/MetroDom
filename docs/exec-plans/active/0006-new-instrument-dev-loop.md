@@ -88,8 +88,10 @@ Measured by:
 - [x] `make -C Instruments/metrodom_brain build|flash|test` on `arduino-cli` (PATH, or the one
       inside the Arduino IDE), with the arduino-pico core 6.3.1 (its own Adafruit TinyUSB), MIDI
       Library 5.0.2 and Adafruit NeoPixel 1.15.5 pinned as `sketch.yaml` build profiles (`pico`, `pico2`)
+- [x] First real compile, 2026-11-12 on macOS: both boards build with the pinned versions, no
+      warnings from our code at `--warnings all`
 - [x] CI job compiles both boards against the pinned core and keeps the UF2s as artifacts
-      (written, not yet run: CI hasn't run on GitHub, TD-04)
+      (not yet run on GitHub, TD-04)
 - [x] `flash` waits for a Pico in BOOTSEL (`RPI-RP2` / `RP2350` drive on macOS and Linux) and
       copies the UF2 (`flash.sh`; tried against a fake drive), so no IDE is needed
 - [ ] On hardware (needs plan 0002 H1): the M0 bench body flashes and plays from the make target
@@ -156,6 +158,11 @@ Measured by:
   brain's USB is MIDI with no serial port to reset through. `bench` takes a port, not `-o`, like
   `body write`, and builds its own governor: it drives one MetroDom brain, never a band. It can't
   test unplugging USB (the port goes with it), so the guide keeps that as a manual check.
+
+- 2026-11-12: The first real compile worked once the library index was fresh: the Arduino
+  IDE's cached index predated NeoPixel 1.15.5, and a profile can't install what the index
+  doesn't list. `make build` now refreshes the index whenever `sketch.yaml` changes. The sketch
+  needed no changes; the only warnings at `--warnings all` are in TinyUSB and NeoPixel.
 
 ## Open questions
 (none)

@@ -9,12 +9,19 @@ IDE_CLI := /Applications/Arduino IDE.app/Contents/Resources/app/lib/backend/reso
 ARDUINO_CLI ?= $(shell command -v arduino-cli 2>/dev/null || { test -x "$(IDE_CLI)" && echo "$(IDE_CLI)"; })
 OUT := build/$(BOARD)
 UF2 := $(OUT)/metrodom_brain.ino.uf2
+# Refreshed whenever the pins change: a profile asking for a library newer than the cached index
+# (the Arduino IDE's can be months old) fails with "library not found".
+INDEX := build/.index-$(shell cksum < sketch.yaml | cut -d' ' -f1)
 
 .PHONY: build flash test clean check-cli
 
-build: check-cli
+build: check-cli $(INDEX)
 	"$(ARDUINO_CLI)" compile --profile $(BOARD) --output-dir $(OUT) --warnings default .
 	@echo "Built $(UF2)"
+
+$(INDEX):
+	"$(ARDUINO_CLI)" lib update-index
+	@mkdir -p build && rm -f build/.index-* && touch $@
 
 flash: build
 	./flash.sh $(UF2)
