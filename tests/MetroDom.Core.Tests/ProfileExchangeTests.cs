@@ -34,9 +34,40 @@ public class ProfileExchangeTests
         Assert.Equal([60, 64, 67], profile.Notes!.Order());
         Assert.Equal(TimeSpan.FromMilliseconds(9), profile.LatencyFor(60));
         Assert.Equal(TimeSpan.FromMilliseconds(10), profile.MaxLatency);
-        Assert.Equal(TimeSpan.FromMilliseconds(80), profile.MinInterval); // slowest note wins
+        Assert.Equal(TimeSpan.FromMilliseconds(80), profile.MinInterval); // for notes without their own: the slowest
+        Assert.Equal(TimeSpan.FromMilliseconds(60), profile.IntervalFor(60)); // each note keeps its own
+        Assert.Equal(TimeSpan.FromMilliseconds(80), profile.IntervalFor(67));
         Assert.False(profile.CanPlay(62));
         Assert.Equal(0, profile.Channel); // "midi": { "channel": 1 }
+        Assert.Equal(3, profile.Polyphony);
+        Assert.Equal(new ActuatorSafety(TimeSpan.FromMilliseconds(45), 30, TimeSpan.FromSeconds(1)), profile.Safety);
+        Assert.Equal(TimeSpan.FromMilliseconds(45), profile.PulseFor(60)); // no pulseMs: the longest allowed
+        Assert.False(profile.SpeaksMetroDom); // only discovery says so, never the JSON
+    }
+
+    [Fact]
+    public void PulseAndSafety_RoundTrip()
+    {
+        var coil = new InstrumentProfile("coil", TimeSpan.FromMilliseconds(9))
+        {
+            Notes = new HashSet<int> { 60 },
+            NotePulse = new Dictionary<int, TimeSpan> { [60] = TimeSpan.FromMilliseconds(30) },
+            Polyphony = 2,
+            Safety = new ActuatorSafety(TimeSpan.FromMilliseconds(45), 30, TimeSpan.FromMilliseconds(500)),
+        };
+
+        Assert.True(InstrumentProfileJson.TryParse(InstrumentProfileJson.Write(coil), out var back, out var error), error);
+        Assert.Equal(coil.NotePulse, back.NotePulse);
+        Assert.Equal(2, back.Polyphony);
+        Assert.Equal(coil.Safety, back.Safety);
+    }
+
+    [Fact]
+    public void AllOff_HasTheDocumentedBytes()
+    {
+        Assert.Equal(new byte[] { 0xF0, 0x7D, (byte)'M', (byte)'D', 0x03, 0xF7 }, Bytes(ProfileExchange.AllOff()));
+        Assert.True(ProfileExchange.IsAllOff(ProfileExchange.AllOff()));
+        Assert.False(ProfileExchange.IsAllOff(ProfileExchange.Request()));
     }
 
     [Fact]
@@ -62,6 +93,11 @@ public class ProfileExchangeTests
     [InlineData("""{"schema":"metrodom.instrument-profile/0","name":"x","latencyMs":-1}""", "negative")]
     [InlineData("""{"schema":"metrodom.instrument-profile/0","name":"x","midi":{"channel":17}}""", "must be 1-16")]
     [InlineData("""{"schema":"metrodom.instrument-profile/0","name":"x","midi":{"channel":0}}""", "must be 1-16")]
+    [InlineData("""{"schema":"metrodom.instrument-profile/0","name":"x","polyphony":0}""", "at least 1")]
+    [InlineData("""{"schema":"metrodom.instrument-profile/0","name":"x","notes":[{"note":60,"pulseMs":0}]}""", "pulseMs")]
+    [InlineData("""{"schema":"metrodom.instrument-profile/0","name":"x","safety":{"maxDutyPercent":30}}""", "maxOnMs")]
+    [InlineData("""{"schema":"metrodom.instrument-profile/0","name":"x","safety":{"maxOnMs":45,"maxDutyPercent":0}}""", "1-100")]
+    [InlineData("""{"schema":"metrodom.instrument-profile/0","name":"x","safety":{"maxOnMs":45,"maxDutyPercent":30,"dutyWindowMs":0}}""", "dutyWindowMs")]
     public void Parse_RejectsBadProfiles_WithAReason(string json, string reason)
     {
         Assert.False(InstrumentProfileJson.TryParse(json, out _, out var error));
@@ -76,6 +112,7 @@ public class ProfileExchangeTests
             Notes = new HashSet<int> { 36, 38 },
             NoteLatency = new Dictionary<int, TimeSpan> { [36] = TimeSpan.FromMilliseconds(40) },
             MinInterval = TimeSpan.FromMilliseconds(50),
+            NoteInterval = new Dictionary<int, TimeSpan> { [38] = TimeSpan.FromMilliseconds(30) },
         };
         var any = new InstrumentProfile("xylo", TimeSpan.FromMilliseconds(10.5));
 
@@ -89,6 +126,7 @@ public class ProfileExchangeTests
             Assert.Equal(original.MinInterval, parsed.MinInterval);
             Assert.Equal(original.Notes?.Order(), parsed.Notes?.Order());
             Assert.Equal(original.NoteLatency, parsed.NoteLatency);
+            Assert.Equal(original.NoteInterval, parsed.NoteInterval);
         }
     }
 

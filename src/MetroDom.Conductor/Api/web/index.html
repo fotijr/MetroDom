@@ -5,14 +5,20 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="light dark">
   <meta name="referrer" content="no-referrer">
+  <meta name="theme-color" content="#111214">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="MetroDom">
   <title>MetroDom</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="stylesheet" href="app.css">
   <script src="app.js" defer></script>
 </head>
 <body>
   <main id="pair" hidden>
     <h1>MetroDom</h1>
-    <p>Open the link the Conductor printed, or paste its token.</p>
+    <p>Scan the QR code you were given, open the link the Conductor printed, or paste its token.</p>
     <form id="pair-form">
       <label for="token">Token</label>
       <input id="token" name="token" autocomplete="off" autocapitalize="off" spellcheck="false" required>
@@ -27,6 +33,7 @@
       <div class="title">
         <div id="song">–</div>
         <div id="status" class="muted">Connecting…</div>
+        <div id="role" class="muted"></div>
       </div>
       <button id="forget" class="ghost" type="button" title="Forget this token on this device">Forget</button>
     </header>
@@ -36,24 +43,80 @@
       <div class="row muted"><span id="time">0:00 / 0:00</span><span id="section"></span></div>
       <div class="tempo"><span id="bpm">–</span><span class="muted"> BPM</span> <span id="tempo-detail" class="muted"></span></div>
       <div id="following" class="muted"></div>
+      <div id="curfew" class="muted"></div>
     </section>
 
     <section class="controls">
-      <button id="startstop" type="button" class="primary">Start</button>
-      <button id="next" type="button">Next</button>
-      <button id="slower" type="button" aria-label="Slower">− Tempo</button>
-      <button id="faster" type="button" aria-label="Faster">Tempo +</button>
-      <button id="tap" type="button">Tap</button>
-      <button id="vamp" type="button">Vamp</button>
-      <button id="outro" type="button">Outro</button>
+      <button id="startstop" type="button" class="primary" data-grant="transport">Start</button>
+      <button id="next" type="button" data-grant="transport">Next</button>
+      <button id="slower" type="button" aria-label="Slower" data-grant="tempo">− Tempo</button>
+      <button id="faster" type="button" aria-label="Faster" data-grant="tempo">Tempo +</button>
+      <button id="tap" type="button" data-grant="tempo">Tap</button>
+      <button id="vamp" type="button" data-grant="sections">Vamp</button>
+      <button id="outro" type="button" data-grant="sections">Outro</button>
     </section>
 
-    <button id="panic" type="button" class="panic">PANIC</button>
+    <div class="volume" data-grant="volume" hidden>
+      <label for="volume">Volume</label>
+      <input id="volume" type="range" min="0" max="100" step="5" value="100">
+      <span id="volume-value" class="muted">100%</span>
+    </div>
+
+    <button id="panic" type="button" class="panic" data-grant="panic">PANIC</button>
+
+    <form id="curfew-form" class="search" data-grant="curfew" hidden>
+      <input id="curfew-at" type="time" required aria-label="Tonight's curfew">
+      <button type="submit">Set curfew</button>
+      <button id="curfew-lift" type="button" class="ghost">Lift</button>
+    </form>
 
     <section>
-      <h2>Setlist</h2>
-      <ol id="setlist"></ol>
+      <h2>Queue</h2>
+      <div id="requests-bar" class="row muted" hidden>
+        <span id="requests-status"></span>
+        <button id="requests-toggle" type="button" class="ghost" data-grant="queue.edit">Pause requests</button>
+      </div>
+      <ol id="queue" class="queue"></ol>
+      <p id="queue-empty" class="muted" hidden>Nothing queued.</p>
     </section>
+
+    <section id="library-panel" data-grant="queue.edit queue.request" hidden>
+      <h2>Library</h2>
+      <div class="search">
+        <input id="library-filter" type="search" placeholder="Find a song" aria-label="Find a song" autocomplete="off">
+        <button id="library-refresh" type="button" class="ghost">Refresh</button>
+      </div>
+      <ul id="library" class="library"></ul>
+      <p id="library-empty" class="muted" hidden></p>
+    </section>
+
+    <section id="invite-panel" data-grant="tokens" hidden>
+      <h2>Invite</h2>
+      <form id="invite-form" class="invite">
+        <label>Who
+          <select id="invite-role">
+            <option value="guest">Guest</option>
+            <option value="operator">Operator</option>
+            <option value="join">Everyone in the room (one QR, a guest per phone)</option>
+          </select>
+        </label>
+        <label>Name <input id="invite-label" maxlength="60" placeholder="Table 4, Sam…" autocomplete="off"></label>
+        <label>Hours <input id="invite-hours" type="number" min="0.5" step="0.5" inputmode="decimal" placeholder="policy maximum"></label>
+        <button type="submit">Make a QR code</button>
+      </form>
+      <div id="invite-result" class="invite-result" hidden>
+        <img id="invite-qr" alt="QR code to join">
+        <p id="invite-who" class="muted"></p>
+        <div class="row">
+          <button id="invite-copy" type="button" class="ghost">Copy link</button>
+          <button id="invite-share" type="button" class="ghost" hidden>Share</button>
+          <a id="invite-screen" class="button ghost" target="_blank" rel="noopener" hidden>Open screen</a>
+        </div>
+      </div>
+      <h3 class="muted">Handed out</h3>
+      <ul id="tokens" class="tokens"></ul>
+    </section>
+
     <section>
       <h2>Instruments</h2>
       <ul id="instruments"></ul>

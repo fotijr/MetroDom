@@ -32,8 +32,46 @@ after the port name. Leave out `@LATENCY` or `/NOTES` and `play` asks the instru
 profile ([profile exchange](midi-profile-exchange.md)) and uses what it sends; what you do write
 wins. `--no-identify` skips the question. Without any `-o`, `play` uses every MetroDom
 instrument it finds, each on the first channel of its spec, and picks up ones started mid-set at
-the next song ([auto band](auto-band.md)). Default band (roadmap S1): `xylo` on every channel except 10 at 10 ms,
+the next song ([auto band](auto-band.md)).
+
+A [profile file](instrument-profile.md) can stand where the latency goes: `-i xylo@Instruments/xylophone/profile.json`
+or `-o "General MIDI kit=10@kit-profile.json"`. It gives notes, latencies, minimum interval,
+polyphony and safety limits, as if the instrument had sent it (and beats what it does send). `-i`
+takes the profile's `midi.channel` unless `=CHANNELS` says otherwise; a missing or invalid file is
+a usage error naming it. Default band (roadmap S1): `xylo` on every channel except 10 at 10 ms,
 `drums` on 10 at 35 ms.
+
+## A body's brain, in software (`--body`)
+
+```bash
+metrodom virtual --body Instruments/snare/body.json            # a "MetroDom snare" port
+metrodom simulate song.mid --body Instruments/snare/body.json  # what it plays and refuses, instantly
+metrodom simulate song.mid -i xylo=1@10 --body Instruments/snare/body.json --arrange
+```
+
+`--body FILE` (repeatable, on `virtual` and `simulate`) stands up a virtual brain running that
+[body](body-record.md). It decides exactly as the firmware does (`BrainModel`): its notes only,
+its `midi.channel` if it has one, a pulse scaled by velocity, and refusals for a note still
+striking, a repeat under `minIntervalMs`, a spent duty budget, or too many at once. Accent LEDs
+flash in the note's color. Panic ends strikes, but their intervals still count. The same
+[parity vectors](../../Instruments/metrodom_brain/test/vectors/README.md) run against the firmware and
+the model, so they can't drift apart.
+
+- `virtual --body` names the port after the body (`"name"`, the USB name a real brain shows), so
+  `play -o "MetroDom snare"` and `devices --identify` treat it like the real instrument. Each
+  strike prints its pulse and an LED swatch; each refusal prints why. It describes itself with
+  the profile the brain would send.
+- `simulate --body` adds the body to the band. Omni bodies hear every channel; with `--arrange`
+  they get their own channel or the first free one, as the [auto band](auto-band.md) picks. The
+  band table shows what `play`'s governor would hold back. A second section, **Played straight
+  to each brain**, reruns the song with no governor (as from a DAW) and counts what each brain
+  refuses, by reason: that's where to look when tuning `pulseMs`, `minIntervalMs` and the duty.
+- Without `-i`, only the bodies play.
+
+`virtual --onsets` adds a `MetroDom onsets` port that sends a Note On whenever a strike would be
+heard, standing in for a piezo or mic ([calibration](calibration.md)). `--drift MS` makes every
+instrument strike that much later than its profile says, to try the boot check, and `--jitter MS`
+scatters strikes randomly.
 
 ## Arranging a song onto the band
 
@@ -49,18 +87,29 @@ metrodom play song.mid --arrange -o "MetroDom xylo=1" -o "MetroDom drums=10"   #
 Rules (`Arranger`): a part is one track on one channel. Greedy pairing, most playable notes
 first, one part per instrument. Pitched parts move by whole octaves to fit, then leftover notes
 fold to the nearest playable note of the same name (`--no-fold` drops them), then repeats faster
-than the instrument's minimum interval are thinned. Only notes are kept. Every change is counted
-in the table. Played to note-limited `virtual` instruments, an arranged song skips nothing.
+than the instrument's minimum interval are thinned. Drum hits the kit lacks play on a stand-in
+(closed hi-hat → pedal or open hat, then ride; crash → another cymbal; a tom → the nearest tom
+the kit has; `DrumMap`), and stand-ins count when choosing the kit's part. With `polyphony`, no
+more notes sound at once than the instrument has actuators: a note holds one for its `pulseMs`
+(else `safety.maxOnMs`, else its length). Chords keep the top voice, then the bass; drum hits
+keep kick, snare, hi-hat/ride, crashes, toms, in that order. Only notes are kept. Every change
+is counted in the table ("on a stand-in", "over polyphony N"). Played to note-limited `virtual` instruments, an arranged song skips nothing.
 
 ## What a virtual instrument does
 
 - Note On → one strike, **heard** at arrival + latency (± `--jitter`, seeded). Note Off is
   ignored: the strike pulse ends by itself, so nothing can stick on.
 - Drops notes it has no actuator for (`InstrumentProfile.Notes`) and refuses repeats faster
-  than `MinInterval`, both reported. `virtual` only listens on its channels.
+  than `MinInterval`, both reported. `virtual` only listens on its channels. A `--body`
+  instrument refuses everything a brain would instead (busy, interval, duty, polyphony).
 - Counts panic (CC 120/123), so tests can check panic reached every instrument.
 
 ## What the simulation measures
+
+Notes go through a `SafetyGovernor` per instrument (profile rules only, no policy limits), as in
+`play`, so the report's **Held** column is what `play` would hold back, with the reasons under the
+table ("4 too soon", "2 not playable"). A note that still gets past the governor and is dropped
+or refused by the instrument shows in red: the governor and the firmware disagree.
 
 `LatencyScheduler` sends each event to each instrument at
 `songTime + lookahead − latency(instrument, note)`, where lookahead is the slowest latency in the
@@ -145,3 +194,7 @@ metrodom play song.mid -o "MetroDom xylo" --follow "pads" # count the band in wi
 - Latency comes from the command line, not profile files or SysEx discovery. Virtual instruments
   do answer MIDI Identity Requests as MetroDom model 0 ([midi-identity](midi-identity.md)), so
   `metrodom devices --identify` finds them and reads their profile ([profile exchange](midi-profile-exchange.md)).
+  They accept a Body Write like a brain (`metrodom body write "MetroDom xylo" FILE`) and from then
+  on describe themselves as that body, though they still play as before: a written body doesn't
+  restart a virtual brain as that body; start it with `--body` instead ([body record](body-record.md)).
+- `--drift` applies to `-i` instruments only, not `--body` ones (they take latency from the body).

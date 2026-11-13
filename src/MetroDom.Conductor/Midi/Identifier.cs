@@ -192,7 +192,7 @@ internal static class Identifier
         }
 
         return InstrumentProfileJson.TryParse(json, out var profile, out var error)
-            ? port with { Profile = profile }
+            ? port with { Profile = profile with { SpeaksMetroDom = true } }
             : port with { ProfileError = $"sent a profile that doesn't parse: {error}" };
     }
 }

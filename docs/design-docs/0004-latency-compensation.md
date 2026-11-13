@@ -1,6 +1,6 @@
 # 0004: Latency compensation via per-instrument lookahead
 
-Status: **Proposed** (2026-11-10)
+Status: **Accepted** (2026-11-11, proposed 2026-11-10)
 
 ## Context
 Mechanical actuators are slow and uneven. A solenoid might strike ~10 ms after the command, a
@@ -28,5 +28,9 @@ and velocity. Sending notes "on time" makes a band of robots sound sloppy.
   runs on **predicted** beats from a tempo tracker, not on a known timeline.
 
 ## Open questions
-- Calibration UX for a rental customer (automatic on boot?).
-- Target jitter budget. Proposed ≤ 5 ms between instruments for pre-composed material.
+- ~~Calibration UX for a rental customer (automatic on boot?)~~ A quick check on boot plays a
+  short test, compares against the stored latencies and flags drift. Full per-note calibration
+  runs on demand (owner, 2026-11-11). Built in plan 0004 S5 ([calibration](../references/calibration.md)):
+  onsets come in as MIDI Note Ons from a trigger or mic-to-MIDI input.
+- ~~Target jitter budget?~~ ≤ 5 ms between instruments for pre-composed material (owner,
+  2026-11-11), as in [RELIABILITY.md](../RELIABILITY.md).

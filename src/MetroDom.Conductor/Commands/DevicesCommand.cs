@@ -178,10 +178,15 @@ internal sealed class DevicesCommand : Command<DevicesCommand.Settings>
         var latency = fastest == profile.MaxLatency
             ? string.Create(CultureInfo.InvariantCulture, $"{fastest.TotalMilliseconds:0.#} ms")
             : string.Create(CultureInfo.InvariantCulture, $"{fastest.TotalMilliseconds:0.#}-{profile.MaxLatency.TotalMilliseconds:0.#} ms");
-        var interval = profile.MinInterval > TimeSpan.Zero
-            ? string.Create(CultureInfo.InvariantCulture, $" · repeat ≥ {profile.MinInterval.TotalMilliseconds:0.#} ms")
+        var intervals = profile.Notes is { Count: > 0 } playable ? playable.Select(profile.IntervalFor).ToList() : [profile.MinInterval];
+        TimeSpan quickest = intervals.Min(), slowest = intervals.Max();
+        var interval = slowest <= TimeSpan.Zero ? ""
+            : quickest == slowest ? string.Create(CultureInfo.InvariantCulture, $" · repeat ≥ {slowest.TotalMilliseconds:0.#} ms")
+            : string.Create(CultureInfo.InvariantCulture, $" · repeat ≥ {quickest.TotalMilliseconds:0.#}-{slowest.TotalMilliseconds:0.#} ms");
+        var accent = profile.Accent is { } strip
+            ? string.Create(CultureInfo.InvariantCulture, $" · {strip.Leds} accent LEDs")
             : "";
-        return $"{notes} · {latency}{interval}";
+        return $"{notes} · {latency}{interval}{accent}";
     }
 
     private static Table Ports(IReadOnlyList<string> names)

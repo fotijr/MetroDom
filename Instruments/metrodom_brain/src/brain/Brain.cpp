@@ -1,5 +1,7 @@
 #include "Brain.h"
 
+#include "Body.h"
+
 #include <stdarg.h>
 #include <stdio.h>
 
@@ -22,6 +24,12 @@ constexpr uint8_t kIdentityReply = 0x02;
 // MetroDom SysEx (docs/references/midi-profile-exchange.md).
 constexpr uint8_t kProfileRequest = 0x01;
 constexpr uint8_t kProfileReply = 0x02;
+constexpr uint8_t kAllOff = 0x03;
+constexpr uint8_t kBodyWrite = 0x04;
+constexpr uint8_t kBodyWriteReply = 0x05;
+constexpr uint8_t kBodyRead = 0x06;
+constexpr uint8_t kBodyReadReply = 0x07;
+constexpr size_t kBodyChunkHex = 128;
 constexpr size_t kChunk = 128;
 
 uint16_t clamp16(uint16_t value, uint16_t low, uint16_t high) {
@@ -64,17 +72,42 @@ struct Writer {
   }
 };
 
+int hexDigit(uint8_t c) {
+  if (c >= '0' && c <= '9') return c - '0';
+  if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+  if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+  return -1;
+}
+
 }  // namespace
 
-Brain::Brain(const BrainConfig& config, Outputs& outputs, Replies& replies)
-    : config_(config), outputs_(outputs), replies_(replies) {
-  count_ = config.actuatorCount > kMaxActuators ? kMaxActuators : config.actuatorCount;
+Brain::Brain(const BrainConfig& config, Outputs& outputs, Replies& replies, BodyStore* store, Leds* leds)
+    : config_(config), outputs_(outputs), replies_(replies), store_(store), leds_(leds) {
+  count_ = config.actuators == nullptr ? 0 : config.actuatorCount > kMaxActuators ? kMaxActuators : config.actuatorCount;
   polyphony_ = config.polyphony == 0 ? 1 : config.polyphony;
+  // Ceilings: whatever the body says, no pulse over kCeilingOnMs and no duty over kCeilingDutyPercent.
+  maxOnMs_ = clamp16(config.maxOnMs, 1, kCeilingOnMs);
+  maxDutyPercent_ = config.maxDutyPercent == 0 ? 1
+                    : config.maxDutyPercent > kCeilingDutyPercent ? kCeilingDutyPercent
+                                                                 : config.maxDutyPercent;
+  // Accent LEDs only with a strip to drive, never brighter than the ceiling.
+  ledCount_ = leds == nullptr ? 0 : config.ledCount > kMaxLeds ? kMaxLeds : config.ledCount;
+  ledPercent_ = config.ledBrightnessPercent > kCeilingLedPercent ? kCeilingLedPercent : config.ledBrightnessPercent;
+  flashMs_ = clamp16(config.flashMs, 10, 1000);
   for (uint8_t i = 0; i < count_; ++i) {
     Actuator a = config.actuators[i];
     a.note &= 0x7F;
+    // Its LEDs stay on the strip; with no strip or no brightness, it has none.
+    if (ledCount_ == 0 || ledPercent_ == 0 || a.ledFirst >= ledCount_) {
+      a.ledCount = 0;
+      a.ledFirst = 0;
+    } else if (a.ledCount > ledCount_ - a.ledFirst) {
+      a.ledCount = static_cast<uint8_t>(ledCount_ - a.ledFirst);
+    }
     // The pulse never exceeds maxOnMs; a repeat never comes before the pulse has ended.
-    a.pulseMs = clamp16(a.pulseMs, 1, config.maxOnMs == 0 ? 1 : config.maxOnMs);
+    a.pulseMs = clamp16(a.pulseMs, 1, maxOnMs_);
+    if (a.minPulseMs >= a.pulseMs) a.minPulseMs = 0;  // no range: a fixed pulse
+    if (a.minPulseMs > 0) velocity_ = true;
     if (a.minIntervalMs < a.pulseMs) a.minIntervalMs = a.pulseMs;
     actuators_[i] = a;
   }
@@ -82,12 +115,16 @@ Brain::Brain(const BrainConfig& config, Outputs& outputs, Replies& replies)
 }
 
 void Brain::begin(uint32_t nowMs) {
+  enabled_ = false;
+  outputs_.enable(false);  // everything off while disabled, then enable
   for (uint8_t i = 0; i < count_; ++i) {
     state_[i] = State{};
     state_[i].heatAt = nowMs;
-    outputs_.set(actuators_[i].output, false);
+    off(i);
   }
+  ledsOff();
   lastRefusal_ = Refusal::None;
+  updateEnable();
 }
 
 void Brain::message(const uint8_t* data, size_t length, uint32_t nowMs) {
@@ -115,7 +152,6 @@ void Brain::message(const uint8_t* data, size_t length, uint32_t nowMs) {
 }
 
 void Brain::noteOn(uint8_t channel, uint8_t note, uint8_t velocity, uint32_t nowMs) {
-  (void)velocity;  // fixed pulse in the first cut (profile: velocity unsupported)
   lastRefusal_ = Refusal::NotMine;
   if (config_.channel != kOmni && channel != config_.channel) return;
 
@@ -133,6 +169,14 @@ void Brain::noteOn(uint8_t channel, uint8_t note, uint8_t velocity, uint32_t now
     counters_.noHost++;
     return;
   }
+  if (restart_) {
+    lastRefusal_ = Refusal::Restarting;  // a new body is written: nothing plays until it boots
+    return;
+  }
+  if (faulted()) {
+    lastRefusal_ = Refusal::Fault;  // an output may be stuck on: strike nothing else
+    return;
+  }
 
   State& s = state_[index];
   const Actuator& a = actuators_[index];
@@ -144,8 +188,9 @@ void Brain::noteOn(uint8_t channel, uint8_t note, uint8_t velocity, uint32_t now
 
   // Thermal budget: a leaky bucket that fills by each pulse and drains at maxDutyPercent.
   cool(s, nowMs);
-  uint32_t capacity = static_cast<uint32_t>(config_.dutyWindowMs) * config_.maxDutyPercent;
-  uint32_t cost = static_cast<uint32_t>(a.pulseMs) * 100;
+  uint16_t pulse = pulseFor(index, velocity);
+  uint32_t capacity = static_cast<uint32_t>(config_.dutyWindowMs) * maxDutyPercent_;
+  uint32_t cost = static_cast<uint32_t>(pulse) * 100;
   if (s.heat + cost > capacity) {
     lastRefusal_ = Refusal::Duty;
     counters_.duty++;
@@ -162,40 +207,110 @@ void Brain::noteOn(uint8_t channel, uint8_t note, uint8_t velocity, uint32_t now
     return;
   }
 
+  if (!outputs_.set(a.output, true)) {
+    counters_.faults++;
+    off(index);  // it may have turned on: make sure it's off, or keep retrying from tick()
+    lastRefusal_ = Refusal::Fault;
+    return;
+  }
   s.heat += cost;
   s.on = true;
   s.struck = true;
+  s.pulse = pulse;
   s.onAt = nowMs;
   s.lastStrike = nowMs;
-  outputs_.set(a.output, true);
   lastRefusal_ = Refusal::None;
   counters_.struck++;
+  flash(index, velocity, nowMs);
+}
+
+// Lights a strike's LEDs: its color, scaled by the body's brightness and the velocity.
+void Brain::flash(uint8_t index, uint8_t velocity, uint32_t nowMs) {
+  const Actuator& a = actuators_[index];
+  if (a.ledCount == 0) return;
+  uint8_t rgb[3];
+  for (int c = 0; c < 3; ++c) {
+    uint32_t v = static_cast<uint32_t>(a.color[c]) * ledPercent_ * velocity / (100u * 127u);
+    rgb[c] = static_cast<uint8_t>(v == 0 && a.color[c] > 0 ? 1 : v);  // dim, never dark
+  }
+  paint(index, rgb[0], rgb[1], rgb[2]);
+  leds_->show();
+  state_[index].lit = true;
+  state_[index].litAt = nowMs;
+}
+
+void Brain::paint(uint8_t index, uint8_t r, uint8_t g, uint8_t b) {
+  const Actuator& a = actuators_[index];
+  for (uint8_t led = 0; led < a.ledCount; ++led) leds_->set(static_cast<uint8_t>(a.ledFirst + led), r, g, b);
+}
+
+void Brain::ledsOff() {
+  for (uint8_t i = 0; i < count_; ++i) state_[i].lit = false;
+  if (ledCount_ == 0) return;
+  for (uint8_t led = 0; led < ledCount_; ++led) leds_->set(led, 0, 0, 0);
+  leds_->show();
 }
 
 void Brain::cool(State& s, uint32_t nowMs) const {
-  uint32_t drained = (nowMs - s.heatAt) * config_.maxDutyPercent;
+  uint32_t drained = (nowMs - s.heatAt) * maxDutyPercent_;
   s.heat = drained >= s.heat ? 0 : s.heat - drained;
   s.heatAt = nowMs;
 }
 
 void Brain::tick(uint32_t nowMs) {
   for (uint8_t i = 0; i < count_; ++i) {
-    if (state_[i].on && nowMs - state_[i].onAt >= actuators_[i].pulseMs) off(i);
+    if ((state_[i].on && nowMs - state_[i].onAt >= state_[i].pulse) || state_[i].stuck) off(i);
   }
+  bool dark = false;
+  for (uint8_t i = 0; i < count_; ++i) {
+    if (state_[i].lit && nowMs - state_[i].litAt >= flashMs_) {
+      paint(i, 0, 0, 0);
+      state_[i].lit = false;
+      dark = true;
+    }
+  }
+  if (dark) leds_->show();
+  updateEnable();
+}
+
+void Brain::updateEnable() {
+  bool allowed = host_ && !restart_ && !faulted();
+  if (allowed == enabled_) return;
+  enabled_ = allowed;
+  outputs_.enable(allowed);
+}
+
+bool Brain::faulted() const {
+  for (uint8_t i = 0; i < count_; ++i) {
+    if (state_[i].stuck) return true;
+  }
+  return false;
+}
+
+uint16_t Brain::pulseFor(uint8_t index, uint8_t velocity) const {
+  const Actuator& a = actuators_[index];
+  if (a.minPulseMs == 0) return a.pulseMs;
+  uint32_t v = velocity < 1 ? 1 : velocity > 127 ? 127 : velocity;
+  return static_cast<uint16_t>(a.minPulseMs + (static_cast<uint32_t>(a.pulseMs - a.minPulseMs) * (v - 1)) / 126);
 }
 
 void Brain::hostConnected(bool connected) {
   if (!connected) allOff();
   host_ = connected;
+  updateEnable();
 }
 
 void Brain::allOff() {
   for (uint8_t i = 0; i < count_; ++i) off(i);
+  ledsOff();
 }
 
 void Brain::off(uint8_t index) {
   state_[index].on = false;
-  outputs_.set(actuators_[index].output, false);  // always written, even if already off
+  bool ok = outputs_.set(actuators_[index].output, false);  // always written, even if already off
+  if (!ok) counters_.faults++;
+  state_[index].stuck = !ok;
+  if (!ok) updateEnable();  // cut every output in hardware now; tick() re-enables once the off takes
 }
 
 void Brain::sysex(const uint8_t* data, size_t length) {
@@ -207,10 +322,107 @@ void Brain::sysex(const uint8_t* data, size_t length) {
     return;
   }
 
-  // F0 7D 4D 44 01 F7: Profile Request.
-  if (length == 6 && data[1] == kManufacturer && data[2] == kFamilyLsb && data[3] == kFamilyMsb &&
-      data[4] == kProfileRequest) {
-    sendProfile();
+  if (length < 6 || data[1] != kManufacturer || data[2] != kFamilyLsb || data[3] != kFamilyMsb) return;
+  if (data[4] == kBodyWrite) {
+    bodyChunk(data, length);
+    return;
+  }
+  if (length != 6) return;
+  if (data[4] == kAllOff) {
+    allOff();  // F0 7D 4D 44 03 F7: panic in one message
+  } else if (data[4] == kProfileRequest) {
+    sendProfile();  // F0 7D 4D 44 01 F7
+  } else if (data[4] == kBodyRead) {
+    sendBody();  // F0 7D 4D 44 06 F7
+  }
+}
+
+// F0 7D 4D 44 04 <index> <count> <hex...> F7: one chunk of a body record, in order from 0.
+void Brain::bodyChunk(const uint8_t* data, size_t length) {
+  if (length < 8) {
+    replyWrite(WriteStatus::BadMessage);
+    return;
+  }
+  uint8_t index = data[5], count = data[6];
+  size_t hex = length - 8;
+  if (index == 0) {
+    bodyLength_ = 0;
+    bodyNext_ = 0;
+    bodyCount_ = count;
+  }
+  bool ok = count > 0 && count == bodyCount_ && index == bodyNext_ && hex % 2 == 0 && hex <= kBodyChunkHex &&
+            bodyLength_ + hex / 2 <= kMaxBodyBytes;
+  for (size_t i = 0; ok && i < hex; i += 2) {
+    int high = hexDigit(data[7 + i]), low = hexDigit(data[8 + i]);
+    ok = high >= 0 && low >= 0;
+    if (ok) bodyIn_[bodyLength_++] = static_cast<uint8_t>((high << 4) | low);
+  }
+  if (!ok) {
+    bodyNext_ = bodyCount_ = 0;
+    replyWrite(WriteStatus::BadMessage);
+    return;
+  }
+  if (++bodyNext_ < bodyCount_) return;
+
+  bodyNext_ = bodyCount_ = 0;
+  Body body;
+  BodyError error = parseBody(bodyIn_, bodyLength_, body);
+  if (error == BodyError::None && bodyLength_ != static_cast<size_t>(bodyIn_[4] | (bodyIn_[5] << 8))) {
+    error = BodyError::Length;  // trailing bytes: the sender and the record disagree
+  }
+  if (error != BodyError::None) {
+    replyWrite(WriteStatus::Invalid, static_cast<uint8_t>(error));
+    return;
+  }
+  if (store_ == nullptr) {
+    replyWrite(WriteStatus::NoStore);
+    return;
+  }
+
+  // Nothing strikes from here: the brain restarts as the new body, or keeps the old one if the
+  // write failed (a half-written EEPROM boots as a silent brain, never as a wrong instrument).
+  allOff();
+  restart_ = true;
+  updateEnable();
+  if (!store_->write(bodyIn_, bodyLength_)) {
+    restart_ = false;
+    updateEnable();
+    replyWrite(WriteStatus::Failed);
+    return;
+  }
+  replyWrite(WriteStatus::Written);
+}
+
+void Brain::replyWrite(WriteStatus status, uint8_t detail) {
+  const uint8_t reply[] = {0xF0, kManufacturer, kFamilyLsb, kFamilyMsb, kBodyWriteReply,
+                           static_cast<uint8_t>(status), static_cast<uint8_t>(detail & 0x7F), 0xF7};
+  replies_.sysex(reply, sizeof reply);
+}
+
+// F0 7D 4D 44 07 <index> <count> <hex...> F7, the record in 128-character chunks. No record:
+// one message with index and count 0.
+void Brain::sendBody() {
+  static const char kHex[] = "0123456789ABCDEF";
+  uint8_t chunk[7 + kBodyChunkHex + 1] = {0xF0, kManufacturer, kFamilyLsb, kFamilyMsb, kBodyReadReply};
+  size_t hex = recordLength_ * 2;
+  size_t count = (hex + kBodyChunkHex - 1) / kBodyChunkHex;
+  if (count == 0 || count > 127) {
+    chunk[5] = chunk[6] = 0;
+    chunk[7] = 0xF7;
+    replies_.sysex(chunk, 8);
+    return;
+  }
+  for (size_t index = 0; index < count; ++index) {
+    size_t start = index * kBodyChunkHex;
+    size_t n = hex - start < kBodyChunkHex ? hex - start : kBodyChunkHex;
+    chunk[5] = static_cast<uint8_t>(index);
+    chunk[6] = static_cast<uint8_t>(count);
+    for (size_t i = 0; i < n; ++i) {
+      uint8_t byte = record_[(start + i) / 2];
+      chunk[7 + i] = static_cast<uint8_t>(kHex[(start + i) % 2 == 0 ? byte >> 4 : byte & 0x0F]);
+    }
+    chunk[7 + n] = 0xF7;
+    replies_.sysex(chunk, 8 + n);
   }
 }
 
@@ -261,11 +473,21 @@ void Brain::buildProfile() {
     const Actuator& a = actuators_[i];
     w.add("%s{\"note\":%u", i == 0 ? "" : ",", a.note);
     if (a.latencyMs > 0) w.add(",\"latencyMs\":%u", a.latencyMs);
-    w.add(",\"minIntervalMs\":%u}", a.minIntervalMs);
+    if (a.ledCount > 0) {
+      w.add(",\"led\":{\"first\":%u,\"count\":%u,\"color\":\"#%02X%02X%02X\"}", a.ledFirst, a.ledCount,
+            a.color[0], a.color[1], a.color[2]);
+    }
+    w.add(",\"minIntervalMs\":%u", a.minIntervalMs);
+    if (a.minPulseMs > 0) w.add(",\"minPulseMs\":%u", a.minPulseMs);
+    w.add(",\"pulseMs\":%u}", a.pulseMs);
   }
-  w.add("],\"polyphony\":%u,\"velocity\":{\"supported\":false}", polyphony_);
-  w.add(",\"safety\":{\"maxOnMs\":%u,\"maxDutyPercent\":%u,\"watchdogMs\":%u}}", config_.maxOnMs,
-        config_.maxDutyPercent, config_.watchdogMs);
+  w.add("]");
+  if (ledCount_ > 0) {
+    w.add(",\"accent\":{\"leds\":%u,\"maxBrightnessPercent\":%u,\"flashMs\":%u}", ledCount_, ledPercent_, flashMs_);
+  }
+  w.add(",\"polyphony\":%u,\"velocity\":{\"supported\":%s}", polyphony_, velocity_ ? "true" : "false");
+  w.add(",\"safety\":{\"maxOnMs\":%u,\"maxDutyPercent\":%u,\"dutyWindowMs\":%u,\"watchdogMs\":%u}}",
+        maxOnMs_, maxDutyPercent_, config_.dutyWindowMs, config_.watchdogMs);
   profileLength_ = w.overflow ? 0 : w.length;
 }
 

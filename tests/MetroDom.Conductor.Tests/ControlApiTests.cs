@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Http.Headers;
@@ -110,6 +111,7 @@ public sealed class ControlApiTests : IAsyncDisposable
     {
         var (_, state) = await Get("state");
         Assert.Equal("waiting", state.GetProperty("state").GetString());
+        Assert.Equal(JsonValueKind.Null, state.GetProperty("curfew").ValueKind); // no curfew set
         Assert.Equal("one.mid", state.GetProperty("song").GetProperty("title").GetString());
         Assert.Equal(JsonValueKind.Null, state.GetProperty("positionSeconds").ValueKind);
 
@@ -279,7 +281,7 @@ public sealed class ControlApiTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task Stream_says_hello_then_state_and_instruments()
+    public async Task Stream_says_hello_then_state_queue_and_instruments()
     {
         using var socket = await Connect();
         var hello = await Next(socket);
@@ -288,6 +290,10 @@ public sealed class ControlApiTests : IAsyncDisposable
         var state = await Next(socket);
         Assert.Equal(("state", 2), (state.GetProperty("type").GetString(), state.GetProperty("seq").GetInt32()));
         Assert.Equal("waiting", state.GetProperty("state").GetProperty("state").GetString());
+
+        var queue = await Next(socket);
+        Assert.Equal("queue", queue.GetProperty("type").GetString());
+        Assert.Equal(["one.mid", "two.mid"], queue.GetProperty("queue").GetProperty("songs").EnumerateArray().Select(s => s.GetProperty("title").GetString()));
 
         var instruments = await Next(socket);
         Assert.Equal("instruments", instruments.GetProperty("type").GetString());
@@ -414,13 +420,16 @@ public sealed class ControlApiTests : IAsyncDisposable
     {
         using var schema = JsonDocument.Parse(ControlApi.EventSchema());
         var types = schema.RootElement.GetProperty("properties").GetProperty("type").GetProperty("enum").EnumerateArray().Select(t => t.GetString());
-        Assert.Equal(["hello", "state", "position", "instruments", "message"], types);
+        Assert.Equal(["hello", "state", "queue", "position", "instruments", "message"], types);
     }
 
     [Theory]
     [InlineData("/", "text/html", "<script src=\"app.js\" defer>")]
     [InlineData("/app.js", "text/javascript", "api/v0/")]
     [InlineData("/app.css", "text/css", "--panic")]
+    [InlineData("/sw.js", "text/javascript", "/api/")]
+    [InlineData("/manifest.webmanifest", "application/manifest+json", "\"display\": \"standalone\"")]
+    [InlineData("/icon.svg", "image/svg+xml", "<svg")]
     public async Task Web_remote_is_served_without_a_token_and_locked_down(string path, string contentType, string contains)
     {
         using var client = new HttpClient();
@@ -435,6 +444,26 @@ public sealed class ControlApiTests : IAsyncDisposable
         Assert.DoesNotContain("unsafe", csp, StringComparison.Ordinal);
         Assert.Equal("nosniff", response.Headers.GetValues("X-Content-Type-Options").Single());
         Assert.Equal("no-referrer", response.Headers.GetValues("Referrer-Policy").Single());
+    }
+
+    [Fact]
+    public async Task Web_remote_is_an_installable_app()
+    {
+        using var client = new HttpClient();
+        using var manifest = JsonDocument.Parse(await client.GetStringAsync(new Uri(_api.Address, "/manifest.webmanifest"), Ct));
+        var icons = manifest.RootElement.GetProperty("icons").EnumerateArray().Select(i => i.GetProperty("src").GetString()!).ToArray();
+        Assert.Contains("icon-512.png", icons);
+        foreach (var icon in icons)
+        {
+            var bytes = await client.GetByteArrayAsync(new Uri(_api.Address, "/" + icon), Ct);
+            Assert.True(icon.EndsWith(".svg", StringComparison.Ordinal) || bytes.AsSpan(0, 8).SequenceEqual((byte[])[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]), icon);
+        }
+
+        using var page = await client.GetAsync(new Uri(_api.Address, "/"), Ct);
+        var csp = page.Headers.GetValues("Content-Security-Policy").Single();
+        Assert.Contains("worker-src 'self'", csp, StringComparison.Ordinal);
+        Assert.Contains("manifest-src 'self'", csp, StringComparison.Ordinal);
+        Assert.Contains("<link rel=\"manifest\"", await page.Content.ReadAsStringAsync(Ct), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -476,5 +505,37 @@ public sealed class ControlApiTests : IAsyncDisposable
         public void Dispose()
         {
         }
+    }
+
+    [Fact]
+    public async Task Curfew_SetTonight_ShowsInState_AndLiftsOnlyWhatWasSet()
+    {
+        Assert.Equal(HttpStatusCode.BadRequest, (await Post("curfew", """{"at":"late"}""")).Status);
+        Assert.Equal(HttpStatusCode.Conflict, (await Send(HttpMethod.Delete, "curfew")).Status);
+
+        var at = DateTime.Now.AddHours(2).ToString("HH:mm", CultureInfo.InvariantCulture);
+        var (status, body) = await Post("curfew", $$"""{"at":"{{at}}"}""");
+        Assert.Equal(HttpStatusCode.Accepted, status);
+        Assert.StartsWith($"Tonight's curfew: {at}.", body.GetProperty("message").GetString(), StringComparison.Ordinal);
+        Assert.Equal($"Set ends {at}", (await Get("state")).Body.GetProperty("curfew").GetString());
+
+        Assert.Equal(HttpStatusCode.Accepted, (await Send(HttpMethod.Delete, "curfew")).Status);
+        Assert.Equal(JsonValueKind.Null, (await Get("state")).Body.GetProperty("curfew").ValueKind);
+        Assert.False(_live.Curfew.IsSet);
+    }
+    [Fact]
+    public async Task Volume_SetsTheKnob_ShowsInState_AndRefusesOutOfRange()
+    {
+        Assert.Equal(100, (await Get("state")).Body.GetProperty("volume").GetInt32());
+        Assert.Equal(HttpStatusCode.BadRequest, (await Post("volume", """{"percent":120}""")).Status);
+        Assert.Equal(HttpStatusCode.BadRequest, (await Post("volume", """{}""")).Status);
+
+        var (status, body) = await Post("volume", """{"percent":40}""");
+        Assert.Equal(HttpStatusCode.OK, status);
+        Assert.Equal("Volume 40%.", body.GetProperty("message").GetString());
+        Assert.Equal(40, _session.Volume.Percent);
+        Assert.Equal(40, (await Get("state")).Body.GetProperty("volume").GetInt32());
+
+        Assert.Equal("Volume 0%: no new notes.", (await Post("volume", """{"percent":0}""")).Body.GetProperty("message").GetString());
     }
 }

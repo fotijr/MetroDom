@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using MetroDom.Conductor.Cli;
 using MetroDom.Conductor.Midi;
 using MetroDom.Core;
+using MetroDom.Core.Calibration;
 using MetroDom.Core.Discovery;
 using MetroDom.Core.Safety;
 using MetroDom.Core.Timing;
@@ -21,11 +22,13 @@ internal sealed record SessionOutput(IMidiOutputPort Port, IReadOnlyList<int> Ch
     /// The profile for <paramref name="name"/>: what the command line says, with anything it left
     /// out taken from the profile the instrument sent. <c>@LATENCY</c> replaces the instrument's
     /// latencies (per note too); <c>/NOTES</c> replaces its notes. The minimum interval always
-    /// comes from the instrument, since the command line can't set one.
+    /// comes from the instrument, since the command line can't set one. A profile file
+    /// (<c>@PROFILE.json</c>) stands in for what the instrument sent.
     /// </summary>
     public static InstrumentProfile Merge(string name, OutputSpec spec, InstrumentProfile? sent)
     {
         ArgumentNullException.ThrowIfNull(spec);
+        sent = spec.Profile ?? sent; // A profile file on the command line beats what the instrument sent.
         if (sent is null)
         {
             return new InstrumentProfile(name, spec.Latency ?? TimeSpan.Zero) { Notes = spec.Notes };
@@ -56,15 +59,26 @@ internal sealed class Session : IDisposable
     private readonly List<SafetyGovernor> _governors = [];
     private readonly List<PlannedOutput> _pending = [];
     private readonly HashSet<int> _reserved = [];
+    private readonly Dictionary<string, LatencyCheck> _checks = new(StringComparer.Ordinal);
+    private CalibrationBook _calibrations = new();
     private readonly SafetyLimits _limits;
+
+    /// <summary>The band's volume knob: every governor, hot-plugged ones too, scales notes by it.</summary>
+    public MasterVolume Volume { get; } = new();
     private readonly IClock _clock;
     private DeviceWatcher? _watcher;
     private Action<string> _log = Ui.Warn;
 
     public Session(OutputSettings settings)
-        : this(Open(settings, out var book), settings.MutedChannels, settings.Limits)
+        : this(Open(settings, out var book, out var calibrations), settings.MutedChannels, settings.Limits)
     {
         Book = book;
+        _calibrations = calibrations;
+        if (_limits != SafetyLimits.None)
+        {
+            var flags = settings.MaxVelocity is not null || settings.MaxRate is not null || settings.Quiet is not null ? " + flags" : "";
+            Ui.Note($"Limits (policy {settings.PolicyProfile.Mode}{flags}): {_limits.Describe()}.");
+        }
     }
 
     /// <summary>One output on every channel, no latency.</summary>
@@ -129,6 +143,26 @@ internal sealed class Session : IDisposable
     /// Null when the command line named the band, which then stays as named.
     /// </summary>
     public AssignmentBook? Book { get; internal set; }
+
+    /// <summary>The latest latency check per output name (ADR 0004 boot check); missing until one ran.</summary>
+    public IReadOnlyDictionary<string, LatencyCheck> LatencyChecks
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return new Dictionary<string, LatencyCheck>(_checks, StringComparer.Ordinal);
+            }
+        }
+    }
+
+    public void SetLatencyCheck(string output, LatencyCheck check)
+    {
+        lock (_gate)
+        {
+            _checks[output] = check;
+        }
+    }
 
     /// <summary>Devices waiting to join at the next song.</summary>
     public IReadOnlyList<PlannedOutput> Pending
@@ -279,7 +313,7 @@ internal sealed class Session : IDisposable
             try
             {
                 var port = open(member.Port);
-                Add(new SessionOutput(port, member.Spec.Channels, member.Profile));
+                Add(new SessionOutput(port, member.Spec.Channels, Calibrated(_calibrations, port.Name, member.Spec, member.Profile, Messages.Add)));
                 joined.Add(port.Name);
                 Messages.Add($"{port.Name} joined the band on channel {ChannelList.Format(member.Spec.Channels)}.");
             }
@@ -305,7 +339,7 @@ internal sealed class Session : IDisposable
     /// <summary>Puts a governor in front of <paramref name="output"/> and routes its channels to it.</summary>
     private void Add(SessionOutput output)
     {
-        var governor = new SafetyGovernor(output.Port, output.Profile, _limits, _clock);
+        var governor = new SafetyGovernor(output.Port, output.Profile, _limits, _clock, volume: Volume);
         int[] channels;
         lock (_gate)
         {
@@ -339,15 +373,16 @@ internal sealed class Session : IDisposable
     /// fully describe for their profile. Without: the band discovery finds (assigned devices and
     /// MetroDom instruments, <paramref name="book"/> set), else a prompt for one output.
     /// </summary>
-    private static List<SessionOutput> Open(OutputSettings settings, out AssignmentBook? book)
+    private static List<SessionOutput> Open(OutputSettings settings, out AssignmentBook? book, out CalibrationBook calibrations)
     {
         book = null;
+        var measured = calibrations = CalibrationStore.Load(CalibrationStore.Resolve(settings.Calibrations), Ui.Warn);
         var specs = settings.OutputSpecs;
         var identify = !settings.NoIdentify;
         if (specs.Count == 0 && identify && Discover(settings) is { } found)
         {
             (book, var plan) = found;
-            return OpenAll(plan.Select(m => (m.Port, m.Spec, m.Profile)).ToArray());
+            return OpenAll(plan.Select(m => (m.Port, m.Spec, m.Profile)).ToArray(), measured);
         }
 
         if (specs.Count == 0)
@@ -357,7 +392,7 @@ internal sealed class Session : IDisposable
 
         var ports = specs.Select(s => PortPicker.FindOutput(s.Port)).ToArray();
         var sent = identify ? FetchProfiles(ports.Where((_, i) => specs[i].WantsProfile).Distinct().ToArray()) : [];
-        return OpenAll(ports.Select((p, i) => (p, specs[i], SessionOutput.Merge(p.Name, specs[i], sent.GetValueOrDefault(p.Name)))).ToArray());
+        return OpenAll(ports.Select((p, i) => (p, specs[i], SessionOutput.Merge(p.Name, specs[i], sent.GetValueOrDefault(p.Name)))).ToArray(), measured);
     }
 
     /// <summary>
@@ -393,7 +428,7 @@ internal sealed class Session : IDisposable
     }
 
     /// <summary>Opens every output. Closes what it opened if one fails.</summary>
-    private static List<SessionOutput> OpenAll(IReadOnlyList<(MidiPortInfo Port, OutputSpec Spec, InstrumentProfile Profile)> band)
+    private static List<SessionOutput> OpenAll(IReadOnlyList<(MidiPortInfo Port, OutputSpec Spec, InstrumentProfile Profile)> band, CalibrationBook calibrations)
     {
         var opened = new List<SessionOutput>();
         try
@@ -401,7 +436,7 @@ internal sealed class Session : IDisposable
             foreach (var (info, spec, profile) in band)
             {
                 var port = MidiDevices.OpenOutput(info);
-                opened.Add(new SessionOutput(port, spec.Channels, profile with { Name = port.Name }));
+                opened.Add(new SessionOutput(port, spec.Channels, Calibrated(calibrations, port.Name, spec, profile, Ui.Note) with { Name = port.Name }));
             }
 
             return opened;
@@ -415,6 +450,22 @@ internal sealed class Session : IDisposable
 
             throw;
         }
+    }
+
+    /// <summary>
+    /// <paramref name="profile"/> with the latencies measured for <paramref name="port"/> by
+    /// <c>metrodom calibrate</c>: measured on this rig beats declared by the instrument. A latency
+    /// or profile file on the command line beats both (the owner said so).
+    /// </summary>
+    internal static InstrumentProfile Calibrated(CalibrationBook calibrations, string port, OutputSpec spec, InstrumentProfile profile, Action<string> note)
+    {
+        if (spec.Latency is not null || spec.Profile is not null || calibrations.Find(port) is not { } calibration)
+        {
+            return profile;
+        }
+
+        note(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{port}: using the latencies calibrated {calibration.MeasuredAt.ToLocalTime():yyyy-MM-dd HH:mm} ({calibration.Latency.TotalMilliseconds:0.#} ms)."));
+        return calibration.ApplyTo(profile);
     }
 
     /// <summary>Asks <paramref name="ports"/> who they are and reports what each MetroDom instrument sent.</summary>

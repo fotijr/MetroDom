@@ -167,7 +167,8 @@ public sealed class Orchestra
 
     /// <summary>
     /// Sends All Sound Off (CC 120) and All Notes Off (CC 123) on every channel to every output,
-    /// ignoring mutes. See docs/RELIABILITY.md.
+    /// ignoring mutes, preceded by the MetroDom SysEx all-off for instruments that answered as
+    /// MetroDom. See docs/RELIABILITY.md.
     /// </summary>
     public void Panic()
     {
@@ -177,10 +178,20 @@ public sealed class Orchestra
         }
     }
 
-    /// <summary>Sends the panic sequence to a single output.</summary>
+    /// <summary>
+    /// Sends the panic sequence to a single output. An output behind a governor whose profile came
+    /// from a MetroDom instrument gets the one-message SysEx all-off first, so it is silent before
+    /// the 32-message CC burst starts. Anything else (a bare port, a third-party device) gets the
+    /// CCs only: <c>7D</c> SysEx means something else to other makers.
+    /// </summary>
     public static void SendPanic(IMidiOutput output)
     {
         ArgumentNullException.ThrowIfNull(output);
+        if (output is Safety.SafetyGovernor { Profile.SpeaksMetroDom: true })
+        {
+            output.Send(Discovery.ProfileExchange.AllOff());
+        }
+
         for (var channel = 0; channel < ChannelCount; channel++)
         {
             foreach (var controller in new[] { ControlNumbers.AllSoundOff, ControlNumbers.AllNotesOff })

@@ -21,3 +21,7 @@ These rules outrank convenience. If a change conflicts with one, stop and write 
    hardware itself. Nothing (queue, crowd, network) can block it.
 10. **Repo is the source of truth.** Decisions, plans, protocols and known debt live in `docs/`.
     Knowledge in someone's head or a chat log doesn't exist for the next agent.
+11. **No versioning until production.** Firmware versions (0.1), format bytes and schema numbers
+    stay where they are while we refactor, even on dev hardware. Breaking changes land in place,
+    with fixtures and docs updated in the same change and no code kept for old layouts. Versioning
+    starts when the owner says MetroDom is in production (polished hardware playing gigs).

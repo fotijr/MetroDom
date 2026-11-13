@@ -43,7 +43,9 @@ public sealed record SongPart(int Track, int Channel, string Name, int NoteCount
 /// <param name="Folded">Notes still out of range after transposing, moved by octaves to the nearest playable same note name.</param>
 /// <param name="Dropped">Notes with no playable equivalent.</param>
 /// <param name="Thinned">Notes removed because they repeat faster than the instrument can, or collide after folding.</param>
-public sealed record PartAssignment(SongPart Part, string Instrument, int Transpose, int Played, int Folded, int Dropped, int Thinned);
+/// <param name="Substituted">Drum hits the kit lacks, played on a stand-in (a closed hi-hat on the ride).</param>
+/// <param name="OverPolyphony">Notes left out of chords bigger than the instrument can strike at once (its <c>polyphony</c>).</param>
+public sealed record PartAssignment(SongPart Part, string Instrument, int Transpose, int Played, int Folded, int Dropped, int Thinned, int Substituted = 0, int OverPolyphony = 0);
 
 /// <summary>The arranger's result: who plays what, and the events to send.</summary>
 /// <param name="Assignments">One per instrument that got a part, in band order.</param>
@@ -62,6 +64,9 @@ public sealed record ArrangerOptions
     /// <summary>Move notes that don't fit by octaves to a playable note of the same name. Pitched parts only.</summary>
     public bool FoldOctaves { get; init; } = true;
 
+    /// <summary>Play a drum sound the kit lacks on a stand-in (<see cref="DrumMap"/>). Percussion parts only.</summary>
+    public bool SubstituteDrums { get; init; } = true;
+
     /// <summary>The song's saved role choices, which override detected roles.</summary>
     public RoleMapping? Roles { get; init; }
 }
@@ -78,7 +83,9 @@ public static class GeneralMidi
 /// plays at most one part: the one it can cover best. Percussion parts only go to percussion
 /// instruments and are never transposed; pitched parts are moved by whole octaves to fit, then
 /// leftover notes are folded or dropped, and repeats faster than the instrument's minimum
-/// interval are thinned (ADR 0004). Only notes are kept: robots have no use for program changes,
+/// interval are thinned (ADR 0004). Drum sounds the kit lacks go to a stand-in. Chords bigger
+/// than the instrument's <c>polyphony</c> keep their outer voices (drums: kick, snare, hats
+/// first), so the safety governor, which mirrors the firmware, never has to pick at random. Only notes are kept: robots have no use for program changes,
 /// pitch bend or controllers. Everything removed is counted, never silently lost.
 /// </summary>
 public static class Arranger
@@ -113,7 +120,7 @@ public static class Arranger
                     continue;
                 }
 
-                var (transpose, score) = BestFit(band[m], parts[p].Notes);
+                var (transpose, score) = BestFit(band[m], parts[p].Notes, options);
                 if (score > 0)
                 {
                     choices.Add((m, p, score, transpose));
@@ -163,12 +170,17 @@ public static class Arranger
     }
 
     /// <summary>Octave shift that makes the most notes playable as written (smallest shift wins ties).</summary>
-    private static (int Transpose, int Score) BestFit(BandMember member, IReadOnlyList<PartNote> notes)
+    private static (int Transpose, int Score) BestFit(BandMember member, IReadOnlyList<PartNote> notes, ArrangerOptions options)
     {
         var profile = member.Profile;
-        if (member.IsPercussion || profile.Notes is null)
+        if (member.IsPercussion)
         {
-            return (0, notes.Count(n => profile.CanPlay(n.Number)));
+            return (0, notes.Count(n => profile.CanPlay(n.Number) || (options.SubstituteDrums && DrumMap.Substitute(profile, n.Number) is not null)));
+        }
+
+        if (profile.Notes is null)
+        {
+            return (0, notes.Count);
         }
 
         return Enumerable.Range(-MaxOctaveShift, (MaxOctaveShift * 2) + 1)
@@ -183,7 +195,7 @@ public static class Arranger
     private static (PartAssignment Assignment, List<PartNote> Notes) Fit(BandMember member, ParsedPart part, int transpose, ArrangerOptions options)
     {
         var profile = member.Profile;
-        int folded = 0, dropped = 0, thinned = 0;
+        int folded = 0, dropped = 0, thinned = 0, substituted = 0;
         var placed = new List<PartNote>();
         foreach (var note in part.Notes)
         {
@@ -194,6 +206,11 @@ public static class Arranger
                 {
                     number = fold;
                     folded++;
+                }
+                else if (member.IsPercussion && options.SubstituteDrums && DrumMap.Substitute(profile, number) is { } standIn)
+                {
+                    number = standIn;
+                    substituted++;
                 }
                 else
                 {
@@ -209,7 +226,8 @@ public static class Arranger
         var lastStart = new Dictionary<int, TimeSpan>();
         foreach (var note in placed.OrderBy(n => n.Start).ThenBy(n => n.Number))
         {
-            var minGap = profile.MinInterval > TimeSpan.Zero ? profile.MinInterval : TimeSpan.FromTicks(1);
+            var interval = profile.IntervalFor(note.Number);
+            var minGap = interval > TimeSpan.Zero ? interval : TimeSpan.FromTicks(1);
             if (lastStart.TryGetValue(note.Number, out var last) && note.Start - last < minGap)
             {
                 thinned++; // Too fast to repeat, or the same note twice at once after folding.
@@ -220,7 +238,56 @@ public static class Arranger
             kept.Add(note);
         }
 
-        return (new PartAssignment(part.Part, profile.Name, transpose, kept.Count, folded, dropped, thinned), kept);
+        var voiced = Voice(kept, profile, member.IsPercussion);
+        return (new PartAssignment(part.Part, profile.Name, transpose, voiced.Count, folded, dropped, thinned, substituted, kept.Count - voiced.Count), voiced);
+    }
+
+    /// <summary>
+    /// Keeps at most <c>polyphony</c> notes sounding at once, as the firmware counts them: a strike
+    /// holds an actuator for its pulse (or, for a software instrument, the note's length). Notes
+    /// starting together are chosen by importance: drums by <see cref="DrumMap.Priority"/>,
+    /// pitched parts top voice first, then the bass, then the inner voices from the top down.
+    /// </summary>
+    private static List<PartNote> Voice(List<PartNote> notes, InstrumentProfile profile, bool percussion)
+    {
+        if (profile.Polyphony is not { } polyphony)
+        {
+            return notes;
+        }
+
+        TimeSpan Busy(PartNote n) =>
+            profile.PulseFor(n.Number) is var pulse && pulse > TimeSpan.Zero ? pulse : TimeSpan.FromTicks(Math.Max(1, (n.End - n.Start).Ticks));
+
+        var voiced = new List<PartNote>(notes.Count);
+        var sounding = new List<TimeSpan>(); // when each kept note frees its actuator
+        foreach (var chord in notes.GroupBy(n => n.Start))
+        {
+            sounding.RemoveAll(until => until <= chord.Key);
+            var ordered = percussion
+                ? chord.OrderBy(n => DrumMap.Priority(n.Number)).ThenBy(n => n.Number).ToList()
+                : OuterVoicesFirst(chord.ToList());
+            foreach (var note in ordered)
+            {
+                if (sounding.Count < polyphony)
+                {
+                    voiced.Add(note);
+                    sounding.Add(note.Start + Busy(note));
+                }
+            }
+        }
+
+        return voiced;
+    }
+
+    private static List<PartNote> OuterVoicesFirst(List<PartNote> chord)
+    {
+        var byPitch = chord.OrderByDescending(n => n.Number).ToList();
+        if (byPitch.Count <= 2)
+        {
+            return byPitch;
+        }
+
+        return [byPitch[0], byPitch[^1], .. byPitch.Skip(1).Take(byPitch.Count - 2)];
     }
 
     /// <summary>The playable note with the same name (pitch class) nearest to <paramref name="number"/>.</summary>

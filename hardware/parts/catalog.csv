@@ -30,3 +30,4 @@ cap-1000uf-10v,1000 uF electrolytic capacitor,passive,,"10 V+, across LED supply
 psu-5v-10a,5 V 10 A power supply,power,,"enclosed, certified, for LEDs only",15,,
 hub75-panel-64x32-p4,HUB75 RGB LED matrix 64x32 P4,display,,"256x128 mm, 5 V, several amps at full white",15,,
 conn-jst-sm-3p,JST-SM 3-pin LED pigtail pair,connector,,"led-3p",0.3,,
+switch-momentary,Momentary push button (panel mount),control,,"normally open, body write enable (EEPROM WP to GND while held)",1,,

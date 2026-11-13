@@ -1,3 +1,5 @@
+using Melanchall.DryWetMidi.Common;
+using Melanchall.DryWetMidi.Core;
 using MetroDom.Core.Simulation;
 using MetroDom.Core.Timing;
 
@@ -52,12 +54,39 @@ public class BandSimulationTests
     }
 
     [Fact]
-    public void NotesTheInstrumentCannotPlay_AreReportedAsDropped()
+    public void NotesTheInstrumentCannotPlay_AreHeldByTheGovernor()
     {
         var result = BandSimulation.Run(Song, Band(xyloNotes: new HashSet<int> { 60, 64, 67 }));
 
-        Assert.Equal(11, result.Instruments[0].Played);
-        Assert.Equal(5, result.Instruments[0].Dropped);
+        var xylo = result.Instruments[0];
+        Assert.Equal(11, xylo.Played);
+        Assert.Equal(5, xylo.Held);
+        Assert.Equal("5 not playable", xylo.HeldWhy);
+        Assert.Equal(0, xylo.Dropped + xylo.Refused);
+    }
+
+    [Fact]
+    public void RepeatsFasterThanTheProfileAllows_AreHeldNotRefused()
+    {
+        var profile = new InstrumentProfile("xylo", Ms(10))
+        {
+            Notes = new HashSet<int> { 60 },
+            MinInterval = Ms(100),
+        };
+        var song = Enumerable.Range(0, 8)
+            .SelectMany(i => new[]
+            {
+                new TimedMidiEvent(Ms(i * 50), new NoteOnEvent((SevenBitNumber)60, (SevenBitNumber)100)),
+                new TimedMidiEvent(Ms((i * 50) + 20), new NoteOffEvent((SevenBitNumber)60, (SevenBitNumber)0)),
+            })
+            .ToArray();
+
+        var xylo = BandSimulation.Run(song, [new SimulatedPart(profile, [DemoSong.MelodyChannel])]).Instruments[0];
+
+        Assert.Equal(4, xylo.Played);
+        Assert.Equal(4, xylo.Held);
+        Assert.Equal("4 too soon", xylo.HeldWhy);
+        Assert.Equal(0, xylo.Refused);
     }
 
     private sealed class ResultComparer : IEqualityComparer<SimulationResult>

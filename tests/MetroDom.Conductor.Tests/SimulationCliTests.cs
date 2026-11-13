@@ -92,4 +92,30 @@ public class SimulationCliTests
             File.Delete(path);
         }
     }
+
+    private static string M1Body()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "AGENTS.md")))
+        {
+            dir = dir.Parent;
+        }
+
+        return Path.Combine(dir!.FullName, "Instruments", "xylophone_solenoid", "body.json");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Simulate_PlaysABody_AloneOrArranged(bool arranged)
+    {
+        string[] args = arranged
+            ? ["simulate", "--body", M1Body(), "--arrange", "-i", "drums=10@35"]
+            : ["simulate", "--body", M1Body()];
+        Assert.Equal(0, MetroDomApp.Create().Run(args, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public void Simulate_RefusesABodyFileThatIsntThere() =>
+        Assert.Equal(MetroDomApp.UsageError, MetroDomApp.Create().Run(["simulate", "--body", M1Body() + ".missing"], TestContext.Current.CancellationToken));
 }

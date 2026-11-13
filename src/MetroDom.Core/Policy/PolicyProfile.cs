@@ -30,10 +30,10 @@ public enum ControlAction
 }
 
 /// <summary>
-/// A deployment mode's policy (ADR 0005), first cut: the control-surface mapping and what the
-/// lights may do.
-/// Format <c>metrodom.policy/0</c>, see docs/references/policy-profile.md. Roles, queue rules and
-/// limits join it as they're built.
+/// A deployment mode's policy (ADR 0005): the control-surface mapping, instrument limits, what
+/// each role may do, the jukebox's queue rules, how long handed-out tokens last, and what the
+/// lights may do. Format <c>metrodom.policy/0</c>, see docs/references/policy-profile.md. Every
+/// section is optional and defaults to the safe, closed choice.
 /// </summary>
 /// <param name="Mode">"live-band", "crowd-jukebox", "rental", or the owner's own name.</param>
 /// <param name="Controls">Which MIDI message triggers each action. Unmapped actions are absent.</param>
@@ -43,6 +43,21 @@ public sealed record PolicyProfile(string Mode, IReadOnlyDictionary<ControlActio
 
     /// <summary>What the venue lets the lights do (ADR 0011 §5). Defaults: no strobe, 3 flashes a second, full brightness.</summary>
     public LightLimits Lights { get; init; } = LightLimits.Default;
+
+    /// <summary>Limits on every instrument's notes (velocity, rate, quiet hours). Default: none.</summary>
+    public Safety.SafetyLimits Limits { get; init; } = Safety.SafetyLimits.None;
+
+    /// <summary>When songs must stop: <c>limits.curfew</c>, <c>limits.endsAt</c>, <c>limits.graceMinutes</c>. Default: none.</summary>
+    public Curfew Curfew { get; init; } = Curfew.None;
+
+    /// <summary>What operators and guests may do. The owner can do everything.</summary>
+    public RolePermissions Roles { get; init; } = RolePermissions.Default;
+
+    /// <summary>The jukebox's rules for guest requests. Default: closed.</summary>
+    public QueueRules Queue { get; init; } = QueueRules.Closed;
+
+    /// <summary>How long handed-out tokens may last. Default: a day.</summary>
+    public SessionRules Sessions { get; init; } = SessionRules.Default;
 
     private static readonly Dictionary<string, ControlAction> ActionNames = new(StringComparer.Ordinal)
     {
@@ -122,12 +137,17 @@ public sealed record PolicyProfile(string Mode, IReadOnlyDictionary<ControlActio
                 return false;
             }
 
-            if (!TryLights(root["lights"], out var lights, out error))
+            if (!TryLights(root["lights"], out var lights, out error)
+                || !TryLimits(root["limits"], out var limits, out error)
+                || !TryCurfew(root["limits"], out var curfew, out error)
+                || !TryRoles(root["roles"], out var roles, out error)
+                || !TryQueue(root["queue"], out var queue, out error)
+                || !TrySessions(root["sessions"], out var sessions, out error))
             {
                 return false;
             }
 
-            profile = new PolicyProfile(mode.Trim(), controls) { Lights = lights };
+            profile = new PolicyProfile(mode.Trim(), controls) { Lights = lights, Limits = limits, Curfew = curfew, Roles = roles, Queue = queue, Sessions = sessions };
             error = null;
             return true;
         }
@@ -176,6 +196,244 @@ public sealed record PolicyProfile(string Mode, IReadOnlyDictionary<ControlActio
         return error is null;
     }
 
+    private static bool TryLimits(JsonNode? node, out Safety.SafetyLimits limits, out string? error)
+    {
+        limits = Safety.SafetyLimits.None;
+        error = null;
+        if (node is null)
+        {
+            return true;
+        }
+
+        if (node is not JsonObject obj)
+        {
+            error = "\"limits\" must be an object.";
+            return false;
+        }
+
+        var velocity = obj["maxVelocity"]?.GetValue<int>();
+        if (velocity is not (null or (>= 1 and <= 127)))
+        {
+            error = "\"limits.maxVelocity\" must be 1-127.";
+            return false;
+        }
+
+        var rate = obj["maxNotesPerSecond"]?.GetValue<int>();
+        if (rate is < 1)
+        {
+            error = "\"limits.maxNotesPerSecond\" must be at least 1.";
+            return false;
+        }
+
+        Safety.QuietHours? quiet = null;
+        if (obj["quietHours"] is { } quietNode)
+        {
+            if (!TryTime(quietNode["from"], out var from) || !TryTime(quietNode["to"], out var to) || from == to)
+            {
+                error = "\"limits.quietHours\" needs different \"from\" and \"to\" as HH:mm (e.g. \"23:00\").";
+                return false;
+            }
+
+            var quietVelocity = quietNode["maxVelocity"]?.GetValue<int>() ?? 0;
+            if (quietVelocity is < 0 or > 127)
+            {
+                error = "\"limits.quietHours.maxVelocity\" must be 0-127 (0: no new notes).";
+                return false;
+            }
+
+            quiet = new Safety.QuietHours(from, to, quietVelocity);
+        }
+
+        limits = new Safety.SafetyLimits { MaxVelocity = velocity, MaxNotesPerSecond = rate, Quiet = quiet };
+        return true;
+    }
+
+    private static bool TryCurfew(JsonNode? node, out Curfew curfew, out string? error)
+    {
+        curfew = Curfew.None;
+        error = null;
+        if (node is not JsonObject obj)
+        {
+            return true; // TryLimits already said what's wrong with a non-object
+        }
+
+        TimeOnly? from = null, to = null;
+        if (obj["curfew"] is { } window)
+        {
+            if (!TryTime(window["from"], out var start) || !TryTime(window["to"], out var end) || start == end)
+            {
+                error = "\"limits.curfew\" needs different \"from\" and \"to\" as HH:mm (e.g. \"23:00\").";
+                return false;
+            }
+
+            (from, to) = (start, end);
+        }
+
+        DateTimeOffset? endsAt = null;
+        if (obj["endsAt"] is { } endNode)
+        {
+            var text = endNode.GetValue<string>();
+            if (!DateTimeOffset.TryParseExact(text, ["yyyy-MM-dd'T'HH:mmzzz", "yyyy-MM-dd'T'HH:mm:sszzz"], CultureInfo.InvariantCulture, DateTimeStyles.None, out var end))
+            {
+                error = "\"limits.endsAt\" must be a date and time with its UTC offset, like \"2026-11-14T01:00-05:00\".";
+                return false;
+            }
+
+            endsAt = end;
+        }
+
+        var grace = obj["graceMinutes"]?.GetValue<double>() ?? Curfew.DefaultGrace.TotalMinutes;
+        if (grace is < 0 or > 60)
+        {
+            error = "\"limits.graceMinutes\" must be 0-60.";
+            return false;
+        }
+
+        curfew = new Curfew(from, to, endsAt, TimeSpan.FromMinutes(grace));
+        return true;
+    }
+
+    private static bool TryRoles(JsonNode? node, out RolePermissions roles, out string? error)
+    {
+        roles = RolePermissions.Default;
+        error = null;
+        if (node is null)
+        {
+            return true;
+        }
+
+        if (node is not JsonObject obj)
+        {
+            error = "\"roles\" must be an object.";
+            return false;
+        }
+
+        var sets = new Dictionary<string, IReadOnlySet<Grant>>
+        {
+            ["operator"] = RolePermissions.Default.Operator,
+            ["guest"] = RolePermissions.Default.Guest,
+        };
+        foreach (var (name, value) in obj)
+        {
+            if (name == "owner")
+            {
+                error = "\"roles.owner\" can't be set: the owner can always do everything.";
+                return false;
+            }
+
+            if (!sets.ContainsKey(name))
+            {
+                error = $"unknown role '{name}'. Known: operator, guest.";
+                return false;
+            }
+
+            if (value is not JsonArray list)
+            {
+                error = $"\"roles.{name}\" must be a list of permissions, e.g. [\"view\", \"panic\"].";
+                return false;
+            }
+
+            var permissions = new HashSet<Grant>();
+            foreach (var item in list)
+            {
+                var text = item?.GetValue<string>() ?? "";
+                if (!RolePermissions.TryParse(text, out var permission))
+                {
+                    error = $"\"roles.{name}\": unknown permission '{text}'. Known: {string.Join(", ", RolePermissions.AllNames)}.";
+                    return false;
+                }
+
+                permissions.Add(permission);
+            }
+
+            sets[name] = permissions;
+        }
+
+        error = RolePermissions.Validate(sets["operator"], sets["guest"]);
+        if (error is not null)
+        {
+            return false;
+        }
+
+        roles = new RolePermissions(sets["operator"], sets["guest"]);
+        return true;
+    }
+
+    private static bool TryQueue(JsonNode? node, out QueueRules queue, out string? error)
+    {
+        queue = QueueRules.Closed;
+        error = null;
+        if (node is null)
+        {
+            return true;
+        }
+
+        if (node is not JsonObject obj)
+        {
+            error = "\"queue\" must be an object.";
+            return false;
+        }
+
+        var maxPerGuest = obj["maxPerGuest"]?.GetValue<int>() ?? QueueRules.Closed.MaxPerGuest;
+        var cooldown = obj["cooldownSeconds"]?.GetValue<double>() ?? QueueRules.Closed.Cooldown.TotalSeconds;
+        if (maxPerGuest is < 1 or > 20)
+        {
+            error = "\"queue.maxPerGuest\" must be 1-20.";
+            return false;
+        }
+
+        if (cooldown is < 0 or > 3600)
+        {
+            error = "\"queue.cooldownSeconds\" must be 0-3600.";
+            return false;
+        }
+
+        var songCooldown = obj["songCooldownMinutes"]?.GetValue<double>() ?? QueueRules.Closed.SongCooldown.TotalMinutes;
+        if (songCooldown is < 0 or > 1440)
+        {
+            error = "\"queue.songCooldownMinutes\" must be 0-1440.";
+            return false;
+        }
+
+        queue = new QueueRules(
+            obj["requests"]?.GetValue<bool>() ?? false,
+            obj["votes"]?.GetValue<bool>() ?? false,
+            maxPerGuest,
+            TimeSpan.FromSeconds(cooldown),
+            obj["autoplay"]?.GetValue<bool>() ?? false)
+        {
+            SongCooldown = TimeSpan.FromMinutes(songCooldown),
+            Fill = obj["fill"]?.GetValue<bool>() ?? false,
+        };
+        return true;
+    }
+
+    private static bool TrySessions(JsonNode? node, out SessionRules sessions, out string? error)
+    {
+        sessions = SessionRules.Default;
+        error = null;
+        if (node is null)
+        {
+            return true;
+        }
+
+        if (node is not JsonObject obj)
+        {
+            error = "\"sessions\" must be an object.";
+            return false;
+        }
+
+        var hours = obj["maxTokenHours"]?.GetValue<double>() ?? SessionRules.Default.MaxTokenLife.TotalHours;
+        if (hours <= 0 || TimeSpan.FromHours(hours) > SessionRules.Ceiling)
+        {
+            error = $"\"sessions.maxTokenHours\" must be more than 0 and at most {SessionRules.Ceiling.TotalHours:0} (a week).";
+            return false;
+        }
+
+        sessions = new SessionRules(TimeSpan.FromHours(hours));
+        return true;
+    }
+
     private static bool TryTime(JsonNode? node, out TimeOnly time)
     {
         time = default;
@@ -215,6 +473,79 @@ public sealed record PolicyProfile(string Mode, IReadOnlyDictionary<ControlActio
             }
 
             root["lights"] = lights;
+        }
+
+        if (Limits != Safety.SafetyLimits.None || Curfew.IsSet)
+        {
+            var limits = new JsonObject();
+            if (Curfew.From is { } curfewFrom && Curfew.To is { } curfewTo)
+            {
+                limits["curfew"] = new JsonObject
+                {
+                    ["from"] = curfewFrom.ToString("HH:mm", CultureInfo.InvariantCulture),
+                    ["to"] = curfewTo.ToString("HH:mm", CultureInfo.InvariantCulture),
+                };
+            }
+
+            if (Curfew.EndsAt is { } endsAt)
+            {
+                limits["endsAt"] = endsAt.ToString("yyyy-MM-dd'T'HH:mmzzz", CultureInfo.InvariantCulture);
+            }
+
+            if (Curfew.IsSet && Curfew.Grace != Curfew.DefaultGrace)
+            {
+                limits["graceMinutes"] = Curfew.Grace.TotalMinutes;
+            }
+
+            if (Limits.MaxVelocity is { } velocity)
+            {
+                limits["maxVelocity"] = velocity;
+            }
+
+            if (Limits.MaxNotesPerSecond is { } rate)
+            {
+                limits["maxNotesPerSecond"] = rate;
+            }
+
+            if (Limits.Quiet is { } quiet)
+            {
+                limits["quietHours"] = new JsonObject
+                {
+                    ["from"] = quiet.Start.ToString("HH:mm", CultureInfo.InvariantCulture),
+                    ["to"] = quiet.End.ToString("HH:mm", CultureInfo.InvariantCulture),
+                    ["maxVelocity"] = quiet.MaxVelocity,
+                };
+            }
+
+            root["limits"] = limits;
+        }
+
+        if (Roles != RolePermissions.Default)
+        {
+            root["roles"] = new JsonObject
+            {
+                ["operator"] = new JsonArray([.. Roles.For(Role.Operator).Select(p => (JsonNode)RolePermissions.NameOf(p))]),
+                ["guest"] = new JsonArray([.. Roles.For(Role.Guest).Select(p => (JsonNode)RolePermissions.NameOf(p))]),
+            };
+        }
+
+        if (Queue != QueueRules.Closed)
+        {
+            root["queue"] = new JsonObject
+            {
+                ["requests"] = Queue.Requests,
+                ["votes"] = Queue.Votes,
+                ["maxPerGuest"] = Queue.MaxPerGuest,
+                ["cooldownSeconds"] = Queue.Cooldown.TotalSeconds,
+                ["autoplay"] = Queue.Autoplay,
+                ["songCooldownMinutes"] = Queue.SongCooldown.TotalMinutes,
+                ["fill"] = Queue.Fill,
+            };
+        }
+
+        if (Sessions != SessionRules.Default)
+        {
+            root["sessions"] = new JsonObject { ["maxTokenHours"] = Sessions.MaxTokenLife.TotalHours };
         }
 
         return root

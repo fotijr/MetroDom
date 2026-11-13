@@ -74,7 +74,10 @@ or `both`. An instrument that needs equipment to play lists it in `requires_equi
 - **Built something:** write `builds/MD-<MODULE>-NNN.md` from the
   [template](builds/README.md), decrement the parts you used in `stock.csv`, same commit.
 - **New module:** copy `modules/_template/`, give it an id, list interfaces from
-  [interfaces.md](interfaces.md), fill the BOM with catalog ids.
+  [interfaces.md](interfaces.md), fill the BOM with catalog ids. A drive module also says how many
+  `outputs` it switches, so `check_hardware.py` can check bodies fit.
+- **New instrument:** `metrodom instrument new <id>` ([guide](../docs/references/new-instrument.md)).
+  `check_hardware.py` checks its `body.json` against its `instrument.toml`.
 - **Can I build it?** `python3 scripts/check_hardware.py --buildable` joins every BOM with stock.
 - **Going to the library / placing an order?** `python3 scripts/check_hardware.py --fab-queue`
   lists queued jobs by process. See [fabrication/](fabrication/README.md).

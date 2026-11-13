@@ -138,4 +138,18 @@ public class IdentifierTests
         Assert.Contains("no reply", text, StringComparison.Ordinal);
         Assert.Contains("output only", text, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void Summary_ShowsTheRangeOfRepeats_WhenNotesDiffer()
+    {
+        var drums = new InstrumentProfile("drums", TimeSpan.FromMilliseconds(35))
+        {
+            Notes = new HashSet<int> { 36, 38 },
+            MinInterval = TimeSpan.FromMilliseconds(150),
+            NoteInterval = new Dictionary<int, TimeSpan> { [36] = TimeSpan.FromMilliseconds(150), [38] = TimeSpan.FromMilliseconds(60) },
+        };
+
+        Assert.EndsWith("repeat ≥ 60-150 ms", DevicesCommand.Summary(drums), StringComparison.Ordinal);
+        Assert.EndsWith("repeat ≥ 150 ms", DevicesCommand.Summary(drums with { NoteInterval = new Dictionary<int, TimeSpan>() }), StringComparison.Ordinal);
+    }
 }

@@ -1,5 +1,7 @@
 using MetroDom.Conductor.Midi;
 using MetroDom.Core.Policy;
+using MetroDom.Core.Safety;
+using MetroDom.Core.Setlist;
 using MetroDom.Core.Timing;
 
 namespace MetroDom.Conductor.Commands;
@@ -43,6 +45,8 @@ internal sealed record ActiveSong(LatencyScheduler Scheduler, SectionNavigator S
 /// <param name="TempoSource">What last set the tempo.</param>
 /// <param name="Section">"Chorus (2/3) · vamping", or null.</param>
 /// <param name="Following">The beat tracker, when following a player.</param>
+/// <param name="Curfew">"Curfew until 10:00", "Set ends 23:00", or null when no stop is set or coming.</param>
+/// <param name="Volume">The band's volume knob, 0-100%.</param>
 internal sealed record LiveState(
     bool Playing,
     int Index,
@@ -54,7 +58,9 @@ internal sealed record LiveState(
     double? PendingBpm,
     string? TempoSource,
     string? Section,
-    (BeatState State, double? Bpm)? Following);
+    (BeatState State, double? Bpm)? Following,
+    string? Curfew = null,
+    int Volume = MasterVolume.Full);
 
 /// <summary>
 /// One place every control lands, whatever sent it: terminal keys, a foot controller
@@ -62,7 +68,7 @@ internal sealed record LiveState(
 /// is playing or the band is waiting, and signals the setlist loop when a song or wait ends.
 /// Inputs call it from their own threads.
 /// </summary>
-internal sealed class LiveControl(Session session, IClock clock) : IDisposable
+internal sealed class LiveControl(Session session, IClock clock, SetQueue? queue = null) : IDisposable
 {
     private readonly Lock _gate = new();
     private readonly TapTempo _tap = new();
@@ -70,13 +76,15 @@ internal sealed class LiveControl(Session session, IClock clock) : IDisposable
     private ActiveSong? _active;
     private LiveSignal? _signal;
     private double? _pendingBpm;
+    private bool _startOwed;
     private string? _pendingSource;
-    private IReadOnlyList<string> _setlist = [];
-    private int _index = -1;
     private BeatTracker? _tracker;
     private BeatFollower? _follower;
 
     public IClock Clock => clock;
+
+    /// <summary>The set: what's played, playing or up next, and coming.</summary>
+    public SetQueue Queue { get; } = queue ?? new SetQueue();
 
     /// <summary>Set when the current wait or song has ended; see <see cref="Signal"/>.</summary>
     public ManualResetEventSlim Done => _done;
@@ -96,7 +104,80 @@ internal sealed class LiveControl(Session session, IClock clock) : IDisposable
     /// <summary>"tapped", "pedal", "MIDI Clock", "nudged": what last set the tempo, for the status line.</summary>
     public string? TempoSource { get; set; }
 
-    /// <summary>Starts waiting (or playing <paramref name="song"/>): clears the last signal.</summary>
+    private Curfew _curfew = Curfew.None;
+
+    /// <summary>When songs must stop: policy limits, <c>--curfew</c>, and tonight's curfew if one is set.</summary>
+    public Curfew Curfew
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _curfew;
+            }
+        }
+
+        init => _curfew = value;
+    }
+
+    /// <summary>
+    /// Sets tonight's curfew at the next <paramref name="at"/> on the wall clock (replacing an earlier
+    /// one). It only adds a stop: the policy's curfew and end time still hold. Returns when it is.
+    /// </summary>
+    public DateTimeOffset SetCurfewTonight(TimeOnly at)
+    {
+        DateTimeOffset stop;
+        lock (_gate)
+        {
+            _curfew = _curfew.Tonight(WallClock(), at);
+            stop = _curfew.StopAt!.Value;
+        }
+
+        session.Messages.Add(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Tonight's curfew: {stop:HH\\:mm}."));
+        return stop;
+    }
+
+    /// <summary>Lifts tonight's curfew. Returns false if none was set. The policy's still hold.</summary>
+    public bool LiftCurfewTonight()
+    {
+        lock (_gate)
+        {
+            if (_curfew.StopAt is null)
+            {
+                return false;
+            }
+
+            _curfew = _curfew with { StopAt = null };
+        }
+
+        session.Messages.Add("Tonight's curfew lifted.");
+        return true;
+    }
+
+    /// <summary>Local wall-clock time, for the curfew. Tests replace it.</summary>
+    public Func<DateTimeOffset> WallClock { get; init; } = () => DateTimeOffset.Now;
+
+    /// <summary>What the curfew means right now, for the status line and the API, or null.</summary>
+    public string? CurfewNote()
+    {
+        var curfew = Curfew;
+        if (!curfew.IsSet)
+        {
+            return null;
+        }
+
+        var now = WallClock();
+        return curfew.Reason(now) ?? (curfew.NextStop(now) is { } stop && stop - now < TimeSpan.FromHours(12)
+            ? string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Set ends {stop:HH\\:mm}")
+            : null);
+    }
+
+    /// <summary>
+    /// Starts waiting (or playing <paramref name="song"/>): clears the last signal. A start that
+    /// came while nothing played and a song was queued, before the set loop got round to waiting
+    /// (a remote's Start right after adding to an empty queue), carries over into the wait
+    /// instead of being lost.
+    /// </summary>
     public void Begin(ActiveSong? song)
     {
         lock (_gate)
@@ -107,46 +188,46 @@ internal sealed class LiveControl(Session session, IClock clock) : IDisposable
                 _follower = null;
             }
 
-            _signal = null;
-            _done.Reset();
+            var owed = song is null && _startOwed;
+            _startOwed = owed; // kept until the wait for start takes it (TakeStart) or a song begins
+            _signal = owed ? LiveSignal.Start : null;
+            if (owed)
+            {
+                _done.Set();
+            }
+            else
+            {
+                _done.Reset();
+            }
         }
     }
 
-    /// <summary>The set's song titles, in order (for the Control API).</summary>
-    public void UseSetlist(IReadOnlyList<string> titles)
-    {
-        lock (_gate)
-        {
-            _setlist = titles;
-        }
-    }
+    /// <summary>Makes the set these titles (each also its song), before it starts.</summary>
+    public void UseSetlist(IReadOnlyList<string> titles) => Queue.Replace(titles.Select(t => (t, t)));
 
-    /// <summary>Marks song <paramref name="index"/> of the setlist as the one waiting or playing.</summary>
-    public void Cue(int index)
-    {
-        lock (_gate)
-        {
-            _index = index;
-        }
-    }
+    /// <summary>Marks song <paramref name="index"/> of the set as the one waiting or playing.</summary>
+    public void Cue(int index) => Queue.Cue(index);
 
     /// <summary>Everything a client needs to draw the band's state.</summary>
     public LiveState Snapshot()
     {
+        var set = Queue.Snapshot();
+        var titles = set.Songs.Select(s => s.Title).ToArray();
+        var curfew = CurfewNote();
         lock (_gate)
         {
             var active = _active;
             var following = _tracker is null ? ((BeatState, double?)?)null : (_tracker.State, _tracker.Bpm);
             if (active is null)
             {
-                return new LiveState(false, _index, _setlist, null, null, null, null, _pendingBpm, TempoSource, null, following);
+                return new LiveState(false, set.Current, titles, null, null, null, null, _pendingBpm, TempoSource, null, following, curfew, session.Volume.Percent);
             }
 
             var speed = active.Scheduler.Speed;
             return new LiveState(
                 true,
-                _index,
-                _setlist,
+                set.Current,
+                titles,
                 active.Scheduler.Position,
                 active.Scheduler.Duration,
                 active.FileBpm is { } fileBpm ? fileBpm() * speed : null,
@@ -154,9 +235,33 @@ internal sealed class LiveControl(Session session, IClock clock) : IDisposable
                 null,
                 TempoSource,
                 active.Sections.Describe(),
-                following);
+                following,
+                curfew,
+                session.Volume.Percent);
         }
     }
+
+    /// <summary>How far the keyboard's [ and ] turn the volume.</summary>
+    public const int VolumeStep = 10;
+
+    /// <summary>
+    /// Sets the band's volume, 0-100%. The policy's caps still apply on top, so this only ever
+    /// turns the band down from what the limits allow. Null outside 0-100; else what to say.
+    /// </summary>
+    public string? SetVolume(int percent)
+    {
+        if (!session.Volume.TrySet(percent))
+        {
+            return null;
+        }
+
+        var message = percent == 0 ? "Volume 0%: no new notes." : $"Volume {percent}%.";
+        session.Messages.Add(message);
+        return message;
+    }
+
+    /// <summary>Turns the volume by <paramref name="by"/> points, staying within 0-100.</summary>
+    public string NudgeVolume(int by) => SetVolume(Math.Clamp(session.Volume.Percent + by, 0, MasterVolume.Full))!;
 
     /// <summary>Whether a song is playing (else the band waits for start).</summary>
     public bool IsPlaying
@@ -235,6 +340,15 @@ internal sealed class LiveControl(Session session, IClock clock) : IDisposable
         }
     }
 
+    /// <summary>The wait for start is over: a start it was owed has been used.</summary>
+    public void TakeStart()
+    {
+        lock (_gate)
+        {
+            _startOwed = false;
+        }
+    }
+
     /// <summary>Ends the current wait or song with <paramref name="signal"/> (the first one wins).</summary>
     public void End(LiveSignal signal)
     {
@@ -242,6 +356,10 @@ internal sealed class LiveControl(Session session, IClock clock) : IDisposable
         {
             _signal ??= signal;
             _done.Set();
+            if (signal == LiveSignal.Start && _active is null && Queue.Now is not null)
+            {
+                _startOwed = true; // until a song begins
+            }
         }
     }
 

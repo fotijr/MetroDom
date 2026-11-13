@@ -1,6 +1,8 @@
 using System.ComponentModel;
 using System.Globalization;
 using System.Text.RegularExpressions;
+using MetroDom.Core;
+using MetroDom.Core.Policy;
 using MetroDom.Core.Safety;
 using Spectre.Console;
 using Spectre.Console.Cli;
@@ -22,29 +24,44 @@ internal class OutputSettings : CommandSettings
     [Description("Where remembered assignments live (see [bold]metrodom devices --assign[/]). Default: $METRODOM_ASSIGNMENTS, else metrodom/assignments.json in your app data folder. Without [bold]-o[/], the band is every assigned device plus every MetroDom instrument found.")]
     public string? Assignments { get; init; }
 
+    [CommandOption("--calibrations <FILE>")]
+    [Description("Where latencies measured by [bold]metrodom calibrate[/] live. Default: $METRODOM_CALIBRATIONS, else metrodom/calibrations.json in your app data folder. An output's measured latencies beat the ones it declares, unless [bold]-o[/] gives a latency or profile file.")]
+    public string? Calibrations { get; init; }
+
     [CommandOption("-m|--mute <CHANNELS>")]
     [Description("Channels to mute, 1-16, comma separated, ranges allowed (e.g. 10 for drums, 1-9).")]
     public string? Mute { get; init; }
 
+    [CommandOption("--policy <FILE>")]
+    [Description("Policy profile (metrodom.policy/0 JSON, see policies/): pedal [bold]controls[/], instrument [bold]limits[/], what each [bold]role[/] may do over the Control API, [bold]lights[/] limits. Default: the built-in live-band profile (policies/live-band.json: pedals start-stop cc:80, next cc:81, vamp cc:82, outro cc:83, panic cc:85, tap cc:64; no limits).")]
+    public string? Policy { get; init; }
+
+    /// <summary>The policy, valid after <see cref="Validate"/>.</summary>
+    public PolicyProfile PolicyProfile =>
+        Policy is not null && File.Exists(Policy) && PolicyProfile.TryParse(File.ReadAllText(Policy), out var profile, out _)
+            ? profile
+            : PolicyProfile.LiveBand;
+
     [CommandOption("--max-velocity <1-127>")]
-    [Description("Safety: turn down any note louder than this.")]
+    [Description("Safety: turn down any note louder than this. Over a policy's limit, the lower wins.")]
     public int? MaxVelocity { get; init; }
 
     [CommandOption("--max-rate <NOTES>")]
-    [Description("Safety: most notes per second any one output may play. Extra notes are held back.")]
+    [Description("Safety: most notes per second any one output may play. Extra notes are held back. Over a policy's limit, the lower wins.")]
     public int? MaxRate { get; init; }
 
     [CommandOption("--quiet <HH:MM-HH:MM[@VELOCITY]>")]
-    [Description("Safety: quiet hours, local time, may cross midnight. No new notes inside them, or with [bold]@VELOCITY[/] notes are turned down to that (e.g. [bold]--quiet 23:00-07:00@40[/]).")]
+    [Description("Safety: quiet hours, local time, may cross midnight. No new notes inside them, or with [bold]@VELOCITY[/] notes are turned down to that (e.g. [bold]--quiet 23:00-07:00@40[/]). Replaces the policy's quiet hours for this run.")]
     public string? Quiet { get; init; }
 
-    /// <summary>Policy limits for the safety governors, valid after <see cref="Validate"/>.</summary>
-    public SafetyLimits Limits => new()
-    {
-        MaxVelocity = MaxVelocity,
-        MaxNotesPerSecond = MaxRate,
-        Quiet = QuietHoursSpec.TryParse(Quiet, out var quiet, out _) ? quiet : null,
-    };
+    /// <summary>
+    /// Limits for the safety governors: the policy's, with the flags on top (a lower velocity or
+    /// rate wins; <c>--quiet</c> replaces the window). Valid after <see cref="Validate"/>.
+    /// </summary>
+    public SafetyLimits Limits => PolicyProfile.Limits.Overridden(
+        MaxVelocity,
+        MaxRate,
+        QuietHoursSpec.TryParse(Quiet, out var quiet, out _) ? quiet : null);
 
     /// <summary>Zero-based muted channels, valid after <see cref="Validate"/>.</summary>
     public IReadOnlyList<int> MutedChannels => ChannelList.TryParse(Mute, out var channels, out _) ? channels : [];
@@ -58,6 +75,19 @@ internal class OutputSettings : CommandSettings
         if (!ChannelList.TryParse(Mute, out _, out var error))
         {
             return ValidationResult.Error($"--mute: {error}");
+        }
+
+        if (Policy is not null)
+        {
+            if (!File.Exists(Policy))
+            {
+                return ValidationResult.Error($"--policy: file not found: {Policy}");
+            }
+
+            if (!PolicyProfile.TryParse(File.ReadAllText(Policy), out _, out var policyError))
+            {
+                return ValidationResult.Error($"--policy: {policyError}");
+            }
         }
 
         if (MaxVelocity is < 1 or > 127)
@@ -92,15 +122,46 @@ internal class OutputSettings : CommandSettings
 /// sends channel 10 to the port matching "MetroDom drums", 35 ms early, and tells the arranger it
 /// can play notes 36 and 38. A plain port gets every channel; its latency and notes come from the
 /// instrument's profile if it sends one (<see cref="WantsProfile"/>), else none and every note.
+/// <c>PORT[=CHANNELS]@PROFILE.json</c> describes the instrument with its profile file instead,
+/// for one that can't send it (a general MIDI device, a brain on old firmware).
 /// </summary>
 internal sealed partial record OutputSpec(string Port, IReadOnlyList<int> Channels, TimeSpan? Latency = null, IReadOnlySet<int>? Notes = null)
 {
+    /// <summary>The profile file's contents, when the spec named one: it stands in for (and beats) what the instrument sends.</summary>
+    public InstrumentProfile? Profile { get; init; }
+
     /// <summary>Whether a profile from the instrument would add anything the command line didn't say.</summary>
-    public bool WantsProfile => Latency is null || Notes is null;
+    public bool WantsProfile => Profile is null && (Latency is null || Notes is null);
 
     public static bool TryParse(string raw, out OutputSpec spec, out string? error)
     {
         spec = null!;
+        var at = raw.LastIndexOf('@');
+        if (at > 0 && ProfileFile.Names(raw[(at + 1)..]))
+        {
+            var head = raw[..at];
+            if (Pattern().Match(head) is not { Success: true } named || named.Groups["lat"].Success || named.Groups["port"].Value.TrimStart() is ['=', ..])
+            {
+                error = $"'{raw}' is not PORT[=CHANNELS]@PROFILE.json.";
+                return false;
+            }
+
+            if (!ProfileFile.TryLoad(raw[(at + 1)..], out var profile, out error))
+            {
+                return false;
+            }
+
+            IReadOnlyList<int> fileChannels = InstrumentSpec.AllChannels;
+            if (named.Groups["ch"].Success && !ChannelList.TryParse(named.Groups["ch"].Value, out fileChannels, out var chError))
+            {
+                error = $"'{raw}': {chError}";
+                return false;
+            }
+
+            spec = new OutputSpec(named.Groups["port"].Value.Trim(), fileChannels) { Profile = profile };
+            return true;
+        }
+
         IReadOnlySet<int>? notes = null;
         if (NotesSuffix().Match(raw) is { Success: true } suffix)
         {

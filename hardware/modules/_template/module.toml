@@ -4,4 +4,5 @@ revision = "A"            # bump when interfaces or BOM change (breaking change)
 status = "planned"        # planned | prototype | proven | deprecated
 job = "strike"            # brain | body logic | power | drive | strike | press | pluck | damp | frame | measure | transport | light | display | control
 interfaces = ["act-2p", "mount-2020"]   # ids from hardware/interfaces.md only
+# outputs = 8            # job "drive" only: how many actuators it switches (required for drive modules)
 fabrication = ["3d-print-fdm"]          # processes from hardware/fabrication/capabilities.csv (optional)

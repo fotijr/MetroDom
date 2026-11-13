@@ -13,6 +13,30 @@ jobs:
       - name: Brain firmware host tests
         run: make -C Instruments/metrodom_brain/test
 
+  # The real compile against the pinned arduino-pico core and libraries (sketch.yaml): the host
+  # tests above can't catch a sketch that doesn't build for the Pico (plan 0006 N5, TD-29).
+  firmware-build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        board: [pico, pico2]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: arduino/setup-arduino-cli@v2
+        with:
+          version: 1.5.1
+      - uses: actions/cache@v6
+        with:
+          path: ~/.arduino15
+          key: arduino-${{ hashFiles('Instruments/metrodom_brain/sketch.yaml') }}
+      - name: Compile the brain for ${{ matrix.board }}
+        run: make -C Instruments/metrodom_brain build BOARD=${{ matrix.board }}
+      - uses: actions/upload-artifact@v7
+        with:
+          name: metrodom-brain-${{ matrix.board }}
+          path: Instruments/metrodom_brain/build/${{ matrix.board }}/metrodom_brain.ino.uf2
+
   dotnet:
     strategy:
       fail-fast: false

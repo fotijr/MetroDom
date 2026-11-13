@@ -7,8 +7,8 @@ namespace MetroDom.Core;
 /// <summary>
 /// Reads and writes the <a href="../../docs/references/instrument-profile.md">instrument profile</a>
 /// JSON (<c>metrodom.instrument-profile/0</c>). Only the fields the Conductor uses today become
-/// <see cref="InstrumentProfile"/> properties (of <c>midi</c>, only the channel); the rest (identity, polyphony, safety) are accepted
-/// and ignored until something needs them.
+/// <see cref="InstrumentProfile"/> properties (of <c>midi</c>, only the channel; accent LEDs are carried
+/// so they can be shown); the rest (identity, velocity, watchdog) are accepted and ignored until something needs them.
 /// </summary>
 public static class InstrumentProfileJson
 {
@@ -71,7 +71,9 @@ public static class InstrumentProfileJson
         }
 
         var latencies = new Dictionary<int, TimeSpan>();
-        var minInterval = Milliseconds(obj["minIntervalMs"]) ?? TimeSpan.Zero;
+        var pulses = new Dictionary<int, TimeSpan>();
+        var intervals = new Dictionary<int, TimeSpan>();
+        var leds = new Dictionary<int, AccentLed>();
         HashSet<int>? notes = null;
         if (obj["notes"] is JsonArray array)
         {
@@ -96,17 +98,59 @@ public static class InstrumentProfileJson
                     latencies[note.Value] = latency;
                 }
 
-                // One interval for the whole instrument: the slowest note's, so nothing is refused.
-                if (Milliseconds(item["minIntervalMs"]) is { } interval && interval > minInterval)
+                if (Milliseconds(item["pulseMs"]) is { } pulse)
                 {
-                    minInterval = interval;
+                    if (pulse <= TimeSpan.Zero)
+                    {
+                        error = $"note {note}: \"pulseMs\" must be more than 0.";
+                        return false;
+                    }
+
+                    pulses[note.Value] = pulse;
+                }
+
+                if (Milliseconds(item["minIntervalMs"]) is { } interval)
+                {
+                    intervals[note.Value] = interval;
+                }
+
+                if (item["led"] is JsonObject ledNode)
+                {
+                    var first = ledNode["first"]?.GetValue<int>() ?? 0;
+                    var count = ledNode["count"]?.GetValue<int>() ?? 1;
+                    if (first < 0 || count < 1 || !AccentLed.TryParseColor(ledNode["color"]?.GetValue<string>(), out var color))
+                    {
+                        error = $"note {note}: \"led\" needs \"first\" 0 or more, \"count\" 1 or more and a \"color\" like \"#FF8000\".";
+                        return false;
+                    }
+
+                    leds[note.Value] = new AccentLed(first, count, color);
                 }
             }
         }
 
+        AccentStrip? accent = null;
+        if (obj["accent"] is JsonObject accentNode)
+        {
+            var count = accentNode["leds"]?.GetValue<int>() ?? 0;
+            var brightness = accentNode["maxBrightnessPercent"]?.GetValue<int>() ?? 0;
+            var flash = accentNode["flashMs"]?.GetValue<int>() ?? 0;
+            if (count < 1 || brightness is < 0 or > 100 || flash < 0)
+            {
+                error = "\"accent\" needs \"leds\" 1 or more, \"maxBrightnessPercent\" 0-100 and \"flashMs\" 0 or more.";
+                return false;
+            }
+
+            accent = new AccentStrip(count, brightness, flash);
+        }
+
         // Notes without their own latency fall back to the top-level one, else the slowest note.
         var defaultLatency = Milliseconds(obj["latencyMs"]) ?? (latencies.Count > 0 ? latencies.Values.Max() : TimeSpan.Zero);
-        if (defaultLatency < TimeSpan.Zero || latencies.Values.Any(l => l < TimeSpan.Zero) || minInterval < TimeSpan.Zero)
+        // Notes without their own interval get the top-level one, else the slowest note's, so a
+        // guess never lets through a repeat the firmware would refuse.
+        var minInterval = Milliseconds(obj["minIntervalMs"]) ?? (intervals.Count > 0 ? intervals.Values.Max() : TimeSpan.Zero);
+        if (defaultLatency < TimeSpan.Zero || latencies.Values.Any(l => l < TimeSpan.Zero) || minInterval < TimeSpan.Zero
+            || intervals.Values.Any(i => i < TimeSpan.Zero))
         {
             error = "latencies and intervals can't be negative.";
             return false;
@@ -125,12 +169,52 @@ public static class InstrumentProfileJson
             channel--;
         }
 
+        int? polyphony = obj["polyphony"]?.GetValue<int>();
+        if (polyphony is < 1)
+        {
+            error = "\"polyphony\" must be at least 1.";
+            return false;
+        }
+
+        ActuatorSafety? safety = null;
+        if (obj["safety"] is JsonObject safetyNode)
+        {
+            var maxOn = Milliseconds(safetyNode["maxOnMs"]);
+            var duty = safetyNode["maxDutyPercent"]?.GetValue<int>();
+            var window = Milliseconds(safetyNode["dutyWindowMs"]) ?? ActuatorSafety.DefaultDutyWindow;
+            if (maxOn is not { } maxOnTime || maxOnTime <= TimeSpan.Zero)
+            {
+                error = "\"safety.maxOnMs\" is required and must be more than 0.";
+                return false;
+            }
+
+            if (duty is not (>= 1 and <= 100))
+            {
+                error = "\"safety.maxDutyPercent\" is required and must be 1-100.";
+                return false;
+            }
+
+            if (window <= TimeSpan.Zero)
+            {
+                error = "\"safety.dutyWindowMs\" must be more than 0.";
+                return false;
+            }
+
+            safety = new ActuatorSafety(maxOnTime, duty.Value, window);
+        }
+
         profile = new InstrumentProfile(name, defaultLatency)
         {
             Channel = channel,
+            Polyphony = polyphony,
+            Safety = safety,
+            NotePulse = pulses,
             Notes = notes,
             NoteLatency = latencies,
             MinInterval = minInterval,
+            NoteInterval = intervals,
+            Accent = accent,
+            NoteLed = leds,
         };
         error = null;
         return true;
@@ -171,10 +255,50 @@ public static class InstrumentProfileJson
                     entry["latencyMs"] = latency.TotalMilliseconds;
                 }
 
+                if (profile.NotePulse.TryGetValue(note, out var pulse))
+                {
+                    entry["pulseMs"] = pulse.TotalMilliseconds;
+                }
+
+                if (profile.NoteInterval.TryGetValue(note, out var interval))
+                {
+                    entry["minIntervalMs"] = interval.TotalMilliseconds;
+                }
+
+                if (profile.NoteLed.TryGetValue(note, out var led))
+                {
+                    entry["led"] = new JsonObject { ["first"] = led.First, ["count"] = led.Count, ["color"] = led.Hex };
+                }
+
                 notes.Add(entry);
             }
 
             obj["notes"] = notes;
+        }
+
+        if (profile.Accent is { } strip)
+        {
+            obj["accent"] = new JsonObject
+            {
+                ["leds"] = strip.Leds,
+                ["maxBrightnessPercent"] = strip.MaxBrightnessPercent,
+                ["flashMs"] = strip.FlashMs,
+            };
+        }
+
+        if (profile.Polyphony is { } polyphony)
+        {
+            obj["polyphony"] = polyphony;
+        }
+
+        if (profile.Safety is { } safety)
+        {
+            obj["safety"] = new JsonObject
+            {
+                ["maxOnMs"] = safety.MaxOnTime.TotalMilliseconds,
+                ["maxDutyPercent"] = safety.MaxDutyPercent,
+                ["dutyWindowMs"] = safety.DutyWindow.TotalMilliseconds,
+            };
         }
 
         return obj.ToJsonString(WriteOptions);

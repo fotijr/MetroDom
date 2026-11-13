@@ -88,6 +88,7 @@ driver and backplane. Only the frame, tips and profile are new.
   ≤ 5 ms. Retro lists every part that *wasn't* reused and why.
 - **First play-along (B9, band leads):** the owner plays guitar over the robots on a song with
   the guitar part muted, after a count-in on the woodblock. Start/stop from a foot pedal.
+- Plan: [0006](exec-plans/active/0006-new-instrument-dev-loop.md) (the new-instrument dev loop the snare is built with).
 
 ### M3: Lights playground ($, can run alongside M1–M2)
 WLED strip + QLC+ driven by pads, then accent LEDs on the xylophone body.

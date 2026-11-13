@@ -1,4 +1,4 @@
-# MIDI profile exchange (discovery step 3)
+# MIDI profile exchange (discovery step 3) and MetroDom SysEx
 
 Status: **Draft**, pending owner review. Implements step 3 of
 [ADR 0007](../design-docs/0007-instrument-discovery.md): a MetroDom instrument sends its
@@ -17,12 +17,33 @@ sends these **only to ports whose Identity Reply said MetroDom**.
 | --- | --- |
 | Profile Request | `F0 7D 4D 44 01 F7` |
 | Profile Reply (one chunk) | `F0 7D 4D 44 02 <index> <count> <text…> F7` |
+| All Off (panic) | `F0 7D 4D 44 03 F7` |
+| Body Write (one chunk) | `F0 7D 4D 44 04 <index> <count> <hex…> F7` |
+| Body Write Reply | `F0 7D 4D 44 05 <status> <detail> F7` |
+| Body Read | `F0 7D 4D 44 06 F7` |
+| Body Read Reply (one chunk) | `F0 7D 4D 44 07 <index> <count> <hex…> F7` |
 
 - `<text>` is the profile JSON, ASCII only (non-ASCII is escaped as `\uXXXX`), so every byte is ≤ `7F`.
 - At most 128 text bytes per chunk, so any USB-MIDI SysEx buffer copes. `<index>` counts from 0,
   `<count>` is the total (1-127): profiles up to 16 KB.
 - Chunks may arrive in any order. A chunk with a different `<count>` starts the answer over.
-- Free sub-IDs after `02` are for later MetroDom messages (e.g. a SysEx all-off, TD-22).
+- **All Off** turns every actuator off at once, like CC 120 on every channel, in one message. It
+  doesn't latch: the next Note On plays. The Conductor's panic sends it first, then CC 120/123,
+  so a MetroDom instrument is silent after one message instead of up to 32. `metrodom panic`
+  sends the CCs first instead (it doesn't know the ports yet and won't wait to ask), then the
+  All Off to ports that identify as MetroDom. Instruments ignore
+  MetroDom sub-IDs they don't know.
+- **Body Write** carries a [body record](body-record.md) as upper-case hex, at most 128
+  characters (64 bytes) per chunk, sent in order from `<index>` 0; chunk 0 starts over. After the
+  last chunk the brain answers once: `<status>` 0 written (it restarts), 1 bad message, 2 refused
+  (`<detail>` = the firmware's `BodyError` number), 3 the EEPROM didn't keep it, 4 no body store.
+  A bad chunk is answered at once. Owner-only by hardware: `metrodom body write` is a local
+  command, and the body's write button must be held while it runs.
+- **Body Read** asks for the record the brain booted from. The reply is the record as hex in
+  chunks like Body Write's (any order, the Conductor reassembles them), or one message with
+  `<index>` and `<count>` 0 when the brain has no record (its compiled-in bench body, or a silent
+  brain). After a Body Write the brain answers with the old record until it restarts.
+- Free sub-IDs after `07` are for later MetroDom messages.
 
 ## What `metrodom devices --identify` does
 
@@ -56,5 +77,5 @@ Measured on macOS: two virtual instruments identified and described, whole comma
 - Profiles are fetched by `devices --identify` and by `play`/`route` at start, not on hot-plug.
   `arrange` and `simulate` take virtual `-i` specs, not ports, so they don't ask.
 - No remembered assignments or auto-adding instruments that weren't named with `-o` (step 4, TD-23).
-- Firmware reading the profile from the body EEPROM. The [brain firmware](../../Instruments/metrodom_brain/README.md) serves one built from its compiled-in config (host-tested, not yet flashed).
+- The [brain firmware](../../Instruments/metrodom_brain/README.md) builds its profile from the body record in the body's EEPROM, or from its compiled-in bench config (host-tested, not yet flashed).
 - MIDI-CI Property Exchange.

@@ -6,18 +6,18 @@ Architecture Decision Records (ADRs) plus the beliefs every decision must respec
 
 | # | Decision | Status |
 | --- | --- | --- |
-| 0001 | [MIDI is the contract at the instrument boundary](0001-midi-is-the-contract.md) | Proposed |
+| 0001 | [MIDI is the contract at the instrument boundary](0001-midi-is-the-contract.md) | Accepted |
 | 0002 | [Conductor is a headless, cross-platform C# service](0002-headless-conductor.md) | Accepted |
-| 0003 | [One Control API for every app](0003-control-api.md) | Proposed |
-| 0004 | [Latency compensation via per-instrument lookahead](0004-latency-compensation.md) | Proposed |
-| 0005 | [Deployment modes are policy, not forks; local-first](0005-deployment-modes-are-policy.md) | Proposed |
+| 0003 | [One Control API for every app](0003-control-api.md) | Accepted |
+| 0004 | [Latency compensation via per-instrument lookahead](0004-latency-compensation.md) | Accepted |
+| 0005 | [Deployment modes are policy, not forks; local-first](0005-deployment-modes-are-policy.md) | Accepted |
 | 0006 | [Swappable instrument brains (brain / body split)](0006-swappable-instrument-brains.md) | Proposed |
-| 0007 | [Instrument discovery: MetroDom + general MIDI devices](0007-instrument-discovery.md) | Proposed |
+| 0007 | [Instrument discovery: MetroDom + general MIDI devices](0007-instrument-discovery.md) | Accepted |
 | 0008 | [Hardware as code: how hardware lives in the repo](0008-hardware-as-code.md) | Proposed |
 | 0009 | [Shared hardware modules and connector standards](0009-shared-hardware-modules.md) | Proposed |
 | 0010 | [Road-ready instruments: cases, transport and fast setup (long-term)](0010-road-ready-instruments.md) | Proposed, deferred |
 | 0011 | [Visuals are part of the band: lights on the same MIDI timeline](0011-visuals-are-part-of-the-band.md) | Proposed |
-| 0012 | [Humans in the band: play-along](0012-humans-in-the-band.md) | Proposed |
+| 0012 | [Humans in the band: play-along](0012-humans-in-the-band.md) | Accepted |
 
 ## Writing a new ADR
 Copy the shape of an existing one: **Status, Context, Decision, Consequences, Open questions**.

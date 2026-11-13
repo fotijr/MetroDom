@@ -1,0 +1,20 @@
+# The M1 xylophone with accent LEDs: 9 LEDs, 20% at most, 80 ms flashes.
+# A flash is color x 20% x velocity / 127 per channel, rounded down, and never dark.
+body ../../bodies/m1-xylophone-accent.hex
+# #FF4000 at 127: 255 x 0.2 = 51 (33), 64 x 0.2 = 12 (0C)
+0 on 72 127 struck 30 #330C00
+79 is-lit 72 yes
+80 is-lit 72 no
+# #FFC000 at 100: 40 (28), 30 (1E)
+100 on 74 100 struck 26 #281E00
+# at velocity 1 every lit channel rounds to 0, so it shows 1: dim, never dark
+200 on 72 1 struck 12 #010100
+# refused notes don't flash
+300 on 72 127 struck 30 #330C00
+300 on 74 127 struck 30 #332600
+300 on 76 127 polyphony
+300 is-lit 76 no
+# panic darkens everything
+310 panic
+310 is-lit 72 no
+310 is-lit 74 no

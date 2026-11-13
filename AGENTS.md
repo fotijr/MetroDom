@@ -23,11 +23,15 @@ This file is a **map, not a manual**. Read the doc that matches your task, then 
 | Handle timing, latency, failure, physical safety | [docs/RELIABILITY.md](docs/RELIABILITY.md)                 |
 | Handle auth, roles, untrusted crowd input       | [docs/SECURITY.md](docs/SECURITY.md)                        |
 | Look up MIDI / protocol details                 | [docs/references/index.md](docs/references/index.md)        |
-| Build or modify an instrument (firmware)        | [Instruments/README.md](Instruments/README.md)              |
+| Build a new instrument (`metrodom instrument new`) | [new-instrument.md](docs/references/new-instrument.md)    |
+| Modify an instrument or the brain firmware      | [Instruments/README.md](Instruments/README.md)              |
+| Describe a body (ID EEPROM, `metrodom body`)    | [body-record.md](docs/references/body-record.md)            |
 | Parts, inventory, hardware modules, builds      | [hardware/README.md](hardware/README.md)                    |
 | Plan lights, LED strips, matrix displays        | [ADR 0011](docs/design-docs/0011-visuals-are-part-of-the-band.md) |
 | Prototype without hardware (virtual band)      | [docs/references/virtual-band.md](docs/references/virtual-band.md) |
 | Detect instruments or other MIDI devices        | [ADR 0007](docs/design-docs/0007-instrument-discovery.md)   |
+| Run the Conductor as a service, queue, remote   | [conductor-service.md](docs/references/conductor-service.md) |
+| Measure instrument latency (calibration)        | [calibration.md](docs/references/calibration.md)            |
 
 ## Repository layout
 
@@ -39,10 +43,10 @@ src/MetroDom.Conductor/ ← `metrodom` CLI + OS MIDI adapters (ALSA, DryWetMIDI)
 tests/                 ← xUnit v3 tests
 Instruments/           ← Arduino firmware + per-instrument hardware notes
 hardware/              ← parts catalog, inventory, shared modules, build records (ADR 0008)
-docs/                  ← knowledge base (Markdown). docs/index.html etc. is the legacy GitHub Pages site.
+docs/                  ← knowledge base (Markdown)
 policies/              ← shipped policy profiles (live-band.json)
 scripts/check_docs.py  ← knowledge-base linter (run before committing doc changes)
-scripts/check_hardware.py ← hardware records linter (run before committing hardware changes)
+scripts/check_hardware.py ← hardware records + body ↔ modules linter (run before committing hardware changes)
 ```
 
 ## State of the project (read before assuming anything works)
@@ -56,10 +60,10 @@ the docs describe intent and the code describes reality — check
 
 ```bash
 python3 scripts/check_docs.py          # knowledge-base lint (links, orphans, AGENTS.md length)
-python3 scripts/check_hardware.py      # parts/BOM/module/build consistency (--buildable: stock report)
+python3 scripts/check_hardware.py      # parts/BOM/module/build/body consistency (--buildable: stock report)
 dotnet build && dotnet test                      # .NET 10 SDK, any OS (Linux/macOS/Windows)
 dotnet run --project src/MetroDom.Conductor -- inspect song.mid
-make -C Instruments/metrodom_brain/test          # brain firmware host tests (any C++17 compiler)
+make -C Instruments/metrodom_brain test           # brain host tests (any C++17); build / flash need arduino-cli
 ```
 
 CI: GitHub Actions (`.github/workflows/`): `docs` (lint) and `build` (Linux, macOS, Windows).

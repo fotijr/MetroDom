@@ -249,3 +249,6 @@ __pycache__/
 # Brain firmware host test binary
 Instruments/metrodom_brain/test/brain_test
 Instruments/metrodom_brain/test/brain_test.dSYM/
+
+# Brain firmware build output (make build)
+Instruments/metrodom_brain/build/

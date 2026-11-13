@@ -1,0 +1,71 @@
+# Duty on the M1 body: 30 ms strikes every 60 ms ask for 50% of a 30% budget.
+# The bucket holds 1000 ms x 30% = 30000, a full strike adds 3000, 60 ms drains 1800.
+# 23 strikes fill it, then only some get through. Soft 12 ms strikes never run out.
+body ../../bodies/m1-xylophone.hex
+0 on 72 127 struck 30
+60 on 72 127 struck 30
+120 on 72 127 struck 30
+180 on 72 127 struck 30
+240 on 72 127 struck 30
+300 on 72 127 struck 30
+360 on 72 127 struck 30
+420 on 72 127 struck 30
+480 on 72 127 struck 30
+540 on 72 127 struck 30
+600 on 72 127 struck 30
+660 on 72 127 struck 30
+720 on 72 127 struck 30
+780 on 72 127 struck 30
+840 on 72 127 struck 30
+900 on 72 127 struck 30
+960 on 72 127 struck 30
+1020 on 72 127 struck 30
+1080 on 72 127 struck 30
+1140 on 72 127 struck 30
+1200 on 72 127 struck 30
+1260 on 72 127 struck 30
+1320 on 72 127 struck 30
+1380 on 72 127 duty
+1440 on 72 127 struck 30
+1500 on 72 127 struck 30
+1560 on 72 127 duty
+1620 on 72 127 struck 30
+1680 on 72 127 duty
+1740 on 72 127 struck 30
+1800 on 72 127 struck 30
+1860 on 72 127 duty
+1920 on 72 127 struck 30
+1980 on 72 127 duty
+# a 1 s rest drains it
+2980 on 72 127 struck 30
+# soft strikes on another bar: 12 ms adds 1200, 60 ms drains 1800
+4000 on 74 1 struck 12
+4060 on 74 1 struck 12
+4120 on 74 1 struck 12
+4180 on 74 1 struck 12
+4240 on 74 1 struck 12
+4300 on 74 1 struck 12
+4360 on 74 1 struck 12
+4420 on 74 1 struck 12
+4480 on 74 1 struck 12
+4540 on 74 1 struck 12
+4600 on 74 1 struck 12
+4660 on 74 1 struck 12
+4720 on 74 1 struck 12
+4780 on 74 1 struck 12
+4840 on 74 1 struck 12
+4900 on 74 1 struck 12
+4960 on 74 1 struck 12
+5020 on 74 1 struck 12
+5080 on 74 1 struck 12
+5140 on 74 1 struck 12
+5200 on 74 1 struck 12
+5260 on 74 1 struck 12
+5320 on 74 1 struck 12
+5380 on 74 1 struck 12
+5440 on 74 1 struck 12
+5500 on 74 1 struck 12
+5560 on 74 1 struck 12
+5620 on 74 1 struck 12
+5680 on 74 1 struck 12
+5740 on 74 1 struck 12

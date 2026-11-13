@@ -28,9 +28,10 @@ phase is fun on its own and doesn't wait for the next one.
 - [ ] Write down what was confusing in [lighting essentials](../../references/lighting-essentials.md)
 
 ### Phase V1: Accent LEDs on instruments (`led-accent`)
-- [ ] Brain firmware drives a short strip on the body: each note's LED flashes on Note On
-- [ ] Instrument profile declares its accent LEDs (count, note → LED index, color)
-- [ ] Printed diffuser (PLA is fine at home). Brightness capped in firmware
+- [x] Brain firmware drives a short strip on the body: each note's LED flashes on Note On
+      (host-tested; [body record](../../references/body-record.md#accent-leds), TD-29)
+- [x] Instrument profile declares its accent LEDs (count, note → LED range, color), from the body record
+- [ ] Printed diffuser (PLA is fine at home). Brightness capped in firmware (done: 25% ceiling)
 - [ ] Fits the xylophone body from exec plan 0002 without a second power supply design
 
 ### Phase V2: Conductor drives lights
@@ -50,7 +51,8 @@ phase is fun on its own and doesn't wait for the next one.
 
 ### Phase V4: LED matrix display (`matrix-hub75`)
 - [ ] One 64×32 HUB75 panel on an ESP32 or Pi: shows song title and tempo from the Control API
-- [ ] Jukebox mode: QR code to join + "up next" ([crowd jukebox](../../product-specs/crowd-jukebox.md))
+- [ ] Jukebox mode: QR code to join + "up next" ([crowd jukebox](../../product-specs/crowd-jukebox.md)).
+      The Control API side is built: `GET /join/qr` and the stream, as the browser big screen uses them
 - [ ] Beat-synced visualizer from the note stream
 - [ ] Chain panels for a bigger display, mounted on a frame
 
@@ -60,6 +62,12 @@ phase is fun on its own and doesn't wait for the next one.
 - [ ] Fog/haze (needs venue rules) and moving heads
 
 ## Decisions log
+- 2026-11-12: V1 firmware built ahead of the hardware, like the body record. Proposed, not yet
+  accepted by the owner: the strip is part of the body record (an LED block after the name, all
+  zeros on a body without one), on brain GPIO 7 through a 74AHCT125, at most 64 LEDs and 25%
+  brightness (about 1 A worst case). Each note owns a range of LEDs and a color; ranges can't
+  overlap, so one note's flash ending never darkens another's. Only strikes flash (a refused note
+  stays dark), brightness scales with velocity, and every panic turns the LEDs off with the coils.
 - 2026-11-10: Visuals are three tiers (accent, stage, display) on the same MIDI timeline.
   Built light hardware speaks MIDI, bought lighting gets sACN/Art-Net/DMX. Reactive lights by
   default, live and authored cues override. Strobe capped by default, panic = safe look (ADR 0011).
@@ -105,8 +113,10 @@ phase is fun on its own and doesn't wait for the next one.
   caps (whole day and quiet hours, the lower wins) scale every intensity channel, the safe look
   included, with a 10% floor so panic is never dark. Quiet hours go by the Conductor's local
   clock and may wrap past midnight.
+- 2026-11-11 (owner): Fixtures and the matrix are wired Ethernet. Small accent nodes may use
+  Wi-Fi through the Conductor's own access point (ADR 0002). Lights fail dark and never hold up
+  the music.
 
 ## Open questions
 - Budget for V3 fixtures.
 - ESP32 or Raspberry Pi for the matrix (ESP32 is cheaper. Pi is easier for text and QR rendering).
-- Wired Ethernet everywhere, or Wi-Fi allowed for small accent nodes?

@@ -1,6 +1,6 @@
 # 0001: MIDI is the contract at the instrument boundary
 
-Status: **Proposed** (2026-11-10)
+Status: **Accepted** (2026-11-11, proposed 2026-11-10)
 
 ## Context
 The prototype uses two incompatible ad-hoc ASCII serial protocols at 9600 baud
@@ -29,4 +29,6 @@ custom host code, and nothing outside MetroDom (DAWs, keyboards, phone MIDI apps
 ## Open questions
 - Board standard: proposed in [ADR 0006](0006-swappable-instrument-brains.md) (Pico-footprint
   RP2040/RP2350 brains).
-- MIDI 2.0 UMP from day one, or MIDI 1.0 now with 2.0 later? Leaning 1.0 now for tooling reach.
+- ~~MIDI 2.0 UMP from day one, or MIDI 1.0 now with 2.0 later?~~ MIDI 1.0 now, 2.0 later
+  (owner, 2026-11-11): every OS, library and cheap controller speaks it today. Profiles stay on
+  `0x7D` SysEx until MIDI-CI is solid on Linux/ARM.

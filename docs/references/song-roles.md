@@ -65,3 +65,20 @@ metrodom arrange song.mid --seat guitar --seat bass
 - The instrument that would have played the part stays in the band (idle, or given another part
   by `--arrange`), so lookahead doesn't change.
 - Measured: demo song to `virtual` with `--seat drums=Dom`: xylophone played, drums got no notes.
+
+### Sharing a part piece by piece
+
+`--seat ROLE[=PLAYER]/PIECES` takes only some notes of the role's parts; the band plays the rest
+([ADR 0012](../design-docs/0012-humans-in-the-band.md) "shared kit piece by piece"). Pieces are `kick`, `snare`, `hihat`,
+`toms`, `crash`, `ride`, `cymbals`, `cowbell`, `tambourine`, `percussion` (General MIDI notes,
+`DrumMap.Pieces`) or note numbers and names, comma-separated.
+
+```bash
+metrodom play song.mid --seat drums=Sam/kick,snare            # robots keep hats, cymbals, toms
+metrodom play song.mid --seat drums=Sam/kick,snare --seat drums=Ana/cymbals
+```
+
+- Several seats can share one role when their pieces don't overlap; overlapping pieces, or a
+  whole-role seat next to a piece seat, are a usage error.
+- It prints `Seat drums (Sam): kick, snare: band leaves those notes out of Drums (#2:10) and
+  plays the rest`. A piece seat whose notes no part plays is a warning, and nothing is left out.

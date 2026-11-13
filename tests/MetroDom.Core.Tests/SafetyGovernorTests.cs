@@ -65,6 +65,30 @@ public class SafetyGovernorTests
     }
 
     [Fact]
+    public void EachNote_HasItsOwnInterval_AsTheBrainEnforcesIt()
+    {
+        // A snare that rolls at 60 ms next to a kick that needs 150 ms: the kick's limit mustn't slow the snare.
+        var governor = Governor(new InstrumentProfile("drums", TimeSpan.Zero)
+        {
+            MinInterval = TimeSpan.FromMilliseconds(150),
+            NoteInterval = new Dictionary<int, TimeSpan> { [38] = TimeSpan.FromMilliseconds(60), [36] = TimeSpan.FromMilliseconds(150) },
+        });
+
+        governor.Send(On(38));
+        governor.Send(On(36));
+        _clock.Advance(TimeSpan.FromMilliseconds(70));
+        governor.Send(On(38)); // the snare's 60 ms has passed
+        governor.Send(On(36)); // the kick's 150 ms hasn't
+        governor.Send(On(42)); // no interval of its own: the instrument's 150 ms, but it's never struck
+        _clock.Advance(TimeSpan.FromMilliseconds(80));
+        governor.Send(On(36)); // 150 ms after the kick that played
+        governor.Send(On(42)); // only 80 ms after the hi-hat
+
+        Assert.Equal([38, 36, 38, 42, 36], SentNotes());
+        Assert.Equal(2, governor.BlockedFor(BlockReason.TooSoon));
+    }
+
+    [Fact]
     public void HeldBackNote_DoesNotRestartTheInterval()
     {
         var governor = Governor(new InstrumentProfile("xylo", TimeSpan.Zero) { MinInterval = TimeSpan.FromMilliseconds(60) });
@@ -95,6 +119,51 @@ public class SafetyGovernorTests
         _clock.AdvanceTo(TimeSpan.FromSeconds(1)); // the first strike leaves the window
         governor.Send(On(70));
         Assert.Equal(70, SentNotes()[^1]);
+    }
+
+    [Fact]
+    public void Volume_ScalesNotes_ThenTheCapApplies()
+    {
+        var volume = new MasterVolume();
+        var governor = new SafetyGovernor(_out, new InstrumentProfile("xylo", TimeSpan.Zero), new SafetyLimits { MaxVelocity = 80 }, _clock, () => new TimeOnly(12, 0), volume);
+        var loud = On(60, velocity: 120);
+
+        governor.Send(loud);           // full: only the cap, 80
+        Assert.True(volume.TrySet(50));
+        governor.Send(On(62, 120));     // half of 120 = 60, under the cap
+        governor.Send(On(64, 1));       // never rounds a note away
+        Assert.True(volume.TrySet(100));
+        governor.Send(On(65, 70));      // full and under the cap: the same event
+
+        Assert.Equal([80, 60, 1, 70], _out.Sent.OfType<NoteOnEvent>().Select(e => (int)e.Velocity));
+        Assert.Equal(120, (int)loud.Velocity);
+        Assert.Equal(2, governor.Capped); // the velocity-1 note went out as it was
+    }
+
+    [Fact]
+    public void VolumeZero_HoldsBackNewNotes_ButNotesStillEnd()
+    {
+        var volume = new MasterVolume();
+        var governor = new SafetyGovernor(_out, new InstrumentProfile("xylo", TimeSpan.Zero), SafetyLimits.None, _clock, () => new TimeOnly(12, 0), volume);
+        governor.Send(On(60));
+        Assert.True(volume.TrySet(0));
+        governor.Send(On(62));
+        governor.Send(Off(60));
+
+        Assert.Equal([60], SentNotes());
+        Assert.Single(_out.Sent.OfType<NoteOffEvent>());
+        Assert.Equal(1, governor.BlockedFor(BlockReason.Muted));
+        Assert.Contains("at volume 0", governor.Summary(), StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(101)]
+    public void Volume_OutsideZeroToHundred_IsRefused(int percent)
+    {
+        var volume = new MasterVolume();
+        Assert.False(volume.TrySet(percent));
+        Assert.Equal(MasterVolume.Full, volume.Percent);
     }
 
     [Fact]
@@ -180,6 +249,120 @@ public class SafetyGovernorTests
 
         Assert.Empty(SentNotes());
         Assert.Equal(Orchestra.ChannelCount * 2, _out.Sent.OfType<ControlChangeEvent>().Count());
+    }
+
+    private static InstrumentProfile Coil(int pulseMs = 30, int intervalMs = 30, int? polyphony = null, params int[] notes) =>
+        new("coil", TimeSpan.Zero)
+        {
+            Notes = notes.Length == 0 ? new HashSet<int> { 60 } : notes.ToHashSet(),
+            MinInterval = TimeSpan.FromMilliseconds(intervalMs),
+            NotePulse = (notes.Length == 0 ? [60] : notes).ToDictionary(n => n, _ => TimeSpan.FromMilliseconds(pulseMs)),
+            Polyphony = polyphony,
+            Safety = new ActuatorSafety(TimeSpan.FromMilliseconds(45), 30, ActuatorSafety.DefaultDutyWindow),
+        };
+
+    [Fact]
+    public void DutyCycle_HoldsBackWhatTheBrainWouldRefuse()
+    {
+        // The same run as the firmware's duty_RefusesWhenTheThermalBudgetIsSpent (brain_test.cpp):
+        // 30 ms pulses back to back against a 30% budget. 13 in a row, then about one in three.
+        var governor = Governor(Coil());
+        for (var i = 0; i < 20; i++)
+        {
+            governor.Send(On(60));
+            _clock.Advance(TimeSpan.FromMilliseconds(30));
+        }
+
+        Assert.Equal(15, governor.Passed);
+        Assert.Equal(5, governor.BlockedFor(BlockReason.DutyCycle));
+
+        _clock.Advance(TimeSpan.FromSeconds(1)); // a rest refills it
+        governor.Send(On(60));
+        Assert.Equal(16, governor.Passed);
+    }
+
+    [Fact]
+    public void DutyCycle_IsPerActuator()
+    {
+        var governor = Governor(Coil(notes: [60, 64]));
+        for (var i = 0; i < 20; i++)
+        {
+            governor.Send(On(60));
+            _clock.Advance(TimeSpan.FromMilliseconds(30));
+        }
+
+        governor.Send(On(64)); // a cold actuator plays while 60 is hot
+        Assert.Equal(64, (int)_out.Sent.OfType<NoteOnEvent>().Last().NoteNumber);
+    }
+
+    [Fact]
+    public void DutyCycle_WithoutAPulse_AssumesTheLongestTheFirmwareAllows()
+    {
+        // No pulseMs: each strike costs maxOnMs (45 ms of the 300 ms budget), draining 13.5 ms per
+        // 45 ms gap. 9 fit; a 30 ms pulse would fit 17.
+        var governor = Governor(Coil() with { NotePulse = new Dictionary<int, TimeSpan>(), MinInterval = TimeSpan.Zero });
+        for (var i = 0; i < 10; i++)
+        {
+            governor.Send(On(60));
+            _clock.Advance(TimeSpan.FromMilliseconds(45));
+        }
+
+        Assert.Equal(9, governor.Passed);
+        Assert.Equal(1, governor.BlockedFor(BlockReason.DutyCycle));
+    }
+
+    [Fact]
+    public void StillStriking_IsTooSoon_EvenWithoutAMinInterval()
+    {
+        var governor = Governor(Coil(pulseMs: 30, intervalMs: 0));
+        governor.Send(On(60));
+        _clock.Advance(TimeSpan.FromMilliseconds(10));
+        governor.Send(On(60));
+
+        Assert.Equal(1, governor.BlockedFor(BlockReason.TooSoon));
+    }
+
+    [Fact]
+    public void Polyphony_CapsActuatorsOnAtOnce_AndFreesThemWhenThePulseEnds()
+    {
+        var governor = Governor(Coil(polyphony: 2, notes: [60, 64, 67]));
+        var blocked = new List<BlockedNote>();
+        governor.Blocked += blocked.Add;
+
+        governor.Send(On(60));
+        governor.Send(On(64));
+        governor.Send(On(67)); // a third coil while two are on
+        _clock.Advance(TimeSpan.FromMilliseconds(30));
+        governor.Send(On(67)); // both pulses have ended
+
+        Assert.Equal([60, 64, 67], SentNotes());
+        Assert.Equal(BlockReason.Polyphony, Assert.Single(blocked).Reason);
+    }
+
+    [Fact]
+    public void ProfileWithoutSafety_HasNoDutyOrPolyphonyLimit()
+    {
+        var governor = Governor(new InstrumentProfile("synth", TimeSpan.Zero));
+        for (var i = 0; i < 100; i++)
+        {
+            governor.Send(On(60 + (i % 12)));
+        }
+
+        Assert.Equal(100, governor.Passed);
+    }
+
+    [Fact]
+    public void Panic_ToAMetroDomInstrument_StartsWithTheSysExAllOff()
+    {
+        var metroDom = Governor(Coil() with { SpeaksMetroDom = true });
+        var other = new SafetyGovernor(new FakeOutput("synth"), Coil(), SafetyLimits.None, _clock);
+
+        Orchestra.SendPanic(metroDom);
+        Orchestra.SendPanic(other);
+
+        Assert.True(Discovery.ProfileExchange.IsAllOff(_out.Sent[0]), "one message silences it before the CC burst");
+        Assert.Equal(1 + (Orchestra.ChannelCount * 2), _out.Sent.Count);
+        Assert.All(((FakeOutput)other.Inner).Sent, e => Assert.IsType<ControlChangeEvent>(e)); // 7D means something else to others
     }
 
     [Fact]

@@ -74,6 +74,25 @@ public class VirtualInstrumentTests
     }
 
     [Fact]
+    public void EachNote_IsRefusedByItsOwnInterval()
+    {
+        var clock = new VirtualClock();
+        var drums = new VirtualInstrument(new InstrumentProfile("drums", Ms10)
+        {
+            NoteInterval = new Dictionary<int, TimeSpan> { [38] = TimeSpan.FromMilliseconds(40), [36] = TimeSpan.FromMilliseconds(150) },
+        }, clock);
+
+        drums.Send(On(38));
+        drums.Send(On(36));
+        clock.Advance(TimeSpan.FromMilliseconds(50));
+        drums.Send(On(38));
+        drums.Send(On(36)); // Too soon for the kick.
+
+        Assert.Equal([38, 36, 38], drums.Strikes.Select(s => s.Note));
+        Assert.Equal(1, drums.Refused);
+    }
+
+    [Fact]
     public void Panic_IsCounted()
     {
         var xylo = new VirtualInstrument(new InstrumentProfile("xylo", Ms10), new VirtualClock());
