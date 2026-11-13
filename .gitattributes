@@ -1,0 +1,4 @@
+# Byte-exact fixtures, read by both the brain's C++ host test and the .NET tests:
+# keep LF on every checkout, Windows included.
+*.hex      text eol=lf
+*.vectors  text eol=lf
