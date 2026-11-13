@@ -24,7 +24,7 @@ What the owner writes and keeps next to the instrument, as `Instruments/<id>/bod
 ```json
 {
   "schema": "metrodom.body/0",
-  "id": "xylophone-m1",
+  "id": "xylophone-solenoid",
   "name": "MetroDom xylophone",
   "driver": { "type": "pca9685", "address": "0x40" },
   "polyphony": 2,

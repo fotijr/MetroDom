@@ -57,9 +57,21 @@ No body can ask for a pulse over 250 ms or a duty over 50%. Raising those limits
 ## 3. Parts and modules
 
 ```bash
-python3 scripts/check_hardware.py              # instrument.toml names real modules
+python3 scripts/check_hardware.py              # the modules exist, and the body fits them
 python3 scripts/check_hardware.py --buildable  # what you can build from stock, what's short
 ```
+
+`check_hardware.py` checks `body.json` against `instrument.toml`, so the two can't drift apart
+as you edit them:
+
+| Check | Fix |
+| --- | --- |
+| The body's `id` is the instrument's `id` | Make them match (`instrument new` does) |
+| A `body-backplane` holds the body | Add it to `instrument.toml` |
+| A driver channel per note (`driver-mosfet-8ch` switches 8), and PCA9685 outputs within them | Add a driver, or renumber outputs from 0 |
+| An actuator module (strike, press, pluck or damp) per note | Raise the actuator's `qty` |
+| `led-accent` when the body has `accent` LEDs | Add the module |
+| An instrument with `brain-pico` has a `body.json` | `instrument new` writes one |
 
 Each module's README has its wiring, assembly and bench test. A module that doesn't exist yet
 starts from `hardware/modules/_template/` ([hardware/README.md](../../hardware/README.md#everyday-workflows)).

@@ -46,7 +46,7 @@ hardware/              ← parts catalog, inventory, shared modules, build recor
 docs/                  ← knowledge base (Markdown)
 policies/              ← shipped policy profiles (live-band.json)
 scripts/check_docs.py  ← knowledge-base linter (run before committing doc changes)
-scripts/check_hardware.py ← hardware records linter (run before committing hardware changes)
+scripts/check_hardware.py ← hardware records + body ↔ modules linter (run before committing hardware changes)
 ```
 
 ## State of the project (read before assuming anything works)
@@ -60,7 +60,7 @@ the docs describe intent and the code describes reality — check
 
 ```bash
 python3 scripts/check_docs.py          # knowledge-base lint (links, orphans, AGENTS.md length)
-python3 scripts/check_hardware.py      # parts/BOM/module/build consistency (--buildable: stock report)
+python3 scripts/check_hardware.py      # parts/BOM/module/build/body consistency (--buildable: stock report)
 dotnet build && dotnet test                      # .NET 10 SDK, any OS (Linux/macOS/Windows)
 dotnet run --project src/MetroDom.Conductor -- inspect song.mid
 make -C Instruments/metrodom_brain/test          # brain firmware host tests (any C++17 compiler)

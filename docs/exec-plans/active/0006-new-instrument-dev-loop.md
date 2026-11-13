@@ -76,10 +76,13 @@ Measured by:
       velocities) through the governor never reach a refusal in the model
 
 ### Phase N4: Records that check each other
-- [ ] `check_hardware.py` reads `Instruments/<id>/body.json` next to `instrument.toml`: output
-      count fits the driver modules' channels, note count fits the striker/presser quantity, a
-      `pca9685` body has a `body-backplane`, an `accent` block has `led-accent`
-- [ ] Clear messages that say which file and field to change
+- [x] `check_hardware.py` reads `Instruments/<id>/body.json` next to `instrument.toml`: same id,
+      notes fit the drive modules' `outputs` (new field, required on drive modules) and PCA9685
+      outputs sit within them, an actuator module (strike, press, pluck, damp) per note, a
+      `body-backplane` for every body, `led-accent` for an `accent` block, and a `body.json` for
+      every instrument with `brain-pico`
+- [x] Clear messages that say which file and field to change; `scripts/test_check_hardware.py`
+      (stdlib unittest, in the docs workflow) covers each rule, the template and the repo
 
 ### Phase N5: One-command firmware build and flash
 - [ ] `make -C Instruments/metrodom_brain build|flash` on `arduino-cli`, with the arduino-pico
@@ -133,6 +136,13 @@ Measured by:
   velocity found none, and USB jitter on real hardware is larger, so the governor wasn't changed.
   Not modeled: USB loss, output faults and Body Write (hardware-only); a body written to a
   `--body` port changes its description, not its behavior; `--drift` is for `-i` instruments only.
+
+- 2026-11-12: N4 built. The lint checks the body against the hardware, not the body's own rules
+  (`metrodom body check` has those, from the firmware), so Python never re-implements them.
+  Every body needs a `body-backplane`, GPIO ones too: the body lives in its EEPROM. Actuators
+  are counted at least one per note, not exactly, so a frame built for an octave can play three
+  notes while the rest are printed. The M1 body's id became `xylophone-solenoid` to match its
+  instrument; the `xylophone-m1` fixtures stay as they are.
 
 ## Open questions
 (none)

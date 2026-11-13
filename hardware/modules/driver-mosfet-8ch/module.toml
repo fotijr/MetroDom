@@ -3,5 +3,6 @@ name = "8-channel MOSFET driver"
 revision = "A"
 status = "planned"   # planned | prototype | proven | deprecated
 job = "drive"
+outputs = 8          # actuator channels; check_hardware.py checks bodies fit
 interfaces = ["rail-12v", "act-2p"]
 fabrication = ["solder"]

@@ -15,3 +15,4 @@ jobs:
           python-version: "3.12"
       - run: python3 scripts/check_docs.py
       - run: python3 scripts/check_hardware.py
+      - run: python3 -m unittest discover -s scripts

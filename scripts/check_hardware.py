@@ -14,6 +14,10 @@ Checks the records under hardware/ and Instruments/*/instrument.toml:
   7. Module `fabrication` processes and fabrication/queue.csv rows use processes from
      fabrication/capabilities.csv. Queue rows reference existing modules and a known status.
   8. inventory/musical-instruments.csv ids are unique slugs; instruments' `plays` references one.
+  9. Drive modules say how many `outputs` they switch. An instrument with a brain has a
+     body.json, and the body fits its modules (check_body): same id, a body-backplane to hold
+     it, a driver channel and an actuator module per note, led-accent for accent LEDs.
+     `metrodom body check` checks the body's own rules; this checks it against the hardware.
 
   --buildable   also print how many of each module current stock can build.
   --fab-queue   also print open fabrication jobs grouped by process, with providers.
@@ -23,6 +27,7 @@ Stdlib only. Exit code 1 on any failure.
 from __future__ import annotations
 
 import csv
+import json
 import re
 import sys
 import tomllib
@@ -35,6 +40,41 @@ STATUSES = {"planned", "prototype", "proven", "deprecated"}
 EQUIPMENT_ROLES = {"shop", "show", "both"}
 QUEUE_STATUSES = {"queued", "batched", "done", "canceled"}
 MODULE_KEYS = ("id", "name", "revision", "status", "job", "interfaces")
+ACTUATOR_JOBS = {"strike", "press", "pluck", "damp"}
+
+
+def check_body(where: str, inst: dict, body: dict, modules: dict[str, dict]) -> list[str]:
+    """What's wrong between an instrument's body.json and the modules its instrument.toml lists."""
+    errors: list[str] = []
+    qty: dict[str, int] = {}
+    for entry in inst.get("modules", []):
+        mid = entry.get("id")
+        if mid in modules:
+            qty[mid] = qty.get(mid, 0) + int(entry.get("qty", 1))
+
+    def total(pred) -> int:
+        return sum(n for mid, n in qty.items() if pred(modules[mid]))
+
+    notes = body.get("notes", [])
+    if body.get("id") != inst.get("id"):
+        errors.append(f"{where}: body id '{body.get('id')}' must equal the instrument id '{inst.get('id')}'")
+    if "body-backplane" not in qty:
+        errors.append(f"{where}: a body is stored in a body-backplane's ID EEPROM; add the body-backplane module")
+    outputs = sum(int(modules[mid].get("outputs", 0)) * n for mid, n in qty.items() if modules[mid].get("job") == "drive")
+    if len(notes) > outputs:
+        errors.append(f"{where}: {len(notes)} note(s) but the drive modules switch {outputs} output(s); "
+                      f"add a driver (e.g. driver-mosfet-8ch)")
+    if body.get("driver", {}).get("type") == "pca9685":
+        high = max((n.get("output", 0) for n in notes), default=-1)
+        if high >= outputs > 0:
+            errors.append(f"{where}: output {high} has no driver channel (the drive modules switch 0-{outputs - 1})")
+    actuators = total(lambda m: m.get("job") in ACTUATOR_JOBS)
+    if len(notes) > actuators:
+        errors.append(f"{where}: {len(notes)} note(s) but only {actuators} actuator module(s) "
+                      f"({', '.join(sorted(ACTUATOR_JOBS))}); one per note")
+    if body.get("accent") and "led-accent" not in qty:
+        errors.append(f"{where}: the body has accent LEDs; add the led-accent module")
+    return errors
 
 
 def read_csv(path: Path, required: tuple[str, ...], errors: list[str]) -> list[dict[str, str]]:
@@ -135,6 +175,8 @@ def main() -> int:
         for proc in m.get("fabrication", []):
             if proc not in providers:
                 errors.append(f"{rel(manifest)}: fabrication process '{proc}' not in capabilities.csv")
+        if m.get("job") == "drive" and not (isinstance(m.get("outputs"), int) and m["outputs"] > 0):
+            errors.append(f"{rel(manifest)}: a drive module needs 'outputs' (how many actuators it switches)")
         modules[mdir.name] = m
 
         bom_path = mdir / "bom.csv"
@@ -168,6 +210,18 @@ def main() -> int:
         for eq in inst.get("requires_equipment", []):
             if eq not in equipment:
                 errors.append(f"{rel(manifest)}: unknown equipment '{eq}'")
+        body_path = manifest.parent / "body.json"
+        has_brain = any(e.get("id") == "brain-pico" for e in inst.get("modules", []))
+        if body_path.exists():
+            try:
+                body = json.loads(body_path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError as e:
+                errors.append(f"{rel(body_path)}: invalid JSON ({e})")
+            else:
+                errors.extend(check_body(rel(body_path), inst, body, modules))
+        elif has_brain:
+            errors.append(f"{rel(manifest)}: lists brain-pico but has no body.json "
+                          f"(metrodom instrument new writes one; or copy Instruments/_template/body.json)")
 
     queue_path = fab_dir / "queue.csv"
     queue = read_csv(queue_path, ("id", "item", "module", "process", "qty", "status"), errors)
