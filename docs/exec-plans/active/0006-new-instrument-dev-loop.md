@@ -86,9 +86,10 @@ Measured by:
 - [ ] On hardware (needs plan 0002 H1): the M0 bench body flashes and plays from the make target
 
 ### Phase N6: Guided bench
-- [ ] `metrodom bench <PORT>`: identify and show the body; fire each note slowly at low, then
+- [ ] `metrodom bench <PORT> [--onsets PORT]`: identify and show the body; fire each note slowly at low, then
       full velocity, asking "heard it?"; a short soak at the duty limit with a reminder to feel
-      the coil; then offers `calibrate` and `body write --calibrated`
+      the coil; then offers `calibrate` and `body write --calibrated`. With `--onsets` each note's
+      latency is measured; without it latency is marked not measured
 - [ ] Writes a bench summary (per note: heard, latency, soak result) the developer pastes into
       the build record (`hardware/builds/MD-…-NNN.md`)
 - [ ] Runs end to end against `virtual --body` in a test; on hardware with M2's snare
@@ -99,10 +100,13 @@ Measured by:
   hardware. N3 is the core of the loop and gets the parity vectors so a software brain can be
   trusted as a stand-in.
 
+- 2026-11-12: Owner decisions. (1) The scaffold is `metrodom instrument new <id>`: it makes the
+  whole folder, and `body` stays for the EEPROM record (check, read, write). (2) One body per
+  instrument at `Instruments/<id>/body.json`; accent LEDs stay an optional block in it, and
+  variants wait until one is needed. (3) Firmware builds and flashes with `arduino-cli`, on the
+  same core and libraries as the IDE steps, versions pinned in the repo. (4) `bench` uses an
+  onset input when given one; without it, it asks "heard it?" and records latency as not
+  measured (the M1 phone-recording fallback still applies).
+
 ## Open questions
-- Command name: `metrodom instrument new` (an instrument is more than its body) or `metrodom body new`?
-- Bodies at `Instruments/<id>/body.json`: one body per instrument, or a folder for variants
-  (with and without accent LEDs)?
-- Firmware build: `arduino-cli` (closest to today's IDE steps) or PlatformIO (better pinning,
-  heavier)? The plan assumes `arduino-cli`.
-- Should `bench` require an onset input for latency, or keep the phone-recording fallback M1 allows?
+(none)
