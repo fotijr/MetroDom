@@ -30,6 +30,23 @@ public class SafetyCliTests
         Assert.False(QuietHoursSpec.TryParse(raw, out _, out _));
 
     [Theory]
+    [InlineData("23-07")]
+    [InlineData("23:00-07:00@40")]
+    public void BadCurfew_ExitsWith2BeforeOpeningAnyDevice(string value)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"metrodom-curfew-{Guid.NewGuid():N}.mid");
+        Core.Simulation.DemoSong.Create().Write(path);
+        try
+        {
+            Assert.Equal(MetroDomApp.UsageError, MetroDomApp.Create().Run(["play", path, "-o", "0", "--curfew", value], TestContext.Current.CancellationToken));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Theory]
     [InlineData("--max-velocity", "0")]
     [InlineData("--max-velocity", "128")]
     [InlineData("--max-rate", "0")]

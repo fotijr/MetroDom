@@ -44,6 +44,7 @@ internal sealed record ActiveSong(LatencyScheduler Scheduler, SectionNavigator S
 /// <param name="TempoSource">What last set the tempo.</param>
 /// <param name="Section">"Chorus (2/3) · vamping", or null.</param>
 /// <param name="Following">The beat tracker, when following a player.</param>
+/// <param name="Curfew">"Curfew until 10:00", "Set ends 23:00", or null when no stop is set or coming.</param>
 internal sealed record LiveState(
     bool Playing,
     int Index,
@@ -55,7 +56,8 @@ internal sealed record LiveState(
     double? PendingBpm,
     string? TempoSource,
     string? Section,
-    (BeatState State, double? Bpm)? Following);
+    (BeatState State, double? Bpm)? Following,
+    string? Curfew = null);
 
 /// <summary>
 /// One place every control lands, whatever sent it: terminal keys, a foot controller
@@ -98,6 +100,26 @@ internal sealed class LiveControl(Session session, IClock clock, SetQueue? queue
     /// <summary>"tapped", "pedal", "MIDI Clock", "nudged": what last set the tempo, for the status line.</summary>
     public string? TempoSource { get; set; }
 
+    /// <summary>When songs must stop (policy limits, <c>--curfew</c>).</summary>
+    public Curfew Curfew { get; init; } = Curfew.None;
+
+    /// <summary>Local wall-clock time, for the curfew. Tests replace it.</summary>
+    public Func<DateTimeOffset> WallClock { get; init; } = () => DateTimeOffset.Now;
+
+    /// <summary>What the curfew means right now, for the status line and the API, or null.</summary>
+    public string? CurfewNote()
+    {
+        if (!Curfew.IsSet)
+        {
+            return null;
+        }
+
+        var now = WallClock();
+        return Curfew.Reason(now) ?? (Curfew.NextStop(now) is { } stop && stop - now < TimeSpan.FromHours(12)
+            ? string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Set ends {stop:HH\\:mm}")
+            : null);
+    }
+
     /// <summary>Starts waiting (or playing <paramref name="song"/>): clears the last signal.</summary>
     public void Begin(ActiveSong? song)
     {
@@ -125,13 +147,14 @@ internal sealed class LiveControl(Session session, IClock clock, SetQueue? queue
     {
         var set = Queue.Snapshot();
         var titles = set.Songs.Select(s => s.Title).ToArray();
+        var curfew = CurfewNote();
         lock (_gate)
         {
             var active = _active;
             var following = _tracker is null ? ((BeatState, double?)?)null : (_tracker.State, _tracker.Bpm);
             if (active is null)
             {
-                return new LiveState(false, set.Current, titles, null, null, null, null, _pendingBpm, TempoSource, null, following);
+                return new LiveState(false, set.Current, titles, null, null, null, null, _pendingBpm, TempoSource, null, following, curfew);
             }
 
             var speed = active.Scheduler.Speed;
@@ -146,7 +169,8 @@ internal sealed class LiveControl(Session session, IClock clock, SetQueue? queue
                 null,
                 TempoSource,
                 active.Sections.Describe(),
-                following);
+                following,
+                curfew);
         }
     }
 

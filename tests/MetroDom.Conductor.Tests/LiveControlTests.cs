@@ -258,4 +258,21 @@ public sealed class LiveControlTests : IDisposable
         {
         }
     }
+
+    [Fact]
+    public void CurfewNote_SaysWhenTheSetEnds_AndWhenItsOver()
+    {
+        var now = new DateTimeOffset(2026, 11, 13, 21, 0, 0, TimeSpan.FromHours(-5));
+        using var live = new LiveControl(_session, _clock)
+        {
+            Curfew = new Curfew(new TimeOnly(23, 0), new TimeOnly(10, 0), null, TimeSpan.FromMinutes(5)),
+            WallClock = () => now,
+        };
+
+        Assert.Equal("Set ends 23:00", live.CurfewNote());
+        Assert.Equal("Set ends 23:00", live.Snapshot().Curfew);
+        now = now.AddHours(3);
+        Assert.Equal("Curfew until 10:00.", live.Snapshot().Curfew);
+        Assert.Null(_live.Snapshot().Curfew);
+    }
 }

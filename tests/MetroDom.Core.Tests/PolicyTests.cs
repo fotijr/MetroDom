@@ -142,6 +142,9 @@ public class PolicyTests
     [InlineData(Head + """ "limits":{"maxVelocity":0}}""", "maxVelocity\" must be 1-127")]
     [InlineData(Head + """ "limits":{"maxNotesPerSecond":0}}""", "at least 1")]
     [InlineData(Head + """ "limits":{"quietHours":{"from":"23:00","to":"23:00"}}}""", "different")]
+    [InlineData(Head + """ "limits":{"curfew":{"from":"23:00"}}}""", "limits.curfew")]
+    [InlineData(Head + """ "limits":{"endsAt":"2026-11-14 01:00"}}""", "UTC offset")]
+    [InlineData(Head + """ "limits":{"graceMinutes":90}}""", "0-60")]
     [InlineData(Head + """ "limits":{"quietHours":{"from":"23:00","to":"07:00","maxVelocity":200}}}""", "0-127")]
     [InlineData(Head + """ "queue":{"maxPerGuest":0}}""", "1-20")]
     [InlineData(Head + """ "queue":{"cooldownSeconds":-1}}""", "0-3600")]
@@ -150,6 +153,18 @@ public class PolicyTests
     {
         Assert.False(PolicyProfile.TryParse(json, out _, out var error));
         Assert.Contains(reason, error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Curfew_AndEndTime_ReadAndRoundTrip()
+    {
+        Assert.True(PolicyProfile.TryParse(Head + """ "limits":{"curfew":{"from":"23:00","to":"10:00"},"endsAt":"2026-11-14T01:30-05:00","graceMinutes":2}}""", out var policy, out var error), error);
+
+        Assert.Equal(new Curfew(new TimeOnly(23, 0), new TimeOnly(10, 0), new DateTimeOffset(2026, 11, 14, 1, 30, 0, TimeSpan.FromHours(-5)), TimeSpan.FromMinutes(2)), policy.Curfew);
+        Assert.Equal(SafetyLimits.None, policy.Limits);
+        Assert.True(PolicyProfile.TryParse(policy.ToJson(), out var back, out error), error);
+        Assert.Equal(policy.Curfew, back.Curfew);
+        Assert.False(PolicyProfile.LiveBand.Curfew.IsSet);
     }
 
     [Fact]

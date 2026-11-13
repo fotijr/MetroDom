@@ -4,7 +4,8 @@ Status: Draft, first cut built (plan 0004 S6) · Profile: `crowd-jukebox`
 
 Built: guest join by QR, the library to request from, requests ordered by votes, de-duplication
 (a repeat request is a vote), per-guest and per-song cooldowns, a flood limit, owner pin, remove,
-skip and pause requests, policy velocity cap and quiet hours, and fill when the queue runs dry
+skip and pause requests, policy velocity cap, quiet hours and curfew (from the policy or
+`--curfew`, not yet set live from the remote), and fill when the queue runs dry
 ([requests and votes](../references/control-api.md#requests-and-votes-jukebox)). Not yet: venue
 filters beyond the library folder, the big-screen view, paid priority (TD-27).
 

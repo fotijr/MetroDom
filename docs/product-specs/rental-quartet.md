@@ -2,6 +2,9 @@
 
 Status: Draft · Profile: `rental`
 
+Built so far: hard limits from the policy (velocity, rate, quiet hours) and the rental end time
+(`limits.endsAt`: no song starts that can't finish by then; [policy profile](../references/policy-profile.md#limits)).
+
 ## Story
 Someone books a four-instrument robotic quartet for a party. It's delivered, plugged into power,
 and they control it all night from their phone. No MIDI knowledge, no laptop, no setup call.

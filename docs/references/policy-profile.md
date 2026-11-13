@@ -90,9 +90,22 @@ profile limits.
 | `maxVelocity` | Louder notes are turned down to this (1-127), never dropped | none |
 | `maxNotesPerSecond` | Most strikes one instrument may play in any second; extra notes are held back | none |
 | `quietHours` | Local `HH:mm` window (may wrap past midnight). `maxVelocity` 0 (the default) means no new notes; 1-127 caps them | none |
+| `curfew` | Local `from`/`to` `HH:mm` window (may wrap past midnight) when no songs play: a venue's closing time | none |
+| `endsAt` | A rental's end, with its UTC offset (`"2026-11-14T01:00-05:00"`). Nothing plays after it | none |
+| `graceMinutes` | How long past the curfew or end a song may run to finish (0-60) | 5 |
+
+**Curfew and end time** stop the *set*, at a song boundary, where quiet hours stop *notes*:
+`play` and `serve` never start a song that can't finish by the next curfew or end time plus the
+grace (its length at the tempo it starts at), and a song still playing at that moment (slowed
+down, vamping) is stopped. `play` then ends the set; `serve` waits ("Curfew until 10:00.") and
+needs Start again when it lifts. Past `endsAt` it never lifts. The remote and `GET /state` show
+`curfew`. Use both for a venue: the curfew ends the set cleanly, quiet hours make sure nothing
+sounds after it, whatever sends notes (`route`, a guest's request). Times are the Conductor's local
+clock; a daylight-saving change on the night isn't handled (TD-25).
 
 **Flags on top:** `--max-velocity` and `--max-rate` can only tighten the policy (the lower
-number wins). `--quiet` replaces the policy's window for that run. `play` and `route` print the
+number wins). `--quiet` replaces the policy's window for that run, and `--curfew HH:MM-HH:MM`
+(`play`, `serve`) the policy's curfew. `play` and `route` print the
 limits in force, e.g. `Limits (policy rental + flags): velocity ≤ 100 · ≤ 8 notes/s per
 instrument · quiet 22:00-08:00 silent.`
 

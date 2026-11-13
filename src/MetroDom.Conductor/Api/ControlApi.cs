@@ -629,6 +629,7 @@ internal sealed class ControlApi : IAsyncDisposable
         tempo = new { bpm = s.Bpm, speed = s.Speed, pendingBpm = s.PendingBpm, source = s.TempoSource },
         section = s.Section,
         following = s.Following is { } f ? new { state = f.State.ToString().ToLowerInvariant(), bpm = f.Bpm } : null,
+        curfew = s.Curfew,
     };
 
     /// <summary>The token from <c>Authorization: Bearer</c>, or (browser WebSockets can't set headers) a <c>token.&lt;token&gt;</c> subprotocol.</summary>

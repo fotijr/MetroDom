@@ -110,6 +110,7 @@ public sealed class ControlApiTests : IAsyncDisposable
     {
         var (_, state) = await Get("state");
         Assert.Equal("waiting", state.GetProperty("state").GetString());
+        Assert.Equal(JsonValueKind.Null, state.GetProperty("curfew").ValueKind); // no curfew set
         Assert.Equal("one.mid", state.GetProperty("song").GetProperty("title").GetString());
         Assert.Equal(JsonValueKind.Null, state.GetProperty("positionSeconds").ValueKind);
 

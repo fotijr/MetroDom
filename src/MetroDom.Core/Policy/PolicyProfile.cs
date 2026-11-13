@@ -47,6 +47,9 @@ public sealed record PolicyProfile(string Mode, IReadOnlyDictionary<ControlActio
     /// <summary>Limits on every instrument's notes (velocity, rate, quiet hours). Default: none.</summary>
     public Safety.SafetyLimits Limits { get; init; } = Safety.SafetyLimits.None;
 
+    /// <summary>When songs must stop: <c>limits.curfew</c>, <c>limits.endsAt</c>, <c>limits.graceMinutes</c>. Default: none.</summary>
+    public Curfew Curfew { get; init; } = Curfew.None;
+
     /// <summary>What operators and guests may do. The owner can do everything.</summary>
     public RolePermissions Roles { get; init; } = RolePermissions.Default;
 
@@ -136,6 +139,7 @@ public sealed record PolicyProfile(string Mode, IReadOnlyDictionary<ControlActio
 
             if (!TryLights(root["lights"], out var lights, out error)
                 || !TryLimits(root["limits"], out var limits, out error)
+                || !TryCurfew(root["limits"], out var curfew, out error)
                 || !TryRoles(root["roles"], out var roles, out error)
                 || !TryQueue(root["queue"], out var queue, out error)
                 || !TrySessions(root["sessions"], out var sessions, out error))
@@ -143,7 +147,7 @@ public sealed record PolicyProfile(string Mode, IReadOnlyDictionary<ControlActio
                 return false;
             }
 
-            profile = new PolicyProfile(mode.Trim(), controls) { Lights = lights, Limits = limits, Roles = roles, Queue = queue, Sessions = sessions };
+            profile = new PolicyProfile(mode.Trim(), controls) { Lights = lights, Limits = limits, Curfew = curfew, Roles = roles, Queue = queue, Sessions = sessions };
             error = null;
             return true;
         }
@@ -241,6 +245,51 @@ public sealed record PolicyProfile(string Mode, IReadOnlyDictionary<ControlActio
         }
 
         limits = new Safety.SafetyLimits { MaxVelocity = velocity, MaxNotesPerSecond = rate, Quiet = quiet };
+        return true;
+    }
+
+    private static bool TryCurfew(JsonNode? node, out Curfew curfew, out string? error)
+    {
+        curfew = Curfew.None;
+        error = null;
+        if (node is not JsonObject obj)
+        {
+            return true; // TryLimits already said what's wrong with a non-object
+        }
+
+        TimeOnly? from = null, to = null;
+        if (obj["curfew"] is { } window)
+        {
+            if (!TryTime(window["from"], out var start) || !TryTime(window["to"], out var end) || start == end)
+            {
+                error = "\"limits.curfew\" needs different \"from\" and \"to\" as HH:mm (e.g. \"23:00\").";
+                return false;
+            }
+
+            (from, to) = (start, end);
+        }
+
+        DateTimeOffset? endsAt = null;
+        if (obj["endsAt"] is { } endNode)
+        {
+            var text = endNode.GetValue<string>();
+            if (!DateTimeOffset.TryParseExact(text, ["yyyy-MM-dd'T'HH:mmzzz", "yyyy-MM-dd'T'HH:mm:sszzz"], CultureInfo.InvariantCulture, DateTimeStyles.None, out var end))
+            {
+                error = "\"limits.endsAt\" must be a date and time with its UTC offset, like \"2026-11-14T01:00-05:00\".";
+                return false;
+            }
+
+            endsAt = end;
+        }
+
+        var grace = obj["graceMinutes"]?.GetValue<double>() ?? Curfew.DefaultGrace.TotalMinutes;
+        if (grace is < 0 or > 60)
+        {
+            error = "\"limits.graceMinutes\" must be 0-60.";
+            return false;
+        }
+
+        curfew = new Curfew(from, to, endsAt, TimeSpan.FromMinutes(grace));
         return true;
     }
 
@@ -426,9 +475,28 @@ public sealed record PolicyProfile(string Mode, IReadOnlyDictionary<ControlActio
             root["lights"] = lights;
         }
 
-        if (Limits != Safety.SafetyLimits.None)
+        if (Limits != Safety.SafetyLimits.None || Curfew.IsSet)
         {
             var limits = new JsonObject();
+            if (Curfew.From is { } curfewFrom && Curfew.To is { } curfewTo)
+            {
+                limits["curfew"] = new JsonObject
+                {
+                    ["from"] = curfewFrom.ToString("HH:mm", CultureInfo.InvariantCulture),
+                    ["to"] = curfewTo.ToString("HH:mm", CultureInfo.InvariantCulture),
+                };
+            }
+
+            if (Curfew.EndsAt is { } endsAt)
+            {
+                limits["endsAt"] = endsAt.ToString("yyyy-MM-dd'T'HH:mmzzz", CultureInfo.InvariantCulture);
+            }
+
+            if (Curfew.IsSet && Curfew.Grace != Curfew.DefaultGrace)
+            {
+                limits["graceMinutes"] = Curfew.Grace.TotalMinutes;
+            }
+
             if (Limits.MaxVelocity is { } velocity)
             {
                 limits["maxVelocity"] = velocity;

@@ -216,6 +216,7 @@
     $("following").textContent = s.following
       ? `Following the player: ${s.following.state}${s.following.bpm ? ` at ${s.following.bpm.toFixed(1)} BPM` : ""}`
       : "";
+    $("curfew").textContent = s.curfew || "";
     if (!playing) renderPosition(0, s.durationSeconds || 0);
     if (s.durationSeconds) duration = s.durationSeconds;
   }

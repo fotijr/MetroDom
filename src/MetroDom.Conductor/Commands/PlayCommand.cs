@@ -100,7 +100,8 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
                 LatencyBootCheck.Run(session, onsets);
             }
 
-            using var live = new LiveControl(session, new SystemClock(), queue);
+            var curfew = settings.Curfew;
+            using var live = new LiveControl(session, new SystemClock(), queue) { Curfew = curfew };
             using var tapInput = settings.Tap is null ? null : TapInput(settings, live.Tap);
             using var clockInput = settings.ClockIn is null ? null : ClockInput(settings, live.Clock, live.FollowClock);
             using var followInput = settings.Follow is null ? null : FollowInput(settings, live.Beat);
@@ -125,6 +126,11 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
             if (api is ApiHandle handle)
             {
                 inputs += $" · API {handle.Address}";
+            }
+
+            if (curfew.Describe() is { } stopping)
+            {
+                inputs += $" · {stopping}";
             }
 
             live.Cue(0);
@@ -176,6 +182,21 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
                     }
                 }
 
+                // Curfew or the booking's end: never start a song that can't finish in time.
+                if (curfew.IsSet && !curfew.Fits(live.WallClock(), SongLength(path, settings.Tempo)))
+                {
+                    var now = live.WallClock();
+                    session.Messages.Add(curfew.Reason(now)
+                        ?? string.Create(CultureInfo.InvariantCulture, $"{entry.Title} wouldn't finish before {curfew.NextStop(now):HH\\:mm}."));
+                    if (!options.KeepRunning || !WaitForCurfew(session, live))
+                    {
+                        break; // play: the set is over. serve: Ctrl+C while waiting.
+                    }
+
+                    wait = true; // after a curfew, someone starts the band again
+                    continue;
+                }
+
                 // Hot-plugged devices join here, between songs, so the scheduler plans for their latency.
                 session.AdmitPending();
                 started = true;
@@ -219,6 +240,46 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
 
         Ui.Success($"Stopped. Panic sent to {output}.");
         return 0;
+    }
+
+    /// <summary>A song's length at the tempo it will start at, for the curfew (count-in and tempo changes are what the grace is for).</summary>
+    private static TimeSpan SongLength(string path, double? tempo)
+    {
+        var file = MidiFile.Read(path);
+        var tempoMap = file.GetTempoMap();
+        TimeSpan length = file.GetDuration<MetricTimeSpan>();
+        return tempo is { } bpm ? length / Clamp(bpm / FileBpm(tempoMap, TimeSpan.Zero)) : length;
+    }
+
+    /// <summary>
+    /// Holds while the curfew is in force or about to be (serve): until songs may start again (true)
+    /// or Ctrl+C (false). Past a booking's end that's never: the service stays up, saying so.
+    /// </summary>
+    private static bool WaitForCurfew(Session session, LiveControl live)
+    {
+        var curfew = live.Curfew;
+        var from = live.WallClock();
+        var until = curfew.InForce(from) ? from : curfew.NextStop(from) ?? from;
+        using var lifted = new ManualResetEventSlim();
+        using var check = new Timer(_ =>
+        {
+            var now = live.WallClock();
+            if (now >= until && !curfew.InForce(now))
+            {
+                lifted.Set();
+            }
+        }, null, TimeSpan.Zero, TimeSpan.FromSeconds(1));
+        live.Begin(null);
+        if (!Ui.IsInteractive)
+        {
+            Console.WriteLine($"{live.CurfewNote() ?? "Curfew."} Waiting.");
+        }
+
+        LiveStatus.Run(
+            session,
+            () => LiveStatus.Panel($"⏹ {Markup.Escape(live.CurfewNote() ?? "Curfew")}", session, progress: null, new Markup("[grey]No songs until the curfew lifts.[/]")),
+            until: lifted);
+        return !session.IsStopping;
     }
 
     /// <summary>Holds while the queue is empty (serve): until a song is queued (true) or Ctrl+C (false).</summary>
@@ -397,6 +458,17 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
 
         using var loop = new SchedulerLoop(scheduler, clock);
         loop.Finished += () => live.End(LiveSignal.Finished);
+
+        // Curfew: a song that runs past the stop time plus grace (slowed down, vamping) is stopped.
+        var deadline = live.Curfew.Deadline(live.WallClock());
+        using var curfewCheck = deadline is null ? null : new Timer(_ =>
+        {
+            if (live.WallClock() >= deadline)
+            {
+                session.Messages.Add($"Curfew: stopping {song}.");
+                live.End(LiveSignal.Stopped);
+            }
+        }, null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
         loop.Failed += ex =>
         {
             session.Messages.Add($"Scheduler stopped: {ex.Message}");
@@ -762,8 +834,22 @@ internal class SetSettings : OutputSettings
     [Description("Start at this tempo instead of the file's. Tempo changes in the file scale with it.")]
     public double? Tempo { get; init; }
 
+    [CommandOption("--curfew <HH:MM-HH:MM>")]
+    [Description("No song starts that can't finish before HH:MM (local time), and none until the second time; a song still playing then gets the policy's grace (5 min) and is stopped. Replaces the policy's curfew for this run.")]
+    public string? CurfewFlag { get; init; }
+
+    /// <summary>The policy's curfew and end time, with <c>--curfew</c> replacing the nightly window. Valid after <see cref="Validate"/>.</summary>
+    public Curfew Curfew => QuietHoursSpec.TryParse(CurfewFlag, out var window, out _) && window is not null
+        ? PolicyProfile.Curfew with { From = window.Start, To = window.End }
+        : PolicyProfile.Curfew;
+
     public override ValidationResult Validate()
     {
+        if (!QuietHoursSpec.TryParse(CurfewFlag, out var curfewWindow, out var curfewError) || curfewWindow is { MaxVelocity: not 0 })
+        {
+            return ValidationResult.Error($"--curfew: {curfewError ?? "a curfew has no @VELOCITY (that's --quiet)."}");
+        }
+
         if (Api is not null && !MetroDom.Conductor.Api.ApiEndpoint.TryParse(Api, out _, out var apiError))
         {
             return ValidationResult.Error($"--api: {apiError}");

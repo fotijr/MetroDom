@@ -160,7 +160,7 @@ next, tempo ±2%, tap, vamp, outro and a big **PANIC** button.
 | --- | --- | --- | --- |
 | GET | `/` (outside `/api/v0`) | The web remote (no token), plus `/app.js`, `/app.css`, `/sw.js`, `/manifest.webmanifest`, icons | |
 | GET | `/openapi.json` | The spec (no token) | |
-| GET | `/state` | `waiting`/`playing`, song, position, duration, tempo (bpm, speed, pending, source), section, following | |
+| GET | `/state` | `waiting`/`playing`, song, position, duration, tempo (bpm, speed, pending, source), section, following, curfew (`"Set ends 23:00"`, `"Curfew until 10:00."`, or null) | |
 | GET | `/queue` | History, current, coming: ids, titles, who added them, what's editable | |
 | POST | `/queue` `{"song":"covers/Late Night.mid","at":3}` | Queue a library song (`queue.edit`) | `400`, `404` unknown song, `409` no library, full or not editable |
 | POST | `/queue/{id}/move` `{"to":2}` | Move a coming song (`queue.edit`) | `400`, `404`, `409` |
