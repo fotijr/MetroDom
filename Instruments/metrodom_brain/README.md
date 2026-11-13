@@ -7,9 +7,9 @@ profile.
 
 Status: **version 0.1, host-tested, not yet flashed.** It stays 0.1 until a brain runs on real
 hardware. The logic runs in `make -C test` on a
-laptop. The sketch has only been compiled against stub headers, because this machine has no
-Pico toolchain yet; the first real build is plan 0002 H1 ("Pico blinks an LED"). Limits: TD-29
-in the [tech-debt tracker](../../docs/exec-plans/tech-debt-tracker.md).
+laptop. `make build` and a CI job compile it against the pinned arduino-pico core
+(`sketch.yaml`), but neither has run yet; the first flash is plan 0002 H1 ("Pico blinks an
+LED"). Limits: TD-29 in the [tech-debt tracker](../../docs/exec-plans/tech-debt-tracker.md).
 
 At boot the brain reads the body's ID EEPROM and becomes that instrument
 ([body record](../../docs/references/body-record.md)). No EEPROM: the bench body in `config.h`.
@@ -64,6 +64,7 @@ Conductor's reader.
 | `src/brain/Brain.{h,cpp}` | Every decision, platform-free |
 | `src/brain/Body.{h,cpp}` | The body record (versions 1 and 2): parse, check, encode, CRC |
 | `src/brain/Devices.{h,cpp}` | PCA9685 and 24LC32 over an I²C interface (Wire on the Pico, a fake in tests) |
+| `Makefile`, `sketch.yaml`, `flash.sh` | `make build` / `flash` / `test`: the pinned toolchain, and copying the UF2 to a Pico in BOOTSEL |
 | `test/` | Host tests (`make -C test`, any C++17 compiler; runs in CI) |
 | `test/vectors/` | [Parity vectors](test/vectors/README.md): timed MIDI in, expected strikes out. The host test and the Conductor's `BrainModel` (behind `virtual --body`, `simulate --body`) both run them. Add one when you change what the brain decides |
 
@@ -83,13 +84,28 @@ Current-limit the bench supply. Never power the coil from the Pico.
 
 ## Build and flash
 
-1. Arduino IDE: add the board URL
+```bash
+make -C Instruments/metrodom_brain flash               # Pico; BOARD=pico2 for a Pico 2
+```
+
+`make build` compiles with the versions pinned in [sketch.yaml](sketch.yaml) (arduino-pico core
+6.3.1 with its Adafruit TinyUSB stack, MIDI Library 5.0.2, Adafruit NeoPixel 1.15.5). The first
+run downloads them, a few hundred MB. It uses `arduino-cli` from your PATH, or the one inside the
+Arduino IDE. `make flash` builds, then waits for a Pico held in BOOTSEL (plug it in with the
+button down: it shows up as an `RPI-RP2` or `RP2350` drive) and copies the UF2 to it
+(`flash.sh`). Every CI run compiles both boards and keeps the UF2s as build artifacts.
+
+Check: `metrodom devices --identify` lists "Bench solenoid" as a MetroDom brain with its
+profile; a DAW on any channel plays note 60.
+
+Or in the Arduino IDE, with the same versions:
+
+1. Add the board URL
    `https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json`,
-   install **Raspberry Pi Pico/RP2040/RP2350**, the **MIDI Library** (FortySevenEffects) and **Adafruit NeoPixel** (accent LEDs).
+   install **Raspberry Pi Pico/RP2040/RP2350** 6.3.1, the **MIDI Library** (FortySevenEffects) 5.0.2
+   and **Adafruit NeoPixel** 1.15.5 (accent LEDs).
 2. Tools > Board: your Pico. Tools > USB Stack: **Adafruit TinyUSB**.
 3. Open `metrodom_brain.ino`, Upload (hold BOOTSEL while plugging in the first time).
-4. Check: `metrodom devices --identify` lists "Bench solenoid" as a MetroDom brain with its
-   profile; a DAW on any channel plays note 60.
 
 ## A real body (M1)
 

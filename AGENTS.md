@@ -63,7 +63,7 @@ python3 scripts/check_docs.py          # knowledge-base lint (links, orphans, AG
 python3 scripts/check_hardware.py      # parts/BOM/module/build/body consistency (--buildable: stock report)
 dotnet build && dotnet test                      # .NET 10 SDK, any OS (Linux/macOS/Windows)
 dotnet run --project src/MetroDom.Conductor -- inspect song.mid
-make -C Instruments/metrodom_brain/test          # brain firmware host tests (any C++17 compiler)
+make -C Instruments/metrodom_brain test           # brain host tests (any C++17); build / flash need arduino-cli
 ```
 
 CI: GitHub Actions (`.github/workflows/`): `docs` (lint) and `build` (Linux, macOS, Windows).

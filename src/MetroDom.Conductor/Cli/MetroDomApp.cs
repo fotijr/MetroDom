@@ -73,6 +73,10 @@ internal static class MetroDomApp
                 .WithDescription("Check a light profile and show its patch, or hold a scene on the rig over sACN (DMX over the network).")
                 .WithExample("lights", "rig.json")
                 .WithExample("lights", "rig.json", "--scene", "36");
+            config.AddCommand<BenchCommand>("bench")
+                .WithDescription("Walk through an instrument's first power-on: every note soft and hard, a soak at the duty limit, latency from an onset input. Writes up the results.")
+                .WithExample("bench", "\"MetroDom snare\"")
+                .WithExample("bench", "\"MetroDom snare\"", "--onsets", "trigger", "--out", "bench.md");
             config.AddBranch("instrument", instrument =>
             {
                 instrument.SetDescription("Start a new MetroDom instrument: its folder, module list, body file and README.");

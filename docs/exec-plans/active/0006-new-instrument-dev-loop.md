@@ -85,20 +85,24 @@ Measured by:
       (stdlib unittest, in the docs workflow) covers each rule, the template and the repo
 
 ### Phase N5: One-command firmware build and flash
-- [ ] `make -C Instruments/metrodom_brain build|flash` on `arduino-cli`, with the arduino-pico
-      core, Adafruit TinyUSB, MIDI Library and NeoPixel versions pinned in the repo
-- [ ] CI job compiles the sketch against the real core on Linux (closes part of TD-29)
-- [ ] `flash` finds a Pico in BOOTSEL mode and copies the UF2, so no IDE is needed
+- [x] `make -C Instruments/metrodom_brain build|flash|test` on `arduino-cli` (PATH, or the one
+      inside the Arduino IDE), with the arduino-pico core 6.3.1 (its own Adafruit TinyUSB), MIDI
+      Library 5.0.2 and Adafruit NeoPixel 1.15.5 pinned as `sketch.yaml` build profiles (`pico`, `pico2`)
+- [x] CI job compiles both boards against the pinned core and keeps the UF2s as artifacts
+      (written, not yet run: CI hasn't run on GitHub, TD-04)
+- [x] `flash` waits for a Pico in BOOTSEL (`RPI-RP2` / `RP2350` drive on macOS and Linux) and
+      copies the UF2 (`flash.sh`; tried against a fake drive), so no IDE is needed
 - [ ] On hardware (needs plan 0002 H1): the M0 bench body flashes and plays from the make target
 
 ### Phase N6: Guided bench
-- [ ] `metrodom bench <PORT> [--onsets PORT]`: identify and show the body; fire each note slowly at low, then
-      full velocity, asking "heard it?"; a short soak at the duty limit with a reminder to feel
-      the coil; then offers `calibrate` and `body write --calibrated`. With `--onsets` each note's
-      latency is measured; without it latency is marked not measured
-- [ ] Writes a bench summary (per note: heard, latency, soak result) the developer pastes into
-      the build record (`hardware/builds/MD-…-NNN.md`)
-- [ ] Runs end to end against `virtual --body` in a test; on hardware with M2's snare
+- [x] `metrodom bench <PORT> [--onsets PORT]`: identify, then every note soft and hard with
+      "heard it?" (both, soft only, hard only, neither, again); a soak at the limit through the
+      governor, then "how warm is the coil?"; with `--onsets`, each note's latency measured and
+      saved for `body write --calibrated`. Panic at the end and on Ctrl+C
+- [x] Prints a Markdown bench table (`--out` saves it) for the README and build record
+- [x] Runs end to end against the virtual brain in tests (scripted answers, virtual clock) and
+      by hand against `virtual --body --onsets` on macOS
+- [ ] On hardware with M2's snare
 
 ## Decisions log
 - 2026-11-12: Plan written at the owner's request after a review of the new-instrument story.
@@ -143,6 +147,15 @@ Measured by:
   are counted at least one per note, not exactly, so a frame built for an octave can play three
   notes while the rest are printed. The M1 body's id became `xylophone-solenoid` to match its
   instrument; the `xylophone-m1` fixtures stay as they are.
+
+- 2026-11-12: N5 and N6 built. Pins live in `sketch.yaml` build profiles, which `arduino-cli`
+  installs on its own, rather than in a setup script: one file says what a brain is built from,
+  and bumping it is a reviewed change. 6.3.1, not 6.3.2: a core release under two weeks old
+  isn't pinned. TinyUSB isn't pinned separately; it ships inside the core, and a second copy would
+  clash. `flash` copies to the BOOTSEL drive instead of `arduino-cli upload`, because the
+  brain's USB is MIDI with no serial port to reset through. `bench` takes a port, not `-o`, like
+  `body write`, and builds its own governor: it drives one MetroDom brain, never a band. It can't
+  test unplugging USB (the port goes with it), so the guide keeps that as a manual check.
 
 ## Open questions
 (none)

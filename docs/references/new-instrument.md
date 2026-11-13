@@ -1,8 +1,9 @@
 # Building a new instrument
 
-Status: **Partly built** ([plan 0006](../exec-plans/active/0006-new-instrument-dev-loop.md)).
-Steps 1–4 work today. Step 5's one-command flash and step 6's `metrodom bench` are still
-planned; until they're built, those steps say what to do instead.
+Status: **Built, not yet proven on hardware** ([plan 0006](../exec-plans/active/0006-new-instrument-dev-loop.md)).
+Every step has its command. Steps 1–4 and 7 run without hardware. `make flash` (step 5) and
+`metrodom bench` (step 6) have been tried only against a fake drive and the virtual brain:
+the first real run is the first brain flashed (plan 0002 H1), then M2's snare.
 
 A MetroDom instrument is a **body**: actuators on a real instrument, a driver board, and an ID
 EEPROM that says what it is. Every instrument runs the same **brain** firmware, and the brain
@@ -103,8 +104,14 @@ Each strike prints its pulse length and LED color, and each refusal prints why
 
 ## 5. Flash the brain and write the body
 
-Flash the one brain firmware ([build and flash](../../Instruments/metrodom_brain/README.md#build-and-flash),
-Arduino IDE for now; plan 0006 N5 makes it one command). Wire the brain to the body, then:
+Flash the one brain firmware. Hold BOOTSEL on the Pico while you plug it in:
+
+```bash
+make -C Instruments/metrodom_brain flash       # BOARD=pico2 for a Pico 2
+```
+
+The first build downloads the pinned core and libraries ([build and flash](../../Instruments/metrodom_brain/README.md#build-and-flash)).
+Wire the brain to the body, then:
 
 ```bash
 metrodom devices --identify                    # a "MetroDom brain" (no body yet)
@@ -116,22 +123,28 @@ and restarts as "MetroDom snare". From then on, any brain plugged into this body
 
 ## 6. Bench and calibrate
 
-Until `metrodom bench` exists (plan 0006 N6), do it by hand:
-
-1. Play each note slowly from a DAW or `metrodom route`, soft and then hard. Every note sounds,
-   and nothing stays on.
-2. Unplug USB mid-note. Everything goes off.
-3. Play one note at its fastest repeat for a minute, then feel the coil. Write down how warm it is.
-4. Measure latency with an onset input (a [trigger-piezo](../../hardware/modules/trigger-piezo/module.toml)
-   or a mic-to-MIDI box), then store it in the body so every Conductor schedules it right:
-
 ```bash
-metrodom calibrate -o "MetroDom snare" --onsets "trigger" --onset-latency 2
+metrodom bench "MetroDom snare" --onsets "trigger" --out bench.md
 metrodom body write "MetroDom snare" --calibrated
 ```
 
-No onset input yet? Skip step 4. The latency stays "not measured", and a phone recording of
-the strikes is enough for a first number ([calibration](calibration.md)).
+`bench` walks you through it in the terminal, and every strike goes through the safety governor,
+as in `play`:
+
+1. **Every note, soft then hard** (velocity 30, then 127). After each pair you answer: both,
+   soft only, hard only, neither, or again.
+2. **Soak:** the lowest note (`--soak-note`) as fast as the brain allows for 60 s (`--soak`,
+   0 skips it). It counts strikes and how many the duty cycle held back, then asks how warm the coil is.
+3. **Latency**, with `--onsets` (a [trigger-piezo](../../hardware/modules/trigger-piezo/module.toml)
+   or a mic-to-MIDI box; `--onset-latency` takes off its own delay): each note measured as
+   `calibrate` does, and saved, so `body write --calibrated` stores it in the body. Without an
+   onset input, latency stays "not measured"; a phone recording of the strikes is enough for a
+   first number ([calibration](calibration.md)).
+
+It prints a Markdown table (`--out` saves it) for the instrument's README and the build record.
+Piped, with no one to answer, the answers read "not asked". Ctrl+C stops it and sends panic.
+
+One check `bench` can't do for you: unplug USB mid-note. Everything must go off.
 
 ## 7. Records
 

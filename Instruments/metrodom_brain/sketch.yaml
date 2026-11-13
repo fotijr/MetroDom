@@ -1,0 +1,24 @@
+# Pinned build for the brain firmware (plan 0006 N5). `make build` and CI compile with these
+# profiles, so every brain is built from the same core and libraries. The Arduino IDE ignores
+# profiles; the IDE steps in README.md install the same versions by hand.
+# Bump a version on purpose: change it here, `make build`, flash a bench brain, then commit.
+profiles:
+  pico:
+    notes: Raspberry Pi Pico (RP2040), Adafruit TinyUSB stack
+    fqbn: rp2040:rp2040:rpipico:usbstack=tinyusb
+    platforms:
+      - platform: rp2040:rp2040 (6.3.1)
+        platform_index_url: https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
+    libraries:
+      - MIDI Library (5.0.2)
+      - Adafruit NeoPixel (1.15.5)
+  pico2:
+    notes: Raspberry Pi Pico 2 (RP2350), Adafruit TinyUSB stack
+    fqbn: rp2040:rp2040:rpipico2:usbstack=tinyusb
+    platforms:
+      - platform: rp2040:rp2040 (6.3.1)
+        platform_index_url: https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
+    libraries:
+      - MIDI Library (5.0.2)
+      - Adafruit NeoPixel (1.15.5)
+default_profile: pico
