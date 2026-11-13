@@ -8,6 +8,7 @@ Protocol and format facts agents need while coding. Keep each file factual and t
 | [instrument-profile.md](instrument-profile.md) | Building an instrument or the Conductor registry |
 | [midi-identity.md](midi-identity.md) | Identity Request/Reply bytes, MetroDom's identity, `devices --identify` |
 | [midi-profile-exchange.md](midi-profile-exchange.md) | MetroDom SysEx profile request/reply, discovery step 3, Body Write |
+| [new-instrument.md](new-instrument.md) | Building a new instrument end to end: `metrodom instrument new`, tuning, flashing, bench, records |
 | [body-record.md](body-record.md) | The body's ID EEPROM: `metrodom.body/0` files, the byte layout, `metrodom body check/write`, what a brain boots as |
 | [auto-band.md](auto-band.md) | `play` without `-o`, hot-plug, `devices --assign/--forget`, `metrodom.assignments/0` (discovery step 4) |
 | [control-api.md](control-api.md) | Control API v0: tokens and roles, routes, queue and library, the web remote, the `openapi.json` contract |

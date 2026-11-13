@@ -1,0 +1,31 @@
+# Which shared hardware modules this instrument is built from (ADR 0009).
+# `metrodom instrument new <id>` writes this file for you; copy it by hand only if you'd rather.
+id = "my-instrument"       # same as the folder name and the body's "id": a-z, 0-9, '-'
+name = "MetroDom my instrument"
+status = "planned"         # planned | prototype | proven | deprecated (like modules)
+plays = "xylophone"        # id in hardware/inventory/musical-instruments.csv
+requires_equipment = []    # ids from hardware/inventory/equipment.csv it needs to play (e.g. a compressor)
+
+[[modules]]
+id = "brain-pico"
+qty = 1
+
+[[modules]]
+id = "body-backplane"      # the ID EEPROM that holds body.json, and the PCA9685
+qty = 1
+
+[[modules]]
+id = "power-entry"
+qty = 1
+
+[[modules]]
+id = "driver-mosfet-8ch"   # one per 8 actuators
+qty = 1
+
+[[modules]]
+id = "striker-solenoid"    # one per note in body.json
+qty = 3
+
+[[modules]]
+id = "frame-2020"
+qty = 1

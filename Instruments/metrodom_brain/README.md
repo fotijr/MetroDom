@@ -59,7 +59,7 @@ Conductor's reader.
 | File | What |
 | --- | --- |
 | `config.h` | The bench body, used when no EEPROM answers: notes, GPIO pins, pulse, limits |
-| `bodies/` | Body files (`metrodom.body/0`) for real instruments, and the M1 fixtures (with and without accent LEDs) both test suites check |
+| `bodies/` | The M1 test fixtures (with and without accent LEDs) both test suites check. Real instruments keep theirs in `Instruments/<id>/body.json` |
 | `metrodom_brain.ino` | Arduino layer only: TinyUSB MIDI, Wire, GPIO, watchdog, USB mount state, choosing the body |
 | `src/brain/Brain.{h,cpp}` | Every decision, platform-free |
 | `src/brain/Body.{h,cpp}` | The body record (versions 1 and 2): parse, check, encode, CRC |
@@ -97,7 +97,7 @@ PCA9685 at `0x40` with `/OE` on GPIO 6, Qwiic on GPIO 4/5), then run this and ho
 write button when it asks:
 
 ```bash
-metrodom body write "MetroDom brain" Instruments/metrodom_brain/bodies/m1-xylophone.json
+metrodom body write "MetroDom brain" Instruments/xylophone_solenoid/body.json
 ```
 
 The brain restarts as "MetroDom xylophone".

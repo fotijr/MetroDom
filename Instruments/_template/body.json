@@ -1,0 +1,13 @@
+{
+  "schema": "metrodom.body/0",
+  "id": "my-instrument",
+  "name": "MetroDom my instrument",
+  "driver": { "type": "pca9685", "address": "0x40" },
+  "polyphony": 2,
+  "safety": { "maxOnMs": 45, "maxDutyPercent": 30, "dutyWindowMs": 1000, "watchdogMs": 500 },
+  "notes": [
+    { "note": 72, "output": 0, "pulseMs": 30, "minPulseMs": 12, "minIntervalMs": 60 },
+    { "note": 74, "output": 1, "pulseMs": 30, "minPulseMs": 12, "minIntervalMs": 60 },
+    { "note": 76, "output": 2, "pulseMs": 30, "minPulseMs": 12, "minIntervalMs": 60 }
+  ]
+}

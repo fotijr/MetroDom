@@ -156,6 +156,8 @@ def main() -> int:
 
     instruments: set[str] = set()
     for manifest in sorted((ROOT / "Instruments").glob("*/instrument.toml")):
+        if manifest.parent.name.startswith("_"):
+            continue  # _template
         inst = load_toml(manifest, errors)
         instruments.add(inst.get("id", manifest.parent.name))
         for entry in inst.get("modules", []):

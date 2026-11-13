@@ -19,7 +19,7 @@ The USB product name is the body's name, so a DAW lists "MetroDom xylophone", no
 
 ## Body file (`metrodom.body/0`)
 
-What the owner writes and keeps next to the instrument. [bodies/m1-xylophone.json](../../Instruments/metrodom_brain/bodies/m1-xylophone.json):
+What the owner writes and keeps next to the instrument, as `Instruments/<id>/body.json` (`metrodom instrument new` starts one). The M1 xylophone, [xylophone_solenoid/body.json](../../Instruments/xylophone_solenoid/body.json):
 
 ```json
 {
@@ -101,15 +101,16 @@ test builds each body and compares, the .NET test encodes each JSON file and com
 ## Writing a body
 
 ```bash
-metrodom body check Instruments/metrodom_brain/bodies/m1-xylophone.json
+metrodom body check Instruments/xylophone_solenoid/body.json
+metrodom body check                      # every Instruments/*/body.json
 ```
 
 ```bash
-metrodom body write "MetroDom brain" Instruments/metrodom_brain/bodies/m1-xylophone.json
+metrodom body write "MetroDom brain" Instruments/xylophone_solenoid/body.json
 ```
 
 `body check` validates with the firmware's rules and shows the table (`--hex OUT` writes the
-bytes). `body write` checks the file, identifies the port (only MetroDom instruments get it),
+bytes). With no file it checks every instrument's `body.json` in the checkout, one line each. `body write` checks the file, identifies the port (only MetroDom instruments get it),
 asks you to hold the body's write button (in a terminal: hold it, then press Enter), sends the record as Body Write SysEx ([profile exchange](midi-profile-exchange.md)), and waits
 for the reply. The brain turns everything off, writes the EEPROM page by page, reads it back,
 answers, and restarts; the command waits up to 5 s for it to answer as the new body, then reads

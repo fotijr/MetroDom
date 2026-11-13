@@ -140,17 +140,27 @@ internal sealed class BodyCheckCommand : Command<BodyCheckCommand.Settings>
 {
     public sealed class Settings : CommandSettings
     {
-        [CommandArgument(0, "<FILE>")]
-        [Description("A [bold]metrodom.body/0[/] JSON file (see docs/references/body-record.md).")]
-        public string File { get; init; } = "";
+        [CommandArgument(0, "[FILE]")]
+        [Description("A [bold]metrodom.body/0[/] JSON file (see docs/references/body-record.md). Omitted: every Instruments/*/body.json in this checkout.")]
+        public string? File { get; init; }
 
         [CommandOption("--hex <OUT>")]
         [Description("Also write the record as hex, the bytes a brain stores (fixtures, or an EEPROM programmer).")]
         public string? Hex { get; init; }
+
+        public override ValidationResult Validate() =>
+            File is null && Hex is not null
+                ? ValidationResult.Error("--hex needs a body FILE.")
+                : ValidationResult.Success();
     }
 
     public override int Execute(CommandContext context, Settings settings, CancellationToken cancellationToken)
     {
+        if (settings.File is null)
+        {
+            return CheckAll();
+        }
+
         var body = BodyFile.Load(settings.File);
         var record = BodyImage.Encode(body);
         BodyFile.Show(body, record);
@@ -161,6 +171,43 @@ internal sealed class BodyCheckCommand : Command<BodyCheckCommand.Settings>
         }
 
         Ui.Success("A brain will accept this body.");
+        return 0;
+    }
+
+    /// <summary>Every instrument's body file, one line each; a usage error if any would be refused.</summary>
+    private static int CheckAll()
+    {
+        var root = Workspace.FindRoot()
+            ?? throw new UsageException("not inside a MetroDom checkout (no Instruments/ and hardware/ above here). Give a body FILE.");
+        var files = Workspace.InstrumentBodies(root);
+        if (files.Count == 0)
+        {
+            throw new UsageException("no Instruments/*/body.json in this checkout. Start one with metrodom instrument new.");
+        }
+
+        var refused = 0;
+        foreach (var file in files)
+        {
+            var shown = Path.GetRelativePath(root, file);
+            try
+            {
+                var body = BodyFile.Load(file);
+                AnsiConsole.MarkupLine(string.Create(CultureInfo.InvariantCulture,
+                    $"[green]✓[/] {Markup.Escape(shown)} [grey]· {Markup.Escape(body.Name)} · {body.Notes.Count} note(s) · {BodyImage.Encode(body).Length} bytes[/]"));
+            }
+            catch (UsageException ex)
+            {
+                refused++;
+                Ui.Fail(ex.Message);
+            }
+        }
+
+        if (refused > 0)
+        {
+            throw new UsageException($"{refused} of {files.Count} body files would be refused by a brain.");
+        }
+
+        Ui.Success($"A brain will accept all {files.Count} body files.");
         return 0;
     }
 }

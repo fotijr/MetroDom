@@ -73,18 +73,27 @@ internal static class MetroDomApp
                 .WithDescription("Check a light profile and show its patch, or hold a scene on the rig over sACN (DMX over the network).")
                 .WithExample("lights", "rig.json")
                 .WithExample("lights", "rig.json", "--scene", "36");
+            config.AddBranch("instrument", instrument =>
+            {
+                instrument.SetDescription("Start a new MetroDom instrument: its folder, module list, body file and README.");
+                instrument.AddCommand<InstrumentNewCommand>("new")
+                    .WithDescription("Make Instruments/<ID>/ with an instrument.toml, a body.json a brain will accept, and a README to fill in.")
+                    .WithExample("instrument", "new", "snare", "--notes", "38", "--plays", "drum-kit")
+                    .WithExample("instrument", "new", "xylophone-alto", "--notes", "C5-C6");
+            });
             config.AddBranch("body", body =>
             {
-                body.SetDescription("Check a body file, or write it into a brain's body EEPROM so the brain becomes that instrument.");
+                body.SetDescription("Check body files, or write one into a brain's body EEPROM so the brain becomes that instrument.");
                 body.AddCommand<BodyCheckCommand>("check")
                     .WithDescription("Check a body file the way a brain will, and show what the instrument becomes.")
-                    .WithExample("body", "check", "Instruments/metrodom_brain/bodies/m1-xylophone.json");
+                    .WithExample("body", "check", "Instruments/xylophone_solenoid/body.json")
+                    .WithExample("body", "check");
                 body.AddCommand<BodyReadCommand>("read")
                     .WithDescription("Show the body record a brain booted from; --out saves it as a body file.")
                     .WithExample("body", "read", "\"MetroDom xylophone\"", "--out", "xylophone-backup.json");
                 body.AddCommand<BodyWriteCommand>("write")
                     .WithDescription("Write a body file into a MetroDom brain over MIDI. The brain checks it, stores it, reads it back and restarts as that instrument.")
-                    .WithExample("body", "write", "\"MetroDom brain\"", "Instruments/metrodom_brain/bodies/m1-xylophone.json")
+                    .WithExample("body", "write", "\"MetroDom brain\"", "Instruments/xylophone_solenoid/body.json")
                     .WithExample("body", "write", "\"MetroDom xylophone\"", "--calibrated");
             });
             config.AddCommand<PanicCommand>("panic")

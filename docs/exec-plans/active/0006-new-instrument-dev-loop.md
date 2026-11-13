@@ -42,22 +42,25 @@ Measured by:
 
 ## Phases
 
-### Phase N1: Front door
-- [ ] `docs/references/new-instrument.md`: the whole loop, one command per step, linking out
-      for depth rather than restating. Written first against today's commands, then updated as
-      each phase lands
-- [ ] Row in AGENTS.md ("Build a new instrument"); Instruments README leads with the brain and
-      the guide, legacy sketches moved to the bottom
-- [ ] `Instruments/_template/`: `instrument.toml`, `body.json`, `README.md` (wiring, power,
-      measured latency, bench results), each with the fields to fill marked
+### Phase N1: Getting started
+- [x] `docs/references/new-instrument.md`: the whole loop, one command per step, linking out
+      for depth rather than restating. Written against today's commands; each step still
+      planned says what to do instead. Update it as each phase lands
+- [x] Row in AGENTS.md ("Build a new instrument"); Instruments README leads with the guide and
+      the three files, legacy sketches at the bottom
+- [x] `Instruments/_template/`: `instrument.toml`, `body.json` (checked by `body check`),
+      `README.md` (wiring, power, bench results). `check_hardware.py` skips `_template`
 
 ### Phase N2: Scaffold, and bodies live with their instrument
-- [ ] `metrodom instrument new <id>`: creates `Instruments/<id>/` from the template, asks (or
-      takes flags for) name, driver, notes, outputs and striker module, and writes a body that
-      already passes `body check` with safe defaults (30 ms pulse, 60 ms interval, 30% duty)
-- [ ] Real instruments' body files move to `Instruments/<id>/body.json`; test fixtures
-      (`m1-xylophone*.{json,hex}`) stay with the brain's tests. Docs and examples updated
-- [ ] `body check` with no argument checks every `Instruments/*/body.json`, and CI runs it
+- [x] `metrodom instrument new <id>`: creates `Instruments/<id>/` (`--notes`, `--driver`,
+      `--actuator`, `--plays`, `--name`, `--dir`), writes a body that passes `body check` with safe
+      defaults (30 ms pulse, 12 ms soft, 60 ms interval, 30% duty, polyphony ≤ 2), an
+      `instrument.toml` with an actuator per note and a driver per 8, and the README from the
+      template (built into the CLI). Checks `--actuator` and `--plays` against the checkout's records
+- [x] The M1 body lives at `Instruments/xylophone_solenoid/body.json`; test fixtures
+      (`m1-xylophone*.{json,hex}`) stay with the brain's tests. Docs and CLI examples updated
+- [x] `body check` with no argument checks every `Instruments/*/body.json`; a .NET test runs it,
+      so CI does
 
 ### Phase N3: A virtual brain that behaves like the real one
 - [ ] `BrainModel` in Core: the brain's acceptance rules (interval, duty leaky bucket,
@@ -107,6 +110,16 @@ Measured by:
   same core and libraries as the IDE steps, versions pinned in the repo. (4) `bench` uses an
   onset input when given one; without it, it asks "heard it?" and records latency as not
   measured (the M1 phone-recording fallback still applies).
+
+- 2026-11-12: N1 and N2 built. `instrument new` takes flags only, no prompts: every option has a
+  safe default, the result is meant to be edited, and flags keep it scriptable and testable.
+  Prompts can come later if people miss them. The README template is the one in
+  `Instruments/_template/`, embedded in the CLI, so the hand-copy and the command can't drift
+  apart. The template's `instrument.toml` and `body.json` are hand-copy examples; the command
+  writes its own from the request. `body check` with no file includes `_template/body.json`, so
+  the example stays valid. The M1 body is copied to its instrument folder, not moved: the
+  fixture pins the byte layout for both test suites, and the real body will diverge from it
+  (measured latencies).
 
 ## Open questions
 (none)
