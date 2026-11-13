@@ -44,6 +44,9 @@ but is polled (1 ms full-speed frames).
      until policy profiles exist: `--max-rate N` (strikes per second per output, extra notes held
      back), `--max-velocity N` (louder notes turned down, never dropped), `--quiet 23:00-07:00[@VEL]`
      (local time, may cross midnight; no new notes, or capped at VEL).
+   - The band's volume (`POST /volume`, the remote's slider, `[` `]` in `play`) scales each new
+     note's velocity first, then the caps apply, so turning it up can never pass a limit. At 0
+     new notes are held back; what's sounding still ends.
    - Rejects notes outside an instrument's declared range or minimum inter-note interval. Built:
      notes and each note's own min interval from the profile the instrument sends (or
      `-o PORT.../NOTES`), and no repeat while the actuator is still in its pulse.

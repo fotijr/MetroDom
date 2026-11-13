@@ -311,6 +311,23 @@
         }
       }
     },
+    "/volume": {
+      "post": {
+        "operationId": "setVolume",
+        "x-metrodom-grant": "volume",
+        "summary": "Set the band's volume, 0-100%. Each new note's velocity is scaled by it before the policy's caps, so it can only turn the band down from what the limits allow. 0: no new notes.",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/VolumeRequest" } } }
+        },
+        "responses": {
+          "200": { "$ref": "#/components/responses/Message" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
     "/curfew": {
       "post": {
         "operationId": "setCurfewTonight",
@@ -479,7 +496,7 @@
           "join": { "type": "boolean", "description": "The caller is a join code (the big screen): it may only view." }
         }
       },
-      "Grant": { "type": "string", "enum": ["view", "transport", "tempo", "sections", "panic", "queue.request", "queue.vote", "queue.edit", "tokens", "curfew"] },
+      "Grant": { "type": "string", "enum": ["view", "transport", "tempo", "sections", "panic", "queue.request", "queue.vote", "queue.edit", "tokens", "curfew", "volume"] },
       "TokenHolder": {
         "type": "object",
         "required": ["id", "role", "issuedAt", "expiresAt"],
@@ -529,6 +546,11 @@
         "type": "object",
         "required": ["bpm"],
         "properties": { "bpm": { "type": "number", "minimum": 30, "maximum": 300 } }
+      },
+      "VolumeRequest": {
+        "type": "object",
+        "required": ["percent"],
+        "properties": { "percent": { "type": "integer", "minimum": 0, "maximum": 100 } }
       },
       "CurfewRequest": {
         "type": "object",
@@ -617,6 +639,7 @@
           },
           "section": { "type": ["string", "null"], "description": "e.g. \"Chorus (2/3) · vamping\"." },
           "curfew": { "type": ["string", "null"], "description": "\"Set ends 23:00\", \"Curfew until 10:00.\", or null when no stop is set or coming." },
+          "volume": { "type": "integer", "minimum": 0, "maximum": 100, "description": "The band's volume, percent (POST /volume). 100 until someone turns it down." },
           "following": {
             "oneOf": [
               { "type": "null" },

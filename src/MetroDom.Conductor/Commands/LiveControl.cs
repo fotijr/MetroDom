@@ -1,5 +1,6 @@
 using MetroDom.Conductor.Midi;
 using MetroDom.Core.Policy;
+using MetroDom.Core.Safety;
 using MetroDom.Core.Setlist;
 using MetroDom.Core.Timing;
 
@@ -45,6 +46,7 @@ internal sealed record ActiveSong(LatencyScheduler Scheduler, SectionNavigator S
 /// <param name="Section">"Chorus (2/3) · vamping", or null.</param>
 /// <param name="Following">The beat tracker, when following a player.</param>
 /// <param name="Curfew">"Curfew until 10:00", "Set ends 23:00", or null when no stop is set or coming.</param>
+/// <param name="Volume">The band's volume knob, 0-100%.</param>
 internal sealed record LiveState(
     bool Playing,
     int Index,
@@ -57,7 +59,8 @@ internal sealed record LiveState(
     string? TempoSource,
     string? Section,
     (BeatState State, double? Bpm)? Following,
-    string? Curfew = null);
+    string? Curfew = null,
+    int Volume = MasterVolume.Full);
 
 /// <summary>
 /// One place every control lands, whatever sent it: terminal keys, a foot controller
@@ -73,6 +76,7 @@ internal sealed class LiveControl(Session session, IClock clock, SetQueue? queue
     private ActiveSong? _active;
     private LiveSignal? _signal;
     private double? _pendingBpm;
+    private bool _startOwed;
     private string? _pendingSource;
     private BeatTracker? _tracker;
     private BeatFollower? _follower;
@@ -168,7 +172,12 @@ internal sealed class LiveControl(Session session, IClock clock, SetQueue? queue
             : null);
     }
 
-    /// <summary>Starts waiting (or playing <paramref name="song"/>): clears the last signal.</summary>
+    /// <summary>
+    /// Starts waiting (or playing <paramref name="song"/>): clears the last signal. A start that
+    /// came while nothing played and a song was queued, before the set loop got round to waiting
+    /// (a remote's Start right after adding to an empty queue), carries over into the wait
+    /// instead of being lost.
+    /// </summary>
     public void Begin(ActiveSong? song)
     {
         lock (_gate)
@@ -179,8 +188,17 @@ internal sealed class LiveControl(Session session, IClock clock, SetQueue? queue
                 _follower = null;
             }
 
-            _signal = null;
-            _done.Reset();
+            var owed = song is null && _startOwed;
+            _startOwed = owed; // kept until the wait for start takes it (TakeStart) or a song begins
+            _signal = owed ? LiveSignal.Start : null;
+            if (owed)
+            {
+                _done.Set();
+            }
+            else
+            {
+                _done.Reset();
+            }
         }
     }
 
@@ -202,7 +220,7 @@ internal sealed class LiveControl(Session session, IClock clock, SetQueue? queue
             var following = _tracker is null ? ((BeatState, double?)?)null : (_tracker.State, _tracker.Bpm);
             if (active is null)
             {
-                return new LiveState(false, set.Current, titles, null, null, null, null, _pendingBpm, TempoSource, null, following, curfew);
+                return new LiveState(false, set.Current, titles, null, null, null, null, _pendingBpm, TempoSource, null, following, curfew, session.Volume.Percent);
             }
 
             var speed = active.Scheduler.Speed;
@@ -218,9 +236,32 @@ internal sealed class LiveControl(Session session, IClock clock, SetQueue? queue
                 TempoSource,
                 active.Sections.Describe(),
                 following,
-                curfew);
+                curfew,
+                session.Volume.Percent);
         }
     }
+
+    /// <summary>How far the keyboard's [ and ] turn the volume.</summary>
+    public const int VolumeStep = 10;
+
+    /// <summary>
+    /// Sets the band's volume, 0-100%. The policy's caps still apply on top, so this only ever
+    /// turns the band down from what the limits allow. Null outside 0-100; else what to say.
+    /// </summary>
+    public string? SetVolume(int percent)
+    {
+        if (!session.Volume.TrySet(percent))
+        {
+            return null;
+        }
+
+        var message = percent == 0 ? "Volume 0%: no new notes." : $"Volume {percent}%.";
+        session.Messages.Add(message);
+        return message;
+    }
+
+    /// <summary>Turns the volume by <paramref name="by"/> points, staying within 0-100.</summary>
+    public string NudgeVolume(int by) => SetVolume(Math.Clamp(session.Volume.Percent + by, 0, MasterVolume.Full))!;
 
     /// <summary>Whether a song is playing (else the band waits for start).</summary>
     public bool IsPlaying
@@ -299,6 +340,15 @@ internal sealed class LiveControl(Session session, IClock clock, SetQueue? queue
         }
     }
 
+    /// <summary>The wait for start is over: a start it was owed has been used.</summary>
+    public void TakeStart()
+    {
+        lock (_gate)
+        {
+            _startOwed = false;
+        }
+    }
+
     /// <summary>Ends the current wait or song with <paramref name="signal"/> (the first one wins).</summary>
     public void End(LiveSignal signal)
     {
@@ -306,6 +356,10 @@ internal sealed class LiveControl(Session session, IClock clock, SetQueue? queue
         {
             _signal ??= signal;
             _done.Set();
+            if (signal == LiveSignal.Start && _active is null && Queue.Now is not null)
+            {
+                _startOwed = true; // until a song begins
+            }
         }
     }
 

@@ -130,7 +130,7 @@ public sealed class ControlApiRolesTests : IAsyncDisposable
         Assert.Equal(["view", "queue.request", "queue.vote"], session.GetProperty("grants").EnumerateArray().Select(g => g.GetString()!));
 
         Assert.Equal(HttpStatusCode.OK, (await Send(HttpMethod.Get, "state", guest)).Status);
-        foreach (var path in new[] { "panic", "transport/start", "tap", "sections/vamp", "curfew" })
+        foreach (var path in new[] { "panic", "transport/start", "tap", "sections/vamp", "curfew", "volume" })
         {
             var (status, body) = await Send(HttpMethod.Post, path, guest);
             Assert.Equal(HttpStatusCode.Forbidden, status);

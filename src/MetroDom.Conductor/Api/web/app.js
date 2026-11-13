@@ -20,6 +20,7 @@
   let library = [];
   let inviteUrl = "";
   let inviteQr = "";
+  let turningVolume = false;
   const messages = [];
 
   function storage(action, value) {
@@ -247,6 +248,11 @@
       ? `Following the player: ${s.following.state}${s.following.bpm ? ` at ${s.following.bpm.toFixed(1)} BPM` : ""}`
       : "";
     $("curfew").textContent = s.curfew || "";
+    // Don't yank the slider from under a finger; the stream catches up when it's let go.
+    if (!turningVolume && typeof s.volume === "number") {
+      $("volume").value = s.volume;
+      $("volume-value").textContent = `${s.volume}%`;
+    }
     if (!playing) renderPosition(0, s.durationSeconds || 0);
     if (s.durationSeconds) duration = s.durationSeconds;
   }
@@ -502,6 +508,14 @@
     if ($("curfew-at").value) call("curfew", { at: $("curfew-at").value });
   });
   $("curfew-lift").addEventListener("click", () => call("curfew", undefined, "DELETE"));
+  $("volume").addEventListener("pointerdown", () => { turningVolume = true; });
+  $("volume").addEventListener("input", () => {
+    $("volume-value").textContent = `${$("volume").value}%`;
+  });
+  $("volume").addEventListener("change", async () => {
+    await call("volume", { percent: Number($("volume").value) });
+    turningVolume = false;
+  });
   $("library-filter").addEventListener("input", renderLibrary);
   $("requests-toggle").addEventListener("click", () => call("requests", { open: !(queue && queue.requests && queue.requests.open) }, "PUT"));
   $("library-refresh").addEventListener("click", loadLibrary);

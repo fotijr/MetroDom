@@ -3,7 +3,10 @@
 Status: Draft · Profile: `rental`
 
 Built so far: hard limits from the policy (velocity, rate, quiet hours) and the rental end time
-(`limits.endsAt`: no song starts that can't finish by then; [policy profile](../references/policy-profile.md#limits)).
+(`limits.endsAt`: no song starts that can't finish by then; [policy profile](../references/policy-profile.md#limits)),
+and from the phone: play/stop/skip, the queue and library, and volume (a slider that scales
+every note under the company's caps, so the customer can turn it down, never past a limit).
+Not yet: party mode as one switch, the box's own Wi-Fi, ready-in-2-minutes.
 
 ## Story
 Someone books a four-instrument robotic quartet for a party. It's delivered, plugged into power,

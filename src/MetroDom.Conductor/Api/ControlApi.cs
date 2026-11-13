@@ -390,6 +390,11 @@ internal sealed class ControlApi : IAsyncDisposable
                 return Conflict("A song is already playing.");
             }
 
+            if (live.Queue.Now is null)
+            {
+                return Conflict("The queue is empty: add a song first.");
+            }
+
             live.End(LiveSignal.Start);
             return Accepted("Starting.");
         }).Needs(Grant.Transport);
@@ -425,6 +430,10 @@ internal sealed class ControlApi : IAsyncDisposable
         }).Needs(Grant.Tempo);
         guarded.MapPost("/sections/vamp", () => Navigate(live, ControlAction.Vamp)).Needs(Grant.Sections);
         guarded.MapPost("/sections/outro", () => Navigate(live, ControlAction.Outro)).Needs(Grant.Sections);
+        guarded.MapPost("/volume", (VolumeRequest? request) =>
+            request?.Percent is { } percent && live.SetVolume(percent) is { } message
+                ? Results.Json(new { message, volume = percent })
+                : BadRequest("percent must be a whole number from 0 to 100.")).Needs(Grant.Volume);
         guarded.MapPost("/curfew", (CurfewRequest? request) =>
         {
             if (!TimeOnly.TryParseExact(request?.At, ["H:mm", "HH:mm"], CultureInfo.InvariantCulture, DateTimeStyles.None, out var at))
@@ -728,6 +737,7 @@ internal sealed class ControlApi : IAsyncDisposable
         section = s.Section,
         following = s.Following is { } f ? new { state = f.State.ToString().ToLowerInvariant(), bpm = f.Bpm } : null,
         curfew = s.Curfew,
+        volume = s.Volume,
     };
 
     /// <summary>The token from <c>Authorization: Bearer</c>, or (browser WebSockets can't set headers) a <c>token.&lt;token&gt;</c> subprotocol.</summary>
@@ -770,6 +780,8 @@ internal sealed class ControlApi : IAsyncDisposable
     private sealed record TempoRequest(double? Bpm);
 
     private sealed record CurfewRequest(string? At);
+
+    private sealed record VolumeRequest(int? Percent);
 
     private sealed record TokenRequest(string? Role, double? Hours, string? Label, bool? Join = null);
 

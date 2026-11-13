@@ -96,6 +96,9 @@ public enum BlockReason
 
     /// <summary>As many actuators as the profile's <c>polyphony</c> are already on.</summary>
     Polyphony,
+
+    /// <summary>The volume is at 0.</summary>
+    Muted,
 }
 
 /// <summary>A note the governor held back.</summary>
@@ -114,6 +117,7 @@ public sealed record BlockedNote(string Instrument, int Note, int Channel, Block
 /// <c>maxDutyPercent</c>; and at most <c>polyphony</c> actuators inside their pulse at once.
 /// </remarks>
 /// <remarks>
+/// The band's <see cref="MasterVolume"/> scales new notes before the caps.
 /// Only new notes (Note On with velocity &gt; 0) are ever held back or changed. Anything that
 /// makes things quieter or stops them always passes: Note Off, All Sound Off / All Notes Off
 /// (panic), and every other non-note message. A governor can't leave an actuator on.
@@ -130,6 +134,7 @@ public sealed class SafetyGovernor : IMidiOutput
     private readonly Lock _gate = new();
     private readonly IClock _clock;
     private readonly Func<TimeOnly> _timeOfDay;
+    private readonly MasterVolume? _volume;
     private readonly Dictionary<int, Actuator> _actuators = [];
     private readonly Queue<TimeSpan> _recent = new();
     private readonly long[] _blocked = new long[Enum.GetValues<BlockReason>().Length];
@@ -141,7 +146,8 @@ public sealed class SafetyGovernor : IMidiOutput
     /// <param name="limits">Policy limits. <see cref="SafetyLimits.None"/> for profile rules only.</param>
     /// <param name="clock">Monotonic clock for intervals and rates.</param>
     /// <param name="timeOfDay">Local wall-clock time for quiet hours. Defaults to the system's.</param>
-    public SafetyGovernor(IMidiOutput inner, InstrumentProfile profile, SafetyLimits limits, IClock clock, Func<TimeOnly>? timeOfDay = null)
+    /// <param name="volume">The band's volume knob, shared by every governor; null for full.</param>
+    public SafetyGovernor(IMidiOutput inner, InstrumentProfile profile, SafetyLimits limits, IClock clock, Func<TimeOnly>? timeOfDay = null, MasterVolume? volume = null)
     {
         ArgumentNullException.ThrowIfNull(inner);
         ArgumentNullException.ThrowIfNull(profile);
@@ -167,6 +173,7 @@ public sealed class SafetyGovernor : IMidiOutput
         Limits = limits;
         _clock = clock;
         _timeOfDay = timeOfDay ?? (() => TimeOnly.FromDateTime(DateTime.Now));
+        _volume = volume;
     }
 
     /// <summary>Raised for each note held back. Called on the sending thread: keep it short.</summary>
@@ -248,6 +255,7 @@ public sealed class SafetyGovernor : IMidiOutput
         BlockReason.QuietHours => "in quiet hours",
         BlockReason.DutyCycle => "over duty cycle",
         BlockReason.Polyphony => "too many at once",
+        BlockReason.Muted => "at volume 0",
         _ => reason.ToString(),
     };
 
@@ -259,6 +267,13 @@ public sealed class SafetyGovernor : IMidiOutput
         if (!Profile.CanPlay(note))
         {
             reason = BlockReason.NotPlayable;
+            return null;
+        }
+
+        var velocity = _volume?.Scale(noteOn.Velocity) ?? noteOn.Velocity;
+        if (velocity == 0)
+        {
+            reason = BlockReason.Muted;
             return null;
         }
 
@@ -327,9 +342,11 @@ public sealed class SafetyGovernor : IMidiOutput
             _actuators[note] = new Actuator(now, now + pulse, heat, now);
         }
 
-        return noteOn.Velocity <= cap
+        // The volume first, then the caps: the knob can turn a song down, never past a limit.
+        velocity = Math.Min(velocity, cap);
+        return velocity == noteOn.Velocity
             ? noteOn
-            : new NoteOnEvent(noteOn.NoteNumber, (SevenBitNumber)cap) { Channel = noteOn.Channel, DeltaTime = noteOn.DeltaTime };
+            : new NoteOnEvent(noteOn.NoteNumber, (SevenBitNumber)velocity) { Channel = noteOn.Channel, DeltaTime = noteOn.DeltaTime };
     }
 
     /// <summary>One note's actuator: when it last struck, when that pulse ends, and its heat (ms x percent) as of <see cref="HeatAt"/>.</summary>

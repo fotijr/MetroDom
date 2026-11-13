@@ -125,7 +125,7 @@ public class PolicyTests
         Assert.Equal(SafetyLimits.None, live.Limits);
         Assert.Equal(QueueRules.Closed, live.Queue);
         Assert.Empty(live.Roles.For(Role.Guest));
-        Assert.Equal([Grant.View, Grant.Transport, Grant.Tempo, Grant.Sections, Grant.Panic, Grant.QueueEdit, Grant.Curfew], live.Roles.For(Role.Operator));
+        Assert.Equal([Grant.View, Grant.Transport, Grant.Tempo, Grant.Sections, Grant.Panic, Grant.QueueEdit, Grant.Curfew, Grant.Volume], live.Roles.For(Role.Operator));
         Assert.True(live.Roles.Allows(Role.Owner, Grant.Tokens));
     }
 

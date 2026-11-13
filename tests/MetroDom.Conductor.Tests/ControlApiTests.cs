@@ -523,4 +523,19 @@ public sealed class ControlApiTests : IAsyncDisposable
         Assert.Equal(JsonValueKind.Null, (await Get("state")).Body.GetProperty("curfew").ValueKind);
         Assert.False(_live.Curfew.IsSet);
     }
+    [Fact]
+    public async Task Volume_SetsTheKnob_ShowsInState_AndRefusesOutOfRange()
+    {
+        Assert.Equal(100, (await Get("state")).Body.GetProperty("volume").GetInt32());
+        Assert.Equal(HttpStatusCode.BadRequest, (await Post("volume", """{"percent":120}""")).Status);
+        Assert.Equal(HttpStatusCode.BadRequest, (await Post("volume", """{}""")).Status);
+
+        var (status, body) = await Post("volume", """{"percent":40}""");
+        Assert.Equal(HttpStatusCode.OK, status);
+        Assert.Equal("Volume 40%.", body.GetProperty("message").GetString());
+        Assert.Equal(40, _session.Volume.Percent);
+        Assert.Equal(40, (await Get("state")).Body.GetProperty("volume").GetInt32());
+
+        Assert.Equal("Volume 0%: no new notes.", (await Post("volume", """{"percent":0}""")).Body.GetProperty("message").GetString());
+    }
 }

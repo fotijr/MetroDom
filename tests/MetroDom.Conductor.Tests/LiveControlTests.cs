@@ -41,6 +41,43 @@ public sealed class LiveControlTests : IDisposable
     }
 
     [Fact]
+    public void Start_JustBeforeTheWait_CarriesIntoIt_Once()
+    {
+        _live.UseSetlist(["one.mid"]);
+        _live.Cue(0);
+        _live.Begin(null);              // the set loop waited for songs; one was just queued
+        _live.End(LiveSignal.Start);    // the remote's Start lands before the loop waits for start
+
+        _live.Begin(null);              // the loop begins its wait for start
+        Assert.True(_live.Done.IsSet);
+        Assert.Equal(LiveSignal.Start, _live.Signal);
+
+        _live.TakeStart();              // the wait used it
+        _live.Begin(null);              // a later wait (a curfew) isn't ended by it again
+        Assert.False(_live.Done.IsSet);
+        Assert.Null(_live.Signal);
+    }
+
+    [Fact]
+    public void Start_WithNothingQueued_IsNotOwed()
+    {
+        _live.End(LiveSignal.Start);
+        _live.Begin(null);
+        Assert.False(_live.Done.IsSet);
+    }
+
+    [Fact]
+    public void Volume_IsTheSessionsKnob_AndShowsInTheSnapshot()
+    {
+        Assert.Equal("Volume 30%.", _live.SetVolume(30));
+        Assert.Null(_live.SetVolume(101));
+        Assert.Equal(30, _session.Volume.Percent);
+        Assert.Equal(30, _live.Snapshot().Volume);
+        Assert.Equal("Volume 0%: no new notes.", _live.NudgeVolume(-50));
+        Assert.Equal("Volume 10%.", _live.NudgeVolume(LiveControl.VolumeStep));
+    }
+
+    [Fact]
     public void StartStop_StartsWhenWaiting_StopsWhenPlaying()
     {
         _live.Begin(null);

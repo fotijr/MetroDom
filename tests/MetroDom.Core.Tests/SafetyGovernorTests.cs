@@ -122,6 +122,51 @@ public class SafetyGovernorTests
     }
 
     [Fact]
+    public void Volume_ScalesNotes_ThenTheCapApplies()
+    {
+        var volume = new MasterVolume();
+        var governor = new SafetyGovernor(_out, new InstrumentProfile("xylo", TimeSpan.Zero), new SafetyLimits { MaxVelocity = 80 }, _clock, () => new TimeOnly(12, 0), volume);
+        var loud = On(60, velocity: 120);
+
+        governor.Send(loud);           // full: only the cap, 80
+        Assert.True(volume.TrySet(50));
+        governor.Send(On(62, 120));     // half of 120 = 60, under the cap
+        governor.Send(On(64, 1));       // never rounds a note away
+        Assert.True(volume.TrySet(100));
+        governor.Send(On(65, 70));      // full and under the cap: the same event
+
+        Assert.Equal([80, 60, 1, 70], _out.Sent.OfType<NoteOnEvent>().Select(e => (int)e.Velocity));
+        Assert.Equal(120, (int)loud.Velocity);
+        Assert.Equal(2, governor.Capped); // the velocity-1 note went out as it was
+    }
+
+    [Fact]
+    public void VolumeZero_HoldsBackNewNotes_ButNotesStillEnd()
+    {
+        var volume = new MasterVolume();
+        var governor = new SafetyGovernor(_out, new InstrumentProfile("xylo", TimeSpan.Zero), SafetyLimits.None, _clock, () => new TimeOnly(12, 0), volume);
+        governor.Send(On(60));
+        Assert.True(volume.TrySet(0));
+        governor.Send(On(62));
+        governor.Send(Off(60));
+
+        Assert.Equal([60], SentNotes());
+        Assert.Single(_out.Sent.OfType<NoteOffEvent>());
+        Assert.Equal(1, governor.BlockedFor(BlockReason.Muted));
+        Assert.Contains("at volume 0", governor.Summary(), StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(101)]
+    public void Volume_OutsideZeroToHundred_IsRefused(int percent)
+    {
+        var volume = new MasterVolume();
+        Assert.False(volume.TrySet(percent));
+        Assert.Equal(MasterVolume.Full, volume.Percent);
+    }
+
+    [Fact]
     public void VelocityCap_TurnsDownACopy_NeverTheSharedEvent()
     {
         var governor = Governor(limits: new SafetyLimits { MaxVelocity = 80 });

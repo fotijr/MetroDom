@@ -376,7 +376,7 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
 
         LiveStatus.Run(
             session,
-            () => LiveStatus.Panel($"⏸ Ready: {Markup.Escape(song)}", session, progress: null, new Markup($"[grey]Press[/] {Markup.Escape(how)} [grey]to play.[/]"), "Enter start · N skip · Space tap the starting tempo"),
+            () => LiveStatus.Panel($"⏸ Ready: {Markup.Escape(song)}", session, progress: null, new Markup($"[grey]Press[/] {Markup.Escape(how)} [grey]to play.[/]"), "Enter start · N skip · Space tap the starting tempo · [ ] volume"),
             key =>
             {
                 if (key.Key == ConsoleKey.Enter)
@@ -391,8 +391,13 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
                 {
                     live.Tap("tapped");
                 }
+                else if (key.KeyChar is '[' or ']')
+                {
+                    live.NudgeVolume(key.KeyChar == ']' ? LiveControl.VolumeStep : -LiveControl.VolumeStep);
+                }
             },
             live.Done);
+        live.TakeStart();
         return session.IsStopping ? null : live.Signal;
     }
 
@@ -512,7 +517,7 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
                     ? new Rows(TempoLine(scheduler, FileBpm(tempoMap, SongPosition()), TempoSource(live)), new Markup($"[grey]Section[/] {Markup.Escape(where)}"))
                     : TempoLine(scheduler, FileBpm(tempoMap, SongPosition()), TempoSource(live)),
                 "Space tap · +/- tempo · 0 file tempo" + (sections.Sections.Count > 0 ? " · V vamp · O outro" : "")
-                    + (hasNext ? " · N next" : "") + " · Enter stop · Esc panic" + inputs),
+                    + (hasNext ? " · N next" : "") + " · [ ] volume · Enter stop · Esc panic" + inputs),
             key =>
             {
                 if (key.Key == ConsoleKey.Enter)
@@ -549,6 +554,9 @@ internal sealed class PlayCommand : Command<PlayCommand.Settings>
                         break;
                     case 'n':
                         live.Control(ControlAction.Next);
+                        break;
+                    case '[' or ']':
+                        live.NudgeVolume(key.KeyChar == ']' ? LiveControl.VolumeStep : -LiveControl.VolumeStep);
                         break;
                 }
             },

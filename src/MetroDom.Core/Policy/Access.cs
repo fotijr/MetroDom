@@ -45,6 +45,9 @@ public enum Grant
 
     /// <summary>Set or lift tonight's curfew (<c>POST</c>/<c>DELETE /curfew</c>). It can only end the night sooner.</summary>
     Curfew,
+
+    /// <summary>Turn the band's volume up or down (<c>POST /volume</c>), within the policy's caps.</summary>
+    Volume,
 }
 
 /// <summary>
@@ -67,6 +70,7 @@ public sealed record RolePermissions
         ["queue.edit"] = Grant.QueueEdit,
         ["tokens"] = Grant.Tokens,
         ["curfew"] = Grant.Curfew,
+        ["volume"] = Grant.Volume,
     };
 
     /// <summary>What a guest may ever be given.</summary>
@@ -80,7 +84,7 @@ public sealed record RolePermissions
     /// in API v0), guests get nothing.
     /// </summary>
     public static readonly RolePermissions Default = new(
-        new HashSet<Grant> { Grant.View, Grant.Transport, Grant.Tempo, Grant.Sections, Grant.Panic, Grant.QueueEdit, Grant.Curfew },
+        new HashSet<Grant> { Grant.View, Grant.Transport, Grant.Tempo, Grant.Sections, Grant.Panic, Grant.QueueEdit, Grant.Curfew, Grant.Volume },
         new HashSet<Grant>());
 
     public RolePermissions(IReadOnlySet<Grant> operatorCan, IReadOnlySet<Grant> guestCan)

@@ -54,6 +54,7 @@ not given):
 | `vamp` | - | Toggle vamp on this section | V |
 | `outro` | - | Outro after this section | O |
 | `panic` | Silence | Stop every actuator now, then wait to restart the same song | Esc |
+| (keyboard only) | Volume −/+ 10% | Volume −/+ 10% | [ ] |
 
 ```bash
 metrodom play set/*.mid -o "MetroDom xylo=1" -o "MetroDom drums=10" --control "FS-5U" [--policy my-band.json]
@@ -122,7 +123,7 @@ tokens from the owner (`POST /tokens`), and the policy lists what each may do:
 
 ```json
 "roles": {
-  "operator": ["view", "transport", "tempo", "sections", "panic", "queue.edit", "curfew"],
+  "operator": ["view", "transport", "tempo", "sections", "panic", "queue.edit", "curfew", "volume"],
   "guest": ["view", "queue.request", "queue.vote"]
 }
 ```
@@ -139,15 +140,16 @@ tokens from the owner (`POST /tokens`), and the policy lists what each may do:
 | `queue.vote` | `POST`/`DELETE /queue/{id}/vote` |
 | `tokens` | `GET`/`POST /tokens`, `DELETE /tokens/{id}`: the owner's alone |
 | `curfew` | `POST`/`DELETE /curfew`: set or lift tonight's curfew (it can only end the night sooner) |
+| `volume` | `POST /volume`: the band's volume, under the policy's caps (it can only turn the band down from them) |
 
 Rules that hold whatever a file says ([SECURITY](../SECURITY.md)), refused with a reason:
 - An operator always has `view` and `panic`.
-- A guest may only have `view`, `queue.request`, `queue.vote`: never panic, transport, tempo or settings.
+- A guest may only have `view`, `queue.request`, `queue.vote`: never panic, transport, tempo, volume or settings.
 - Nobody but the owner has `tokens`. `roles.owner` can't be set.
 
 Without a `roles` section: operators get `view`, `transport`, `tempo`, `sections`, `panic` (what
-every token could do in API v0), `queue.edit` (a bandmate reorders the set) and `curfew` (venue
-staff can call it a night early), and guests get nothing.
+every token could do in API v0), `queue.edit` (a bandmate reorders the set), `curfew` (venue
+staff can call it a night early) and `volume`, and guests get nothing.
 
 ## Queue
 

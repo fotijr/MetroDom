@@ -11,7 +11,7 @@
     "quietHours": { "from": "01:00", "to": "10:00", "maxVelocity": 0 }
   },
   "roles": {
-    "operator": ["view", "transport", "tempo", "sections", "panic", "queue.edit", "curfew"],
+    "operator": ["view", "transport", "tempo", "sections", "panic", "queue.edit", "curfew", "volume"],
     "guest": ["view", "queue.request", "queue.vote"]
   },
   "queue": {

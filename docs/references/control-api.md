@@ -140,8 +140,9 @@ request limits hold per phone, not per table.
 `play --api` and `serve` also serve a phone-sized remote at `/` (`src/MetroDom.Conductor/Api/web/`:
 plain HTML, CSS and JS embedded in the binary, no framework or build step). It shows the song,
 progress, section, tempo, queue, instruments and messages live from `/stream`, and has start/stop,
-next, tempo ±2%, tap, vamp, outro and a big **PANIC** button, and (with `curfew`) a time to set
-tonight's curfew and a Lift button; the curfew in force shows under the tempo.
+next, tempo ±2%, tap, vamp, outro, a volume slider (with `volume`) and a big **PANIC** button, and
+(with `curfew`) a time to set tonight's curfew and a Lift button; the curfew in force shows under
+the tempo.
 
 - **Queue and library** (with `queue.edit`): ↑ ↓ ✕ on each coming song, and a searchable library
   with an Add button per song. Everyone with `view` sees the queue and who added what.
@@ -193,19 +194,20 @@ tonight's curfew and a Lift button; the curfew in force shows under the tempo.
 | --- | --- | --- | --- |
 | GET | `/` (outside `/api/v0`) | The web remote (no token), plus `/app.js`, `/app.css`, `/sw.js`, `/manifest.webmanifest`, icons | |
 | GET | `/openapi.json` | The spec (no token) | |
-| GET | `/state` | `waiting`/`playing`, song, position, duration, tempo (bpm, speed, pending, source), section, following, curfew (`"Set ends 23:00"`, `"Curfew until 10:00."`, or null) | |
+| GET | `/state` | `waiting`/`playing`, song, position, duration, tempo (bpm, speed, pending, source), section, following, curfew (`"Set ends 23:00"`, `"Curfew until 10:00."`, or null), volume (0-100) | |
 | GET | `/queue` | History, current, coming: ids, titles, who added them, what's editable | |
 | POST | `/queue` `{"song":"covers/Late Night.mid","at":3}` | Queue a library song (`queue.edit`) | `400`, `404` unknown song, `409` no library, full or not editable |
 | POST | `/queue/{id}/move` `{"to":2}` | Move a coming song (`queue.edit`) | `400`, `404`, `409` |
 | DELETE | `/queue/{id}` | Take a coming song out (`queue.edit`) | `404`, `409` up now or played |
 | GET | `/library` | Songs that can be queued: id, title, length, BPM (empty in `play`) | |
 | GET | `/instruments` | Name, channels (1-16), latency, notes, connected, `latencyCheck` (boot check verdict, [calibration](calibration.md)) | |
-| POST | `/transport/start` | Start the song up next | `409` if playing |
+| POST | `/transport/start` | Start the song up next. A Start right after adding to an empty queue isn't lost: it carries into the wait | `409` if playing or nothing is queued |
 | POST | `/transport/stop` | Stop the song | `409` if waiting |
 | POST | `/transport/next` | Next song now (skips while waiting) | |
 | POST | `/tempo` `{"bpm": 96}` | Tempo now, or for the next song while waiting (30-300) | `400` |
 | POST | `/tap` | One tap (shared with keys and pedals) | |
 | POST | `/sections/vamp`, `/sections/outro` | Vamp toggle / outro after this section | `409` if waiting |
+| POST | `/volume` `{"percent": 70}` | The band's volume, 0-100% (`volume`): scales notes before the policy's caps, so it only ever turns down; 0 holds back new notes. In `state` as `volume` | `400` |
 | POST | `/curfew` `{"at":"23:30"}` | Tonight's curfew, the next time the clock reads it (`curfew`; [policy](policy-profile.md#limits)) | `400` not HH:mm |
 | DELETE | `/curfew` | Lift tonight's curfew (`curfew`); the policy's stay | `409` none set |
 | POST | `/panic` | Stop every actuator; the band then waits | |

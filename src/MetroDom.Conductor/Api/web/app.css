@@ -63,6 +63,10 @@ header { display: flex; align-items: center; gap: .75rem; }
 .tempo { margin-top: .6rem; font-size: 1.1rem; }
 #bpm { font-size: 2rem; font-weight: 700; font-variant-numeric: tabular-nums; }
 
+.volume { display: grid; grid-template-columns: auto 1fr 3.5rem; gap: .8rem; align-items: center; margin-top: 1rem; }
+.volume input { width: 100%; accent-color: var(--accent); min-height: 2.5rem; }
+.volume span { text-align: right; font-variant-numeric: tabular-nums; }
+
 .controls { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; margin-top: 1rem; }
 .controls .primary { grid-column: 1 / -1; }
 

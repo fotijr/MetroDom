@@ -62,6 +62,9 @@ internal sealed class Session : IDisposable
     private readonly Dictionary<string, LatencyCheck> _checks = new(StringComparer.Ordinal);
     private CalibrationBook _calibrations = new();
     private readonly SafetyLimits _limits;
+
+    /// <summary>The band's volume knob: every governor, hot-plugged ones too, scales notes by it.</summary>
+    public MasterVolume Volume { get; } = new();
     private readonly IClock _clock;
     private DeviceWatcher? _watcher;
     private Action<string> _log = Ui.Warn;
@@ -336,7 +339,7 @@ internal sealed class Session : IDisposable
     /// <summary>Puts a governor in front of <paramref name="output"/> and routes its channels to it.</summary>
     private void Add(SessionOutput output)
     {
-        var governor = new SafetyGovernor(output.Port, output.Profile, _limits, _clock);
+        var governor = new SafetyGovernor(output.Port, output.Profile, _limits, _clock, volume: Volume);
         int[] channels;
         lock (_gate)
         {
