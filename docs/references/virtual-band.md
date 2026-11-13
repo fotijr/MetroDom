@@ -41,6 +41,33 @@ takes the profile's `midi.channel` unless `=CHANNELS` says otherwise; a missing 
 a usage error naming it. Default band (roadmap S1): `xylo` on every channel except 10 at 10 ms,
 `drums` on 10 at 35 ms.
 
+## A body's brain, in software (`--body`)
+
+```bash
+metrodom virtual --body Instruments/snare/body.json            # a "MetroDom snare" port
+metrodom simulate song.mid --body Instruments/snare/body.json  # what it plays and refuses, instantly
+metrodom simulate song.mid -i xylo=1@10 --body Instruments/snare/body.json --arrange
+```
+
+`--body FILE` (repeatable, on `virtual` and `simulate`) stands up a virtual brain running that
+[body](body-record.md). It decides exactly as the firmware does (`BrainModel`): its notes only,
+its `midi.channel` if it has one, a pulse scaled by velocity, and refusals for a note still
+striking, a repeat under `minIntervalMs`, a spent duty budget, or too many at once. Accent LEDs
+flash in the note's color. Panic ends strikes, but their intervals still count. The same
+[parity vectors](../../Instruments/metrodom_brain/test/vectors/README.md) run against the firmware and
+the model, so they can't drift apart.
+
+- `virtual --body` names the port after the body (`"name"`, the USB name a real brain shows), so
+  `play -o "MetroDom snare"` and `devices --identify` treat it like the real instrument. Each
+  strike prints its pulse and an LED swatch; each refusal prints why. It describes itself with
+  the profile the brain would send.
+- `simulate --body` adds the body to the band. Omni bodies hear every channel; with `--arrange`
+  they get their own channel or the first free one, as the [auto band](auto-band.md) picks. The
+  band table shows what `play`'s governor would hold back. A second section, **Played straight
+  to each brain**, reruns the song with no governor (as from a DAW) and counts what each brain
+  refuses, by reason: that's where to look when tuning `pulseMs`, `minIntervalMs` and the duty.
+- Without `-i`, only the bodies play.
+
 `virtual --onsets` adds a `MetroDom onsets` port that sends a Note On whenever a strike would be
 heard, standing in for a piezo or mic ([calibration](calibration.md)). `--drift MS` makes every
 instrument strike that much later than its profile says, to try the boot check, and `--jitter MS`
@@ -73,7 +100,8 @@ is counted in the table ("on a stand-in", "over polyphony N"). Played to note-li
 - Note On → one strike, **heard** at arrival + latency (± `--jitter`, seeded). Note Off is
   ignored: the strike pulse ends by itself, so nothing can stick on.
 - Drops notes it has no actuator for (`InstrumentProfile.Notes`) and refuses repeats faster
-  than `MinInterval`, both reported. `virtual` only listens on its channels.
+  than `MinInterval`, both reported. `virtual` only listens on its channels. A `--body`
+  instrument refuses everything a brain would instead (busy, interval, duty, polyphony).
 - Counts panic (CC 120/123), so tests can check panic reached every instrument.
 
 ## What the simulation measures
@@ -167,5 +195,6 @@ metrodom play song.mid -o "MetroDom xylo" --follow "pads" # count the band in wi
   do answer MIDI Identity Requests as MetroDom model 0 ([midi-identity](midi-identity.md)), so
   `metrodom devices --identify` finds them and reads their profile ([profile exchange](midi-profile-exchange.md)).
   They accept a Body Write like a brain (`metrodom body write "MetroDom xylo" FILE`) and from then
-  on describe themselves as that body, though they still play as their `-i` spec
-  ([body record](body-record.md)).
+  on describe themselves as that body, though they still play as before: a written body doesn't
+  restart a virtual brain as that body; start it with `--body` instead ([body record](body-record.md)).
+- `--drift` applies to `-i` instruments only, not `--body` ones (they take latency from the body).

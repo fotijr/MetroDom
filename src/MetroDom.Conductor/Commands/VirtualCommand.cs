@@ -32,6 +32,10 @@ internal sealed class VirtualCommand : Command<VirtualCommand.Settings>
         [Description("A virtual instrument, NAME[[=CHANNELS]]@LATENCY_MS[[/NOTES]], repeatable (e.g. [bold]-i xylo=1@10 -i drums=10@35[/]). It only listens on its channels. Default: xylo on every channel but 10 at 10 ms, drums on 10 at 35 ms.")]
         public string[]? Instruments { get; init; }
 
+        [CommandOption("-b|--body <FILE>")]
+        [Description("A virtual brain running this body file, repeatable: a port with the body's name that strikes, refuses (busy, interval, duty, polyphony) and flashes exactly as a real brain would. Without [bold]-i[/], only the bodies.")]
+        public string[]? Bodies { get; init; }
+
         [CommandOption("--onsets")]
         [Description("Also create a [bold]MetroDom onsets[/] port that sends a Note On whenever a virtual instrument would be heard, like a piezo trigger or mic would: point [bold]calibrate --onsets[/] or [bold]play --onsets[/] at it.")]
         public bool Onsets { get; init; }
@@ -45,7 +49,9 @@ internal sealed class VirtualCommand : Command<VirtualCommand.Settings>
         public double Jitter { get; init; }
 
         public IReadOnlyList<InstrumentSpec> Band =>
-            InstrumentSpec.TryParseAll(Instruments, out var specs, out _) && specs.Count > 0 ? specs : InstrumentSpec.DefaultBand;
+            InstrumentSpec.TryParseAll(Instruments, out var specs, out _) && specs.Count > 0 ? specs
+            : Bodies is { Length: > 0 } ? []
+            : InstrumentSpec.DefaultBand;
 
         public override ValidationResult Validate()
         {
@@ -65,6 +71,7 @@ internal sealed class VirtualCommand : Command<VirtualCommand.Settings>
 
     public override int Execute(CommandContext context, Settings settings, CancellationToken cancellationToken)
     {
+        var bodies = (settings.Bodies ?? []).Select(BodyFile.Load).ToArray();
         var clock = new SystemClock();
         var console = new Lock();
         var ports = new List<IVirtualPort>();
@@ -117,12 +124,30 @@ internal sealed class VirtualCommand : Command<VirtualCommand.Settings>
                 port.Start();
             }
 
-            AnsiConsole.MarkupLine("[bold]Virtual instruments ready[/] [grey](send to them like any MIDI output)[/]");
-            foreach (var (spec, port) in settings.Band.Zip(ports))
+            var ready = settings.Band.Zip(ports).Select(p => string.Create(CultureInfo.InvariantCulture,
+                $"  [green]●[/] {Markup.Escape(p.Second.Name)}  [grey]channels {ChannelList.Format(p.First.Channels)}, latency {p.First.Latency.TotalMilliseconds:0.#} ms[/]")).ToList();
+            foreach (var body in bodies)
             {
-                AnsiConsole.MarkupLine(string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"  [green]●[/] {Markup.Escape(port.Name)}  [grey]channels {ChannelList.Format(spec.Channels)}, latency {spec.Latency.TotalMilliseconds:0.#} ms[/]"));
+                // A brain's USB name is its body's name, so this port is named exactly as the real one will be.
+                var port = MidiDevices.CreateVirtualInput(body.Name);
+                ports.Add(port);
+                var instrument = VirtualInstrument.ForBody(body, clock, TimeSpan.FromMilliseconds(settings.Jitter), seed++);
+                if (emitter is not null)
+                {
+                    instrument.Struck += (_, s) => emitter.Emit(s);
+                }
+
+                var label = body.Name.StartsWith(PortPrefix + " ", StringComparison.Ordinal) ? body.Name[(PortPrefix.Length + 1)..] : body.Name;
+                Wire(port, new InstrumentSpec(label, InstrumentSpec.AllChannels, instrument.Profile.MaxLatency), instrument.Profile, instrument, clock, console);
+                port.Start();
+                ready.Add(string.Create(CultureInfo.InvariantCulture,
+                    $"  [green]●[/] {Markup.Escape(port.Name)}  [grey]brain running {Markup.Escape(body.Id)}: {body.Notes.Count} note(s), {(body.Channel is { } c ? $"channel {c + 1}" : "any channel")}, polyphony {body.Polyphony}, latency {(body.Notes.Max(n => n.LatencyMs) is var l and > 0 ? $"{l} ms" : "not measured")}[/]"));
+            }
+
+            AnsiConsole.MarkupLine("[bold]Virtual instruments ready[/] [grey](send to them like any MIDI output)[/]");
+            foreach (var line in ready)
+            {
+                AnsiConsole.MarkupLine(line);
             }
 
             if (onsetPort is not null)
@@ -164,7 +189,7 @@ internal sealed class VirtualCommand : Command<VirtualCommand.Settings>
         TimeSpan? lastPanic = null;
         instrument.Struck += (_, s) => Print(console, s.ReceivedAt, spec.Name, string.Create(
             CultureInfo.InvariantCulture,
-            $"ch {s.Channel + 1,2}  {NoteName(s.Note),-4} [grey]({s.Note,3})[/]  vel {s.Velocity,3}  [grey]→ heard at[/] {s.SoundsAt.TotalSeconds:0.000} [grey](+{(s.SoundsAt - s.ReceivedAt).TotalMilliseconds:0.#} ms)[/]"));
+            $"ch {s.Channel + 1,2}  {NoteName(s.Note),-4} [grey]({s.Note,3})[/]  vel {s.Velocity,3}{Pulse(s)}  [grey]→ heard at[/] {s.SoundsAt.TotalSeconds:0.000} [grey](+{(s.SoundsAt - s.ReceivedAt).TotalMilliseconds:0.#} ms)[/]"));
         instrument.Rejected += (_, note, reason) => Print(console, clock.Now, spec.Name, $"[yellow]skipped {NoteName(note)} ({note}): {Markup.Escape(reason)}[/]");
 
         port.EventReceived += e =>
@@ -257,6 +282,11 @@ internal sealed class VirtualCommand : Command<VirtualCommand.Settings>
                 $"[grey]{at.TotalSeconds,9:0.000}[/]  [bold]{Markup.Escape(instrument),-8}[/] {markup}"));
         }
     }
+
+    /// <summary>"  26 ms ■" for a brain-modeled strike: its pulse, and the LED flash in its own color.</summary>
+    private static string Pulse(Strike s) =>
+        s.PulseMs == 0 ? "" : string.Create(CultureInfo.InvariantCulture,
+            $"  {s.PulseMs,3} ms{(s.Flash is { } c ? $" [#{c:X6}]■[/]" : "")}");
 
     private static string NoteName(int number) => Note.Get((SevenBitNumber)(byte)number).ToString();
 }

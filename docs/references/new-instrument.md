@@ -1,9 +1,8 @@
 # Building a new instrument
 
 Status: **Partly built** ([plan 0006](../exec-plans/active/0006-new-instrument-dev-loop.md)).
-Steps 1–3 and 5 work today. Step 4's brain-accurate virtual port (`virtual --body`), step 5's
-one-command flash and step 6's `metrodom bench` are still planned. Until they're built, each of
-those steps says what to do instead.
+Steps 1–4 work today. Step 5's one-command flash and step 6's `metrodom bench` are still
+planned; until they're built, those steps say what to do instead.
 
 A MetroDom instrument is a **body**: actuators on a real instrument, a driver board, and an ID
 EEPROM that says what it is. Every instrument runs the same **brain** firmware, and the brain
@@ -13,7 +12,7 @@ So a new instrument needs no firmware change, just two files and the hardware.
 ```mermaid
 flowchart LR
   new[1 instrument new] --> body[2 tune body.json] --> parts[3 parts and modules]
-  body --> hear[4 hear it virtually]
+  body --> hear[4 simulate and hear it]
   parts --> flash[5 flash and write the body] --> bench[6 bench and calibrate] --> records[7 records]
 ```
 
@@ -67,15 +66,28 @@ starts from `hardware/modules/_template/` ([hardware/README.md](../../hardware/R
 
 ## 4. Hear it before soldering
 
+Run the song through a software brain running your body. It decides exactly as the firmware
+will, because both run the same [parity vectors](../../Instruments/metrodom_brain/test/vectors/README.md):
+
 ```bash
-metrodom virtual -i snare@0/38                 # terminal 1: a "MetroDom snare" port
-metrodom play song.mid --arrange               # terminal 2: the band, snare included
+metrodom simulate song.mid --body Instruments/snare/body.json
 ```
 
-The virtual port plays only the notes you list, so `arrange` and `play` treat it like the real
-instrument ([virtual band](virtual-band.md)). It also takes a `body write`, after which it
-describes itself as your body. It doesn't yet refuse what the brain would refuse (repeats closer
-than `minIntervalMs`, the duty limit, polyphony); `virtual --body` will (plan 0006 N3).
+The last section, **Played straight to each brain**, counts what the brain would refuse from a
+DAW, by reason: still striking, under `minIntervalMs`, over duty, over polyphony. Lots of
+interval refusals on a fast part? Lower `minIntervalMs` if the actuator can take it, or accept
+that it thins the part. `play` never sends those notes in the first place: its governor holds
+them back (the band table's **Held** column).
+
+To hear it in real time, or play it from a keyboard or DAW:
+
+```bash
+metrodom virtual --body Instruments/snare/body.json   # terminal 1: a "MetroDom snare" port
+metrodom play song.mid --arrange                      # terminal 2: the band, snare included
+```
+
+Each strike prints its pulse length and LED color, and each refusal prints why
+([virtual band](virtual-band.md#a-bodys-brain-in-software---body)).
 
 ## 5. Flash the brain and write the body
 

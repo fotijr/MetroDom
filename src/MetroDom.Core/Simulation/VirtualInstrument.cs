@@ -1,4 +1,5 @@
 using Melanchall.DryWetMidi.Core;
+using MetroDom.Core.Bodies;
 using MetroDom.Core.Timing;
 
 namespace MetroDom.Core.Simulation;
@@ -9,7 +10,14 @@ namespace MetroDom.Core.Simulation;
 /// <param name="Channel">Zero-based MIDI channel.</param>
 /// <param name="ReceivedAt">When the command arrived.</param>
 /// <param name="SoundsAt">When the strike would be heard: arrival plus mechanical latency.</param>
-public sealed record Strike(int Note, int Velocity, int Channel, TimeSpan ReceivedAt, TimeSpan SoundsAt);
+public sealed record Strike(int Note, int Velocity, int Channel, TimeSpan ReceivedAt, TimeSpan SoundsAt)
+{
+    /// <summary>The strike's length, when a <see cref="BrainModel"/> decided it; 0 otherwise.</summary>
+    public int PulseMs { get; init; }
+
+    /// <summary>The accent LED color it flashed (0xRRGGBB), when its body has LEDs.</summary>
+    public int? Flash { get; init; }
+}
 
 /// <summary>
 /// A robot instrument in software. It behaves like the generic firmware (ADR 0006): Note On →
@@ -17,6 +25,8 @@ public sealed record Strike(int Note, int Velocity, int Channel, TimeSpan Receiv
 /// notes it has no actuator for are dropped, repeats faster than the profile's minimum interval
 /// are refused, and panic (CC 120/123) is counted. It hears a strike after the profile's latency,
 /// plus optional random jitter, because real mechanics are never exact.
+/// Made <see cref="ForBody"/>, it decides exactly as a brain running that body would
+/// (<see cref="BrainModel"/>: busy, interval, duty, polyphony, velocity → pulse, accent flashes).
 /// </summary>
 /// <remarks>Thread-safe: OS MIDI ports deliver on background threads.</remarks>
 public sealed class VirtualInstrument : IMidiOutput
@@ -27,6 +37,7 @@ public sealed class VirtualInstrument : IMidiOutput
     private readonly Random _random;
     private readonly List<Strike> _strikes = [];
     private readonly Dictionary<int, TimeSpan> _lastStrike = [];
+    private readonly BrainModel? _brain;
 
     /// <param name="profile">Declared behavior: latency, playable notes, minimum interval.</param>
     /// <param name="clock">Where arrival times come from.</param>
@@ -41,6 +52,38 @@ public sealed class VirtualInstrument : IMidiOutput
         _clock = clock;
         _jitter = jitter;
         _random = new Random(seed);
+    }
+
+    private VirtualInstrument(BodyDefinition body, IClock clock, TimeSpan jitter, int seed)
+        : this(body.ToProfile(), clock, jitter, seed)
+    {
+        Body = body;
+        _brain = new BrainModel(body, Millis(clock.Now));
+    }
+
+    /// <summary>A virtual instrument that strikes and refuses exactly as a brain running <paramref name="body"/> would.</summary>
+    public static VirtualInstrument ForBody(BodyDefinition body, IClock clock, TimeSpan jitter = default, int seed = 0)
+    {
+        ArgumentNullException.ThrowIfNull(body);
+        ArgumentNullException.ThrowIfNull(clock);
+        return new VirtualInstrument(body, clock, jitter, seed);
+    }
+
+    /// <summary>The body it plays as, when made <see cref="ForBody"/>.</summary>
+    public BodyDefinition? Body { get; }
+
+    /// <summary>Refusals by reason, when made <see cref="ForBody"/> (no-actuator notes are <see cref="Dropped"/>).</summary>
+    public IReadOnlyDictionary<BrainRefusal, int> RefusedBy
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _brain is null
+                    ? new Dictionary<BrainRefusal, int>()
+                    : _brain.Refused.Where(kv => kv.Key != BrainRefusal.NotMine).ToDictionary();
+            }
+        }
     }
 
     /// <summary>Raised for every accepted strike, on the sender's thread.</summary>
@@ -87,6 +130,7 @@ public sealed class VirtualInstrument : IMidiOutput
                 lock (_gate)
                 {
                     PanicMessages++;
+                    _brain?.AllOff();
                 }
 
                 break;
@@ -101,7 +145,30 @@ public sealed class VirtualInstrument : IMidiOutput
         string? reason = null;
         lock (_gate)
         {
-            if (!Profile.CanPlay(note))
+            if (_brain is not null)
+            {
+                var decided = _brain.NoteOn(noteOn.Channel, note, noteOn.Velocity, Millis(now))!;
+                if (decided.Struck)
+                {
+                    strike = new Strike(note, noteOn.Velocity, noteOn.Channel, now, now + Profile.LatencyFor(note) + Jitter())
+                    {
+                        PulseMs = decided.PulseMs,
+                        Flash = decided.Flash,
+                    };
+                    _strikes.Add(strike);
+                }
+                else if (decided.Refusal == BrainRefusal.NotMine)
+                {
+                    Dropped++;
+                    reason = Body!.Channel is { } own && noteOn.Channel != own ? $"not its channel ({own + 1})" : "no actuator for this note";
+                }
+                else
+                {
+                    Refused++;
+                    reason = decided.Why;
+                }
+            }
+            else if (!Profile.CanPlay(note))
             {
                 Dropped++;
                 reason = "no actuator for this note";
@@ -128,6 +195,9 @@ public sealed class VirtualInstrument : IMidiOutput
             Rejected?.Invoke(this, note, reason!);
         }
     }
+
+    /// <summary>The brain's clock: whole milliseconds, as <c>millis()</c>.</summary>
+    private static long Millis(TimeSpan t) => (long)Math.Floor(t.TotalMilliseconds);
 
     private TimeSpan Jitter() =>
         _jitter == TimeSpan.Zero ? TimeSpan.Zero : _jitter * ((_random.NextDouble() * 2) - 1);

@@ -63,17 +63,17 @@ Measured by:
       so CI does
 
 ### Phase N3: A virtual brain that behaves like the real one
-- [ ] `BrainModel` in Core: the brain's acceptance rules (interval, duty leaky bucket,
-      polyphony, ceilings, velocity → pulse, accent flash) as pure logic on a fake clock
-- [ ] Shared parity vectors (`Instruments/metrodom_brain/test/vectors/*.json`: body + timed
-      strikes + expected accept/refuse/pulse/flash) run by both `make -C test` and the .NET tests,
-      so the model can't drift from the firmware
-- [ ] `metrodom virtual --body FILE` (repeatable): a port named after the body that plays only
-      its notes, refuses what the brain would refuse, and shows strikes, refusals (with reason)
-      and LED flashes live
-- [ ] `metrodom simulate SONG --body FILE`: per-note refusal counts and reasons for a whole
-      song, so a body can be tuned against real music before anything is soldered
-- [ ] The governor and `BrainModel` share their rules where they overlap, or a test shows they agree
+- [x] `BrainModel` in Core: the brain's strike decisions (busy, interval, duty leaky bucket,
+      polyphony, channel, ceilings, velocity → pulse, accent flash) as pure logic in whole ms
+- [x] Shared parity vectors (`Instruments/metrodom_brain/test/vectors/*.vectors`: a body hex
+      fixture + timed Note Ons, panics and state checks with expected outcomes, pulses and flash
+      colors) run by both `make -C test` and the .NET tests
+- [x] `metrodom virtual --body FILE` (repeatable): a port named after the body that strikes and
+      refuses as the brain would, printing each strike's pulse and LED swatch, and each refusal's reason
+- [x] `metrodom simulate SONG --body FILE`: the body in the band (governed, as `play`), plus a
+      rerun straight to each brain (as a DAW) with refusals counted by reason
+- [x] The governor and `BrainModel` agree: seeded random streams (dense, chords, mixed
+      velocities) through the governor never reach a refusal in the model
 
 ### Phase N4: Records that check each other
 - [ ] `check_hardware.py` reads `Instruments/<id>/body.json` next to `instrument.toml`: output
@@ -120,6 +120,19 @@ Measured by:
   the example stays valid. The M1 body is copied to its instrument folder, not moved: the
   fixture pins the byte layout for both test suites, and the real body will diverge from it
   (measured latencies).
+
+- 2026-11-12: N3 built. The model is a port of `Brain.cpp`'s decisions, not a second design:
+  same integer units, same order of checks, same clamps, ticking before each Note On as the
+  firmware's loop does. Parity vectors are plain text so the C++ test reads them without a JSON
+  parser; they name the existing hex fixtures, which both suites already pin. `VirtualInstrument.ForBody`
+  carries the model, so `virtual`, `simulate` and the onsets port all get it for free.
+  `simulate --body` reports twice on purpose: governed (what `play` sends) and straight (what a
+  DAW would hit), because the second is what you tune a body against. The governor's duty math
+  uses exact time and the brain's whole milliseconds; in theory that leaves a window under 1 ms of
+  drain where the governor passes a note the brain refuses. 2,000 random seeds at mixed and full
+  velocity found none, and USB jitter on real hardware is larger, so the governor wasn't changed.
+  Not modeled: USB loss, output faults and Body Write (hardware-only); a body written to a
+  `--body` port changes its description, not its behavior; `--drift` is for `-i` instruments only.
 
 ## Open questions
 (none)

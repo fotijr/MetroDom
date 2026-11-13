@@ -1,6 +1,8 @@
 // Host tests for the brain's core (no Arduino needed): make -C Instruments/metrodom_brain/test
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
+#include <memory>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -1063,6 +1065,121 @@ void bodyRead_SendsTheRecordItBootedFrom() {
   CHECK(hex == Hex(bytes));
 }
 
+// Parity vectors (vectors/README.md): the Conductor's BrainModel runs the same files.
+std::vector<uint8_t> FromHex(const std::string& text) {
+  std::vector<uint8_t> bytes;
+  for (size_t i = 0; i + 1 < text.size(); i += 2) bytes.push_back(static_cast<uint8_t>(std::stoi(text.substr(i, 2), nullptr, 16)));
+  return bytes;
+}
+
+const char* RefusalName(Refusal r) {
+  switch (r) {
+    case Refusal::None: return "struck";
+    case Refusal::NotMine: return "notmine";
+    case Refusal::Busy: return "busy";
+    case Refusal::Interval: return "interval";
+    case Refusal::Duty: return "duty";
+    case Refusal::Polyphony: return "polyphony";
+    default: return "other";
+  }
+}
+
+void RunVectors(const std::filesystem::path& path) {
+  std::ifstream file(path);
+  std::string line;
+  Body body;
+  std::unique_ptr<Rig> rig;
+  BrainConfig config;
+  int number = 0;
+  auto fail = [&](const std::string& what) {
+    ++failures;
+    std::printf("  FAIL %s:%d: %s\n", path.filename().string().c_str(), number, what.c_str());
+  };
+  auto index = [&](int note) {
+    for (uint8_t i = 0; i < config.actuatorCount; ++i) if (config.actuators[i].note == note) return static_cast<int>(i);
+    return -1;
+  };
+  while (std::getline(file, line)) {
+    ++number;
+    if (!line.empty() && line.back() == '\r') line.pop_back();
+    if (line.empty() || line[0] == '#') continue;
+    std::istringstream in(line);
+    std::string first, verb;
+    in >> first;
+    if (first == "body") {
+      std::string name;
+      in >> name;
+      std::ifstream hexFile(path.parent_path() / name);
+      std::string hex;
+      hexFile >> hex;
+      auto bytes = FromHex(hex);
+      if (parseBody(bytes.data(), bytes.size(), body) != BodyError::None) {
+        fail("body " + name + " doesn't parse");
+        return;
+      }
+      config = body.config();
+      rig = std::make_unique<Rig>(config, true, body.ledCount > 0);
+      continue;
+    }
+    if (!rig) {
+      fail("no body line before the first event");
+      return;
+    }
+    uint32_t now = static_cast<uint32_t>(std::stoul(first));
+    in >> verb;
+    ++checks;
+    rig->brain.tick(now);
+    if (verb == "panic") {
+      rig->send({0xB0, 123, 0}, now);
+    } else if (verb == "is-on" || verb == "is-lit") {
+      int note;
+      std::string want;
+      in >> note >> want;
+      int i = index(note);
+      bool got = i >= 0 && (verb == "is-on" ? rig->brain.isOn(static_cast<uint8_t>(i)) : rig->brain.isLit(static_cast<uint8_t>(i)));
+      if (got != (want == "yes")) fail(line + ": got " + (got ? "yes" : "no"));
+    } else if (verb == "on") {
+      int note, velocity;
+      std::string want;
+      in >> note >> velocity >> want;
+      uint32_t struckBefore = rig->brain.counters().struck;
+      rig->on(static_cast<uint8_t>(note), now, 0, static_cast<uint8_t>(velocity));
+      bool struck = rig->brain.counters().struck != struckBefore;
+      std::string got = velocity == 0 ? "none" : struck ? "struck" : RefusalName(rig->brain.lastRefusal());
+      if (got != want) {
+        fail(line + ": got " + got);
+        continue;
+      }
+      if (want != "struck") continue;
+      int pulse = 0;
+      in >> pulse;
+      int i = index(note);
+      if (rig->brain.pulseFor(static_cast<uint8_t>(i), static_cast<uint8_t>(velocity)) != pulse) {
+        fail(line + ": pulse " + std::to_string(rig->brain.pulseFor(static_cast<uint8_t>(i), static_cast<uint8_t>(velocity))));
+      }
+      std::string color;
+      if (in >> color) {
+        const uint8_t* shown = rig->leds.shown[config.actuators[i].ledFirst];
+        char got[8];
+        std::snprintf(got, sizeof got, "#%02X%02X%02X", shown[0], shown[1], shown[2]);
+        if (color != got) fail(line + ": flashed " + got);
+      }
+    } else {
+      fail("unknown line: " + line);
+    }
+  }
+}
+
+void vectors_MatchTheFirmware() {
+  int files = 0;
+  for (const auto& entry : std::filesystem::directory_iterator(VECTORS_DIR)) {
+    if (entry.path().extension() != ".vectors") continue;
+    ++files;
+    RunVectors(entry.path());
+  }
+  CHECK(files >= 3);
+}
+
 }  // namespace
 
 int main() {
@@ -1088,6 +1205,7 @@ int main() {
       bodyRead_SendsTheRecordItBootedFrom, accent_RoundTrips_AndMatchesTheFixture,
       accent_BodyRefusesWhatItCantShow, accent_StrikeFlashesItsLeds_ForFlashMs,
       accent_RefusedNotesDontFlash_AndPanicDarkens, accent_CeilingsAndRanges_AreClamped, accent_LargestProfileFits,
+      vectors_MatchTheFirmware,
   };
   for (auto test : tests) test();
   std::printf("brain: %d checks, %d failed\n", checks, failures);

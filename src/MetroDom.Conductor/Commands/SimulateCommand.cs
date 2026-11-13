@@ -3,7 +3,9 @@ using System.Globalization;
 using Melanchall.DryWetMidi.Core;
 using Melanchall.DryWetMidi.Interaction;
 using MetroDom.Conductor.Cli;
+using MetroDom.Core;
 using MetroDom.Core.Arranging;
+using MetroDom.Core.Bodies;
 using MetroDom.Core.Simulation;
 using MetroDom.Core.Timing;
 using Spectre.Console;
@@ -26,6 +28,10 @@ internal sealed class SimulateCommand : Command<SimulateCommand.Settings>
         [CommandOption("-i|--instrument <SPEC>")]
         [Description("A virtual instrument, NAME[[=CHANNELS]]@LATENCY_MS[[/NOTES]], repeatable (e.g. [bold]-i xylo=1@10 -i drums=10@35[/]). Default: xylo on every channel but 10 at 10 ms, drums on 10 at 35 ms.")]
         public string[]? Instruments { get; init; }
+
+        [CommandOption("-b|--body <FILE>")]
+        [Description("A brain running this body file, repeatable: it strikes and refuses exactly as the real one would, and the report shows what it would refuse played straight from a DAW. Omni bodies hear every channel ([bold]--arrange[/]: the first free one). Without [bold]-i[/], only the bodies.")]
+        public string[]? Bodies { get; init; }
 
         [CommandOption("--no-compensation")]
         [Description("Send every note on the song clock, ignoring latency, to see the problem compensation solves.")]
@@ -60,7 +66,9 @@ internal sealed class SimulateCommand : Command<SimulateCommand.Settings>
         public bool ShowNotes { get; init; }
 
         public IReadOnlyList<InstrumentSpec> Band =>
-            InstrumentSpec.TryParseAll(Instruments, out var specs, out _) && specs.Count > 0 ? specs : InstrumentSpec.DefaultBand;
+            InstrumentSpec.TryParseAll(Instruments, out var specs, out _) && specs.Count > 0 ? specs
+            : Bodies is { Length: > 0 } ? []
+            : InstrumentSpec.DefaultBand;
 
         public override ValidationResult Validate()
         {
@@ -104,10 +112,11 @@ internal sealed class SimulateCommand : Command<SimulateCommand.Settings>
         var midiFile = SeatList.Apply(settings.Path is null ? DemoSong.Create() : MidiFile.Read(settings.Path), settings.Seats, roles);
         var songName = settings.Path is null ? "built-in demo" : System.IO.Path.GetFileName(settings.Path);
         var band = settings.Band;
+        var bodies = (settings.Bodies ?? []).Select(BodyFile.Load).ToArray();
         if (settings.Follow is { } follow)
         {
             var hits = HitLog.TryParse(File.ReadAllText(follow), out var parsed, out _) ? parsed : [];
-            var latency = band.Max(b => b.Latency);
+            var latency = band.Select(b => b.Latency).Concat(bodies.Select(b => b.ToProfile().MaxLatency)).Max();
             var bpm = midiFile.GetTempoMap().GetTempoAtTime(new MidiTimeSpan(0)).BeatsPerMinute;
             var followed = FollowSimulation.Run(hits, SongBeats.From(midiFile), bpm, new FollowOptions { Latency = latency });
             ReportFollow(songName, System.IO.Path.GetFileName(follow), bpm, latency, hits.Count, followed, settings.ShowNotes);
@@ -123,25 +132,80 @@ internal sealed class SimulateCommand : Command<SimulateCommand.Settings>
 
         IReadOnlyList<TimedMidiEvent> timeline;
         IReadOnlyList<SimulatedPart> parts;
+        var rows = band.Select(b => b.Channels).ToList();
         if (settings.Arrange)
         {
-            var members = band.Select(b => b.ToBandMember()).ToArray();
+            var members = band.Select(b => b.ToBandMember()).ToList();
+            var bodyMembers = BodyMembers(bodies, members.Select(m => m.Channel));
+            members.AddRange(bodyMembers);
+            rows.AddRange(bodyMembers.Select(m => (IReadOnlyList<int>)[m.Channel]));
             var arrangement = Arranger.Arrange(midiFile, members, new ArrangerOptions { Roles = roles });
             ArrangementView.Write(arrangement, members);
             AnsiConsole.WriteLine();
             timeline = arrangement.Timeline;
-            parts = members.Select(m => new SimulatedPart(m.Profile, [m.Channel])).ToArray();
+            parts = members.Select((m, i) => new SimulatedPart(m.Profile, [m.Channel]) { Body = i < band.Count ? null : bodies[i - band.Count] }).ToArray();
         }
         else
         {
             timeline = SongTimeline.From(midiFile);
-            parts = band.Select(b => new SimulatedPart(b.ToProfile(), b.Channels)).ToArray();
+            var bodyParts = bodies.Select(b => new SimulatedPart(b.ToProfile(), b.Channel is { } c ? [c] : InstrumentSpec.AllChannels) { Body = b }).ToArray();
+            rows.AddRange(bodyParts.Select(p => p.Channels));
+            parts = [.. band.Select(b => new SimulatedPart(b.ToProfile(), b.Channels)), .. bodyParts];
         }
 
         var result = BandSimulation.Run(timeline, parts, options);
 
-        Report(songName, band, options, result, settings.ShowNotes);
+        Report(songName, rows, options, result, settings.ShowNotes);
+        if (bodies.Length > 0)
+        {
+            ReportBrains(BandSimulation.Run(timeline, parts, options with { Governed = false }), band.Count);
+        }
+
         return 0;
+    }
+
+    /// <summary>Each body on its own channel, or the first free one, as the auto band picks for an omni brain.</summary>
+    private static List<BandMember> BodyMembers(IReadOnlyList<BodyDefinition> bodies, IEnumerable<int> taken)
+    {
+        var used = taken.ToHashSet();
+        var members = new List<BandMember>();
+        foreach (var body in bodies)
+        {
+            var channel = body.Channel is { } own && !used.Contains(own)
+                ? own
+                : Enumerable.Range(0, Orchestra.ChannelCount).Where(c => c != Core.Arranging.GeneralMidi.PercussionChannel || body.Channel == c).Cast<int?>().FirstOrDefault(c => !used.Contains(c!.Value))
+                    ?? throw new UsageException("every channel is taken: too many instruments to arrange.");
+            used.Add(channel);
+            members.Add(new BandMember(body.ToProfile(), channel));
+        }
+
+        return members;
+    }
+
+    /// <summary>What each body's brain refuses with nothing in front of it, as when a DAW plays it.</summary>
+    private static void ReportBrains(SimulationResult straight, int firstBody)
+    {
+        var inv = CultureInfo.InvariantCulture;
+        AnsiConsole.WriteLine();
+        AnsiConsole.MarkupLine("[bold]Played straight to each brain[/] [grey](a DAW or keyboard, no governor in front)[/]");
+        foreach (var r in straight.Instruments.Skip(firstBody))
+        {
+            var refused = r.RefusedBy.Values.Sum();
+            var why = string.Join(", ", r.RefusedBy.Where(kv => kv.Value > 0).OrderByDescending(kv => kv.Value)
+                .Select(kv => string.Create(inv, $"{kv.Value} {Reason(kv.Key)}")));
+            var verdict = refused == 0 ? "[green]refused 0[/]" : string.Create(inv, $"[yellow]refused {refused}[/] [grey]({why})[/]");
+            var others = r.Dropped == 0 ? "" : string.Create(inv, $" [grey]· {r.Dropped} not its notes[/]");
+            AnsiConsole.MarkupLine(string.Create(inv, $"  {Markup.Escape(r.Name)}: struck {r.Played}, {verdict}{others}"));
+        }
+
+        static string Reason(BrainRefusal why) => why switch
+        {
+            BrainRefusal.Busy => "still striking",
+            BrainRefusal.Interval => "under minIntervalMs",
+            BrainRefusal.Duty => "over duty",
+            BrainRefusal.Polyphony => "over polyphony",
+            _ => why.ToString().ToLowerInvariant(),
+        };
     }
 
     /// <summary>Held by the governor, plus anything that still got past it to be dropped or refused.</summary>
@@ -152,7 +216,7 @@ internal sealed class SimulateCommand : Command<SimulateCommand.Settings>
         return past == 0 ? held : $"{held} [red]+{past.ToString(CultureInfo.InvariantCulture)} refused[/]";
     }
 
-    private static void Report(string songName, IReadOnlyList<InstrumentSpec> band, SimulationOptions options, SimulationResult result, bool showNotes)
+    private static void Report(string songName, List<IReadOnlyList<int>> channels, SimulationOptions options, SimulationResult result, bool showNotes)
     {
         var inv = CultureInfo.InvariantCulture;
         var summary = new Grid().AddColumn(new GridColumn().PadRight(2)).AddColumn();
@@ -172,12 +236,12 @@ internal sealed class SimulateCommand : Command<SimulateCommand.Settings>
             .AddColumn(new TableColumn("Held").RightAligned())
             .AddColumn(new TableColumn("Heard").RightAligned())
             .AddColumn("Panic");
-        for (var i = 0; i < band.Count; i++)
+        for (var i = 0; i < channels.Count; i++)
         {
             var r = result.Instruments[i];
             table.AddRow(
                 Markup.Escape(r.Name),
-                ChannelList.Format(band[i].Channels),
+                ChannelList.Format(channels[i]),
                 Ms(r.Latency),
                 r.Played.ToString(inv),
                 Held(r),

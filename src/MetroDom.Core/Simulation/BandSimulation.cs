@@ -1,10 +1,18 @@
+using MetroDom.Core.Bodies;
 using MetroDom.Core.Safety;
 using MetroDom.Core.Timing;
 
 namespace MetroDom.Core.Simulation;
 
 /// <summary>A virtual instrument in the simulated band and the channels it plays.</summary>
-public sealed record SimulatedPart(InstrumentProfile Profile, IReadOnlyList<int> Channels);
+public sealed record SimulatedPart(InstrumentProfile Profile, IReadOnlyList<int> Channels)
+{
+    /// <summary>
+    /// A body file: the part then plays as a brain running it would (<see cref="BrainModel"/>),
+    /// and <see cref="Profile"/> should be its <see cref="BodyDefinition.ToProfile"/>.
+    /// </summary>
+    public BodyDefinition? Body { get; init; }
+}
 
 /// <summary>How to run a simulation.</summary>
 public sealed record SimulationOptions
@@ -17,6 +25,12 @@ public sealed record SimulationOptions
 
     /// <summary>Seed for the jitter. Same seed, same result.</summary>
     public int Seed { get; init; }
+
+    /// <summary>
+    /// Put the safety governor in front of each instrument, as <c>play</c> does. False sends
+    /// straight to the instruments, as a DAW would, so a body's brain refuses what it must.
+    /// </summary>
+    public bool Governed { get; init; } = true;
 }
 
 /// <summary>One note as heard. <paramref name="Offset"/> is how late (+) or early (−) it sounded.</summary>
@@ -38,7 +52,11 @@ public sealed record InstrumentResult(
     int Refused,
     TimeSpan MinOffset,
     TimeSpan MaxOffset,
-    bool GotPanic);
+    bool GotPanic)
+{
+    /// <summary>For a body part: what its brain refused, by reason. Empty otherwise.</summary>
+    public IReadOnlyDictionary<BrainRefusal, int> RefusedBy { get; init; } = new Dictionary<BrainRefusal, int>();
+}
 
 /// <summary>What the simulated band did.</summary>
 /// <param name="Lookahead">How far the band ran behind the song clock.</param>
@@ -74,23 +92,26 @@ public static class BandSimulation
         var clock = new VirtualClock();
         var orchestra = new Orchestra();
         var instruments = parts
-            .Select((part, i) => new VirtualInstrument(part.Profile, clock, options.Jitter, options.Seed + i))
+            .Select((part, i) => part.Body is { } body
+                ? VirtualInstrument.ForBody(body, clock, options.Jitter, options.Seed + i)
+                : new VirtualInstrument(part.Profile, clock, options.Jitter, options.Seed + i))
             .ToArray();
         var governors = instruments
-            .Select(i => new SafetyGovernor(i, i.Profile, SafetyLimits.None, clock))
+            .Select(i => options.Governed ? new SafetyGovernor(i, i.Profile, SafetyLimits.None, clock) : null)
             .ToArray();
+        var outputs = instruments.Select((i, n) => (IMidiOutput?)governors[n] ?? i).ToArray();
         for (var i = 0; i < parts.Count; i++)
         {
             foreach (var channel in parts[i].Channels)
             {
-                orchestra.Assign(channel, governors[i]);
+                orchestra.Assign(channel, outputs[i]);
             }
         }
 
         var scheduler = new LatencyScheduler(
             orchestra,
             clock,
-            governors.ToDictionary(g => (IMidiOutput)g, g => g.Profile),
+            outputs.Select((o, n) => (o, instruments[n].Profile)).ToDictionary(x => x.o, x => x.Profile),
             options.Compensate);
 
         var notes = new List<SimulatedNote>();
@@ -126,19 +147,22 @@ public static class BandSimulation
             shared.DefaultIfEmpty().Max());
     }
 
-    private static InstrumentResult Summarize(VirtualInstrument instrument, SafetyGovernor governor, List<SimulatedNote> notes)
+    private static InstrumentResult Summarize(VirtualInstrument instrument, SafetyGovernor? governor, List<SimulatedNote> notes)
     {
         var offsets = notes.Where(n => n.Instrument == instrument.Name).Select(n => n.Offset).DefaultIfEmpty().ToArray();
         return new InstrumentResult(
             instrument.Name,
             instrument.Profile.Latency,
             instrument.Strikes.Count,
-            (int)governor.TotalBlocked,
-            governor.Summary(),
+            (int)(governor?.TotalBlocked ?? 0),
+            governor?.Summary(),
             instrument.Dropped,
             instrument.Refused,
             offsets.Min(),
             offsets.Max(),
-            instrument.PanicMessages > 0);
+            instrument.PanicMessages > 0)
+        {
+            RefusedBy = instrument.RefusedBy,
+        };
     }
 }

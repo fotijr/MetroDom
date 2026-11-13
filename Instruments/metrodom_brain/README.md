@@ -65,6 +65,7 @@ Conductor's reader.
 | `src/brain/Body.{h,cpp}` | The body record (versions 1 and 2): parse, check, encode, CRC |
 | `src/brain/Devices.{h,cpp}` | PCA9685 and 24LC32 over an I²C interface (Wire on the Pico, a fake in tests) |
 | `test/` | Host tests (`make -C test`, any C++17 compiler; runs in CI) |
+| `test/vectors/` | [Parity vectors](test/vectors/README.md): timed MIDI in, expected strikes out. The host test and the Conductor's `BrainModel` (behind `virtual --body`, `simulate --body`) both run them. Add one when you change what the brain decides |
 
 ## M0 bench wiring (default `config.h`)
 
